@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="color-scheme" content="light only">
+<title>EARWORM</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  :root { color-scheme: light; forced-color-adjust: none; --bg: hsl(160,85%,58%); --fg: hsl(160,70%,8%); }
+  html, body { height:100%; overflow:hidden; }
+  body { background-color: var(--bg) !important; color: var(--fg) !important; }
+  @media (prefers-color-scheme: dark) {
+    html, body { background-color: var(--bg) !important; color: var(--fg) !important; }
+  }
+  body {
+    font-family:'Press Start 2P', monospace;
+    transition: none;
+    user-select:none; -webkit-user-select:none;
+  }
+  .cjk { font-family:'Press Start 2P','Heiti SC','PingFang SC',sans-serif; font-weight:900; }
+  #app { height:100%; display:flex; flex-direction:column; }
+
+  /* ===== HOME ===== */
+  #home { flex:1; display:flex; flex-direction:column; padding:14px; gap:10px; overflow-y:auto; }
+  .title { font-size:22px; letter-spacing:2px; text-align:center; margin-top:8px; }
+  .statrow { display:flex; justify-content:space-between; font-size:9px; }
+  .panel { padding:12px; border:4px solid; }
+  #grid { display:grid; grid-template-columns:repeat(10,1fr); gap:3px; flex:0 0 auto; }
+  .cell { aspect-ratio:1; border:2px solid; }
+  #legend { font-size:7px; display:flex; gap:10px; flex-wrap:wrap; }
+  .lg { display:flex; align-items:center; gap:4px; }
+  .sw { width:10px; height:10px; border:2px solid; display:inline-block; }
+  .btn {
+    font-family:inherit; font-size:13px; padding:16px; border:4px solid;
+    cursor:pointer; width:100%; background:transparent;
+  }
+  .btn:active { transform:translate(2px,2px); }
+  #due { font-size:9px; text-align:center; }
+
+  /* ===== SESSION ===== */
+  #session { flex:1; display:none; flex-direction:column; padding:16px; gap:12px; }
+  #topbar { display:flex; justify-content:space-between; align-items:center; font-size:8px; }
+  #topbar button { font-family:inherit; font-size:8px; padding:8px; border:3px solid; background:transparent; cursor:pointer; }
+  #card {
+    flex:1; border:5px solid; display:flex; flex-direction:column;
+    align-items:center; justify-content:flex-start; gap:0; padding:18px; cursor:pointer;
+    text-align:center; overflow:hidden;
+  }
+  #card-front { display:flex; flex-direction:column; align-items:center; gap:18px; width:100%; padding-top:24px; padding-bottom:16px; }
+  #card-back-zone { display:none; flex-direction:column; align-items:center; gap:20px; width:100%; padding:24px 16px 16px; border-top:2px solid; }
+  #rank { font-size:8px; }
+  #hanzi { font-size:64px; line-height:1.1; }
+  #pinyin { font-size:16px; display:flex; gap:10px; flex-wrap:wrap; justify-content:center; font-family:'Noto Sans','Arial Unicode MS','Helvetica Neue',Arial,sans-serif; }
+  #def { font-size:20px; line-height:1.5; text-align:center; letter-spacing:.5px; }
+  #radical { font-size:8px; }
+  #pos { font-size:11px; opacity:.9; text-align:center; line-height:2; letter-spacing:.5px; }
+  #flipHint { font-size:7px; opacity:.7; }
+  #back { display:flex; flex-direction:column; align-items:center; gap:14px; width:100%; }
+  #streakbar { font-size:8px; text-align:center; min-height:12px; }
+
+  /* ===== MULTIPLE CHOICE ===== */
+  #mc { flex:1; display:none; flex-direction:column; padding:16px; gap:10px; }
+  #mc-topbar { display:flex; justify-content:space-between; align-items:center; font-size:8px; }
+  #mc-topbar button { font-family:inherit; font-size:8px; padding:8px; border:3px solid; background:transparent; cursor:pointer; }
+  #mc-prompt {
+    border:5px solid; padding:20px; text-align:center;
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+  }
+  #mc-hanzi { font-size:72px; line-height:1; }
+  #mc-pinyin { font-size:14px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center; font-family:'Noto Sans','Arial Unicode MS','Helvetica Neue',Arial,sans-serif; }
+  #mc-choices { display:grid; grid-template-columns:1fr 1fr; gap:8px; flex:1; }
+  .choice {
+    font-family:inherit; font-size:9px; padding:12px 8px; border:4px solid;
+    background:transparent; cursor:pointer; line-height:1.6; text-align:center;
+  }
+  .choice:active { transform:translate(2px,2px); }
+  .choice.correct { background:rgba(0,180,0,.25); }
+  .choice.wrong   { background:rgba(220,0,0,.25); }
+  #mc-streak { font-size:8px; text-align:center; min-height:12px; }
+  #mc-explain { font-size:8px; line-height:1.8; min-height:32px; text-align:center; padding:4px; opacity:.9; }
+  #mc-submode { display:flex; gap:8px; }
+  #mc-submode button { font-family:inherit; font-size:8px; padding:8px; border:3px solid; background:transparent; cursor:pointer; flex:1; }
+  #mc-submode button.active { background:rgba(0,0,0,.15); }
+  #mc-dontknow { font-family:inherit; font-size:9px; padding:12px; border:4px solid; background:transparent; cursor:pointer; width:100%; opacity:.7; }
+
+  /* ===== RADICAL DETAIL ===== */
+  #radDetail { flex:1; display:none; flex-direction:column; padding:16px; gap:14px; overflow-y:auto; }
+  #radDetail-topbar { display:flex; justify-content:space-between; align-items:center; font-size:8px; }
+  #radDetail-topbar button { font-family:inherit; font-size:8px; padding:8px; border:3px solid; background:transparent; cursor:pointer; }
+  #radDetail-hero { border:5px solid; padding:24px 16px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px; }
+  #radDetail-char { font-size:72px; line-height:1; }
+  #radDetail-info { font-size:10px; line-height:2; }
+  #radDetail-canon { font-size:8px; opacity:.8; }
+  #radDetail-label { font-size:8px; }
+  #radDetail-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+  .rd-cell { border:3px solid; padding:10px 4px; text-align:center; cursor:pointer; display:flex; flex-direction:column; gap:4px; align-items:center; }
+  .rd-cell:active { transform:translate(2px,2px); }
+  .rd-hanzi { font-size:22px; }
+  .rd-py { font-size:6px; }
+
+  /* ===== CHAR DETAIL ===== */
+  #charDetail { flex:1; display:none; flex-direction:column; padding:16px; gap:12px; overflow-y:auto; }
+  #charDetail-topbar { display:flex; justify-content:space-between; align-items:center; font-size:8px; }
+  #charDetail-topbar button { font-family:inherit; font-size:8px; padding:8px; border:3px solid; background:transparent; cursor:pointer; }
+  #charDetail-card { border:5px solid; padding:20px; display:flex; flex-direction:column; align-items:center; gap:14px; text-align:center; flex:1; }
+  #charDetail-hanzi { font-size:80px; line-height:1.1; }
+  #charDetail-pinyin { font-size:16px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center; font-family:'Noto Sans','Arial Unicode MS','Helvetica Neue',Arial,sans-serif; }
+  #charDetail-def { font-size:11px; line-height:1.8; }
+  #charDetail-rads { font-size:8px; width:100%; }
+  #charDetail-note { font-size:8px; opacity:.7; }
+
+  /* ===== TONE DRILL ===== */
+  #tone { flex:1; display:none; flex-direction:column; padding:16px; gap:10px; }
+  #tone-topbar { display:flex; justify-content:space-between; align-items:center; font-size:8px; }
+  #tone-topbar button { font-family:inherit; font-size:8px; padding:8px; border:3px solid; background:transparent; cursor:pointer; }
+  #tone-prompt { border:5px solid; flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center; padding:20px; cursor:pointer; }
+  #tone-hanzi { font-size:72px; line-height:1.1; }
+  #tone-py { font-size:14px; opacity:.5; font-family:'Noto Sans','Arial Unicode MS','Helvetica Neue',Arial,sans-serif; }
+  #tone-hint { font-size:7px; opacity:.6; }
+  #tone-choices { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+  .tone-btn { font-family:inherit; font-size:10px; padding:14px 4px; border:4px solid; background:transparent; cursor:pointer; text-align:center; line-height:1.5; }
+  .tone-btn:active { transform:translate(2px,2px); }
+  .tone-btn.correct { background:rgba(0,180,0,.3); }
+  .tone-btn.wrong   { background:rgba(220,0,0,.3); }
+  #tone-mode { font-size:7px; text-align:center; }
+  #tone-streak { font-size:8px; text-align:center; min-height:12px; }
+  #tone-submode { display:flex; gap:8px; }
+  #tone-submode button { font-family:inherit; font-size:8px; padding:8px; border:3px solid; background:transparent; cursor:pointer; flex:1; }
+  #tone-submode button.active { background:rgba(0,0,0,.15); }
+
+  /* ===== DECK MANAGER ===== */
+  #deckMgr { flex:1; display:none; flex-direction:column; padding:16px; gap:10px; overflow-y:auto; }
+  #deckMgr-topbar { display:flex; justify-content:space-between; align-items:center; font-size:8px; }
+  #deckMgr-topbar button { font-family:inherit; font-size:8px; padding:8px; border:3px solid; background:transparent; cursor:pointer; }
+  #deckMgr-list { display:flex; flex-direction:column; gap:8px; }
+  .deck-row { border:4px solid; padding:12px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; }
+  .deck-row.active-deck { background:rgba(0,0,0,.15); }
+  .deck-row-info { font-size:9px; line-height:1.8; }
+  .deck-row-btns { display:flex; gap:6px; }
+  .deck-row-btns button { font-family:inherit; font-size:7px; padding:6px 8px; border:3px solid; background:transparent; cursor:pointer; }
+  #deckMgr-new { display:flex; gap:8px; margin-top:4px; }
+  #deckMgr-new input { font-family:inherit; font-size:9px; padding:10px; border:4px solid; background:transparent; flex:1; }
+  #deckMgr-new button { font-family:inherit; font-size:9px; padding:10px; border:4px solid; background:transparent; cursor:pointer; white-space:nowrap; }
+  #deckSelector { border:4px solid; padding:10px; font-size:9px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; }
+
+  /* ===== UNIFIED STUDY ===== */
+  #study {
+    flex:1; display:none; flex-direction:column;
+    padding:12px 12px 8px 12px; gap:6px;
+  }
+  #study-topbar {
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:8px; flex-shrink:0;
+  }
+  #study-topbar button {
+    font-family:inherit; font-size:8px; padding:8px 12px;
+    border:3px solid; background:transparent; cursor:pointer;
+  }
+  #studyMode {
+    font-size:7px; opacity:.7; letter-spacing:2px;
+    text-align:center; flex-shrink:0;
+  }
+  #studySession { flex:1; display:flex; flex-direction:column; min-height:0; }
+
+  /* ── MC layout: card (golden ratio) + choices + wager ── */
+  #studyMC {
+    display:none; flex-direction:column;
+    gap:6px; flex:1; min-height:0;
+  }
+  #studyMCPrompt {
+    border:5px solid; padding:12px;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    gap:8px; text-align:center;
+    flex:1.618; min-height:0; /* golden ratio */
+  }
+  #studyMCChoices {
+    display:grid; gap:6px;
+    flex:1; min-height:0;
+  }
+  #studyMCChoices .choice {
+    font-family:inherit; border:3px solid; background:transparent;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    padding:0; line-height:1.3; min-height:44px;
+  }
+  #studyMCActions, #studyPOSWager, #studyToneWager { flex-shrink:0; padding-top:4px; }
+
+  /* ── Tone layout ── */
+  #studyTone {
+    display:none; flex-direction:column;
+    gap:6px; flex:1; min-height:0; overflow:hidden;
+  }
+  #studyTonePrompt {
+    border:5px solid; flex:1.618;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:12px;
+    min-height:0; overflow:hidden;
+  }
+  #studyToneChar { font-size:72px; line-height:1; }
+  #studyTonePy {
+    font-size:28px;
+    font-family:'Noto Sans','Arial Unicode MS',Arial,sans-serif;
+    margin-top:2px;
+  }
+  #studyToneChoices {
+    display:grid; grid-template-columns:repeat(5,1fr);
+    gap:6px; flex-shrink:0;
+  }
+  #studyToneWager { flex-shrink:0; min-height:40px; padding-top:4px; }
+
+  /* ===== SESSION SUMMARY ===== */
+  #summary { flex:1; display:none; flex-direction:column; padding:16px; gap:10px; overflow-y:auto; }
+  #summary-topbar { display:flex; justify-content:space-between; align-items:center; font-size:8px; }
+  #summary-topbar button { font-family:inherit; font-size:8px; padding:8px; border:3px solid; background:transparent; cursor:pointer; }
+  #summary-title { font-size:14px; text-align:center; letter-spacing:2px; }
+  #summary-stats { display:flex; justify-content:space-around; font-size:9px; border:4px solid; padding:12px; }
+  #summary-list { display:flex; flex-direction:column; gap:6px; }
+  .summary-row { border:3px solid; padding:10px; display:flex; justify-content:space-between; align-items:center; font-size:8px; cursor:pointer; }
+  .summary-row .s-char { font-size:20px; font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif; }
+  .summary-row .s-result { font-size:9px; }
+  .summary-row.s-correct { border-left-width:6px; }
+  .summary-row.s-wrong { border-left-width:6px; opacity:.85; }
+  #summary-attention { font-size:8px; letter-spacing:1px; margin-top:4px; }
+
+  /* ===== PROGRESS BARS ===== */
+  .prog-wrap { border:3px solid; padding:8px 10px; }
+  .prog-label { font-size:7px; opacity:.7; letter-spacing:1px; margin-bottom:5px; display:flex; justify-content:space-between; }
+  .prog-track { height:8px; border:2px solid; position:relative; overflow:hidden; }
+  .prog-fill { height:100%; transition:width .4s; position:absolute; left:0; top:0; }
+  .prog-milestone { font-size:7px; text-align:right; opacity:.6; margin-top:3px; }
+  .xppop { animation:pop .5s; }
+  @keyframes pop { 0%{transform:scale(1.4)} 100%{transform:scale(1)} }
+  #studyMC, #studyPOS, #studyTone { overflow:hidden; }
+
+  /* Wager bar: always fixed height, always visible */
+  #studyMCActions  { flex:0 0 52px !important; overflow:hidden; }
+  #studyPOSWager   { flex:0 0 52px !important; overflow:hidden; }
+  #studyToneWager  { flex:0 0 52px !important; overflow:hidden; }
+
+  /* Tap hints: fixed */
+  #studyMCTapHint, #studyPOSTapHint2, #studyToneTapHint { flex:0 0 18px !important; overflow:hidden; }
+  #studyMCExplain { flex:0 0 22px !important; overflow:hidden; }
+
+  /* Choices: share space with card using golden ratio, never overflow */
+  #studyMCChoices  { flex:1 1 0 !important; min-height:0 !important; overflow:hidden; }
+  #studyPOSChoices { flex:1 1 0 !important; min-height:0 !important; overflow:hidden; }
+  #studyToneChoices { flex:0 0 auto !important; }
+
+  /* Choice buttons: fill cell completely */
+  #studyMCChoices .choice, #studyPOSChoices .choice {
+    min-height:0 !important; height:100%;
+  }
+
+  /* Card prompt: takes remaining space */
+  #studyMCPrompt  { flex:1.618 1 0 !important; min-height:0 !important; overflow:hidden; }
+  #studyPOSPrompt { flex:1.618 1 0 !important; min-height:0 !important; overflow:hidden; }
+  #studyTonePrompt { flex:1.618 1 0 !important; min-height:0 !important; overflow:hidden; }
+
+  /* Phi-unit: character above, pinyin below — no seam, pure spatial rhythm.
+     Unit width = wider of the two; pinyin band height ≈ 0.618 × char height. */
+  .phi-unit {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+  .phi-unit .phi-py {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-family: 'Noto Sans','Arial Unicode MS',Arial,sans-serif;
+    min-width: max-content;
+  }
+
+  /* Block browser-extension dictionary underlines on all CJK character displays */
+  #hanzi, #mc-hanzi, #radDetail-char, .rd-hanzi, #charDetail-hanzi,
+  #tone-hanzi, #studyToneChar, .s-char,
+  #studyMCPromptText, #studyMCPromptText *,
+  #studyHanzi, #studyCollExpr,
+  #studyPOSChar, #studyPOSChar *,
+  .cjk, .cjk * {
+    text-decoration: none !important;
+  }
+
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="home">
+    <!-- IDENTITY -->
+    <div class="title">EARWORM</div>
+    <div style="font-size:8px;text-align:center;letter-spacing:3px;opacity:.7;margin-top:-6px;" id="langLabel">MANDARIN CHINESE</div>
+
+    <!-- PRIMARY RANK -->
+    <div class="panel" style="text-align:center;padding:14px 10px;">
+      <div style="font-size:9px;opacity:.7;letter-spacing:2px;margin-bottom:4px;">FRONTIER</div>
+      <div id="frontierDisplay" style="font-size:48px;line-height:1;letter-spacing:-1px;">0</div>
+      <div style="font-size:8px;opacity:.6;margin-top:4px;" id="frontierSub">MANDARIN · FREQUENCY RANK</div>
+    </div>
+
+    <!-- PROGRESS BARS -->
+    <div class="prog-wrap" id="dailyProgWrap">
+      <div class="prog-label">
+        <span>DAILY GOAL</span>
+        <span id="dailyProgLabel">0 / 60</span>
+      </div>
+      <div class="prog-track" id="dailyProgTrack">
+        <div class="prog-fill" id="dailyProgFill" style="width:0%;"></div>
+      </div>
+      <div class="prog-milestone" id="dailyProgNote">optimal window: 60 cards</div>
+    </div>
+    <div class="prog-wrap" id="milestoneProgWrap">
+      <div class="prog-label">
+        <span>NEXT MILESTONE</span>
+        <span id="milestoneProgLabel">0 / 10</span>
+      </div>
+      <div class="prog-track" id="milestoneProgTrack">
+        <div class="prog-fill" id="milestoneProgFill" style="width:0%;"></div>
+      </div>
+      <div class="prog-milestone" id="milestoneProgNote"></div>
+    </div>
+
+    <!-- MASTERY GRID -->
+    <div id="grid" class="panel"></div>
+    <div id="legend" class="panel">
+      <span class="lg"><span class="sw" id="sw0"></span>UNSEEN</span>
+      <span class="lg"><span class="sw" id="sw1"></span>LEARNING</span>
+      <span class="lg"><span class="sw" id="sw2"></span>FAMILIAR</span>
+      <span class="lg"><span class="sw" id="sw3"></span>MASTERED</span>
+    </div>
+
+    <!-- SECONDARY STATS -->
+    <div class="panel" style="display:flex;flex-direction:column;gap:6px;padding:10px;">
+      <div style="display:flex;justify-content:space-between;font-size:8px;">
+        <span>SEEN <span id="uniqueCount">0</span></span>
+        <span id="masteryBreakdown" style="opacity:.8;">0·0·0·0</span>
+        <span>STREAK <span id="streak">0</span></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:7px;opacity:.5;">
+        <span>XP <span id="xp">0</span></span>
+        <span id="multDisplay" style="opacity:.7;">1x</span>
+        <span id="due">--</span>
+<span>LV <span id="lvl">1</span></span>
+      </div>
+    </div>
+
+    <!-- PRIMARY ACTION -->
+    <button class="btn" id="startStudy" style="font-size:16px;letter-spacing:2px">★ STUDY</button>
+
+    <!-- SETTINGS -->
+    <div style="display:flex;gap:8px;">
+      <button class="btn" id="muteBtn" style="font-size:9px;flex:1">SOUND: AUTO</button>
+      <button class="btn" id="orderBtn" style="font-size:9px;flex:1">ORDER: SHUFFLE</button>
+    </div>
+    <div id="deckSelector" class="panel">DECK: CORE 100 ▸</div>
+
+    <!-- DEBUG MODES (hidden by default) -->
+    <div id="debugToggle" style="font-size:7px;text-align:center;opacity:.35;cursor:pointer;padding:4px;letter-spacing:2px;">▸ DEBUG MODES</div>
+    <div id="debugModes" style="display:none;flex-direction:column;gap:6px;">
+      <button class="btn" id="startWS" style="font-size:8px;opacity:.6">► WORD SEARCH</button>
+      <button class="btn" id="start" style="font-size:8px;opacity:.6">► FLASHCARDS</button>
+      <button class="btn" id="startMC" style="font-size:8px;opacity:.6">► MULTIPLE CHOICE</button>
+      <button class="btn" id="startTone" style="font-size:8px;opacity:.6">► TONE DRILL</button>
+      <button class="btn" id="startGrammar" style="font-size:8px;opacity:.6">► GRAMMAR DRILL</button>
+      <div style="border-top:1px solid;opacity:.3;margin:4px 0;"></div>
+      <button class="btn" id="debugReset" style="font-size:8px;opacity:.6;border-color:hsl(0,70%,50%);color:hsl(0,70%,50%);">⚠ RESET ALL PROGRESS</button>
+      <button class="btn" id="debugSetProficiency" style="font-size:8px;opacity:.6;">◈ SET PROFICIENCY LEVEL</button>
+    </div>
+  </div>
+
+  <div id="session">
+    <div id="topbar">
+      <button id="quit">◄ BACK</button>
+      <span id="sxp">XP 0</span>
+      <button id="finish">■ FINISH</button>
+    </div>
+    <div id="card">
+      <div id="card-front">
+        <div id="rank"></div>
+        <div id="hanzi" class="cjk"></div>
+        <div id="pinyin"></div>
+        <div id="flipHint">TAP TO FLIP</div>
+      </div>
+      <div id="card-back-zone">
+        <div id="back">
+          <div id="def"></div>
+          <div id="pos"></div>
+          <div id="radical"></div>
+        </div>
+      </div>
+    </div>
+    <div id="rateLabel" style="font-size:8px;text-align:center;min-height:14px;"></div>
+    <div id="streakbar"></div>
+  </div>
+
+
+  <div id="mc">
+    <div id="mc-topbar">
+      <button id="mc-quit">◄ BACK</button>
+      <span id="mc-xp">XP 0</span>
+      <button id="mc-finish">■ FINISH</button>
+    </div>
+    <div id="mc-submode">
+      <button id="mc-fwd" class="active">CHAR → EN</button>
+      <button id="mc-rev">EN → CHAR</button>
+    </div>
+    <div id="mc-prompt">
+      <div id="mc-rank"></div>
+      <div id="mc-modality" style="font-size:7px;opacity:.6;letter-spacing:1px;"></div>
+      <div id="mc-hanzi" class="cjk"></div>
+      <div id="mc-pinyin"></div>
+    </div>
+    <div id="mc-choices"></div>
+    <button id="mc-dontknow">✕ DON'T KNOW</button>
+    <div id="mc-streak"></div>
+    <div id="mc-explain" style="font-size:8px;line-height:1.8;min-height:32px;text-align:center;padding:4px;"></div>
+  </div>
+
+  <div id="radDetail">
+    <div id="radDetail-topbar">
+      <button id="radDetail-back">◄ BACK</button>
+      <span id="radDetail-title"></span>
+    </div>
+    <div id="radDetail-hero">
+      <div id="radDetail-char" class="cjk"></div>
+      <div id="radDetail-info"></div>
+      <div id="radDetail-canon"></div>
+    </div>
+    <div id="radDetail-label">APPEARS IN</div>
+    <div id="radDetail-grid"></div>
+  </div>
+
+  <div id="charDetail">
+    <div id="charDetail-topbar">
+      <button id="charDetail-back">◄ BACK</button>
+      <span id="charDetail-title"></span>
+    </div>
+    <div id="charDetail-card">
+      <div class="phi-unit">
+        <div id="charDetail-hanzi" class="cjk"></div>
+        <div id="charDetail-pinyin" class="phi-py"></div>
+      </div>
+      <div id="charDetail-def"></div>
+      <div id="charDetail-rads"></div>
+      <div id="charDetail-note"></div>
+    </div>
+  </div>
+
+  <div id="tone">
+    <div id="tone-topbar">
+      <button id="tone-quit">◄ BACK</button>
+      <span id="tone-xp">XP 0</span>
+      <span id="tone-combo"></span>
+    </div>
+    <div id="tone-submode">
+      <button id="tone-visual" class="active">VISUAL</button>
+      <button id="tone-audio">AUDIO</button>
+    </div>
+    <div id="tone-prompt">
+      <div id="tone-hanzi" class="cjk"></div>
+      <div id="tone-py"></div>
+      <div id="tone-hint">TAP TO HEAR</div>
+    </div>
+    <div id="tone-choices"></div>
+    <div id="tone-streak"></div>
+  </div>
+
+  <div id="deckMgr">
+    <div id="deckMgr-topbar">
+      <button id="deckMgr-back">◄ BACK</button>
+      <span>DECKS</span>
+    </div>
+    <div id="deckMgr-list"></div>
+    <div id="deckMgr-new">
+      <input id="deckMgr-input" type="text" placeholder="NEW DECK NAME..." maxlength="30">
+      <button id="deckMgr-create">+ CREATE</button>
+    </div>
+  </div>
+
+  <div id="study">
+    <div id="study-topbar">
+      <button id="study-quit">◄ BACK</button>
+      <span id="studyXP">XP 0</span>
+      <button id="study-finish">■ FINISH</button>
+    </div>
+    <div id="studyMode" style="font-size:7px;opacity:.7;letter-spacing:2px;text-align:center;min-height:10px;"></div>
+    <!-- Flash sub-panel: reuse #session card but inside study -->
+    <div id="studySession" style="flex:1;display:flex;flex-direction:column;gap:10px;">
+      <div id="studyCard" style="flex:1;border:5px solid;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:0;padding:18px;cursor:pointer;text-align:center;overflow:hidden;">
+        <div id="studyCardFront" style="display:flex;flex-direction:column;align-items:center;gap:18px;width:100%;padding-top:24px;padding-bottom:16px;">
+          <div id="studyRank" style="font-size:8px;"></div>
+          <div class="phi-unit">
+            <div id="studyHanzi" class="cjk" style="font-size:72px;line-height:1;"></div>
+            <div id="studyPinyin" class="phi-py" style="font-size:20px;"></div>
+          </div>
+          <div id="studyFlipHint" style="font-size:7px;opacity:.7;">TAP TO FLIP</div>
+        </div>
+        <div id="studyBackZone" style="display:none;flex-direction:column;align-items:center;gap:20px;width:100%;padding:24px 16px 16px;border-top:2px solid;">
+          <div id="studyDef" style="font-size:20px;line-height:1.5;text-align:center;letter-spacing:.5px;"></div>
+          <div id="studyPos" style="font-size:11px;opacity:.9;text-align:center;line-height:2;letter-spacing:.5px;"></div>
+        </div>
+      </div>
+    </div>
+    <!-- MC sub-panel -->
+    <div id="studyMC">
+      <div id="studyMCPrompt">
+        <div id="studyMCRank" style="font-size:8px;"></div>
+        <div id="studyMCModality" style="font-size:7px;opacity:.6;letter-spacing:1px;"></div>
+        <div class="phi-unit">
+          <div id="studyMCPromptText"></div>
+          <div id="studyMCPinyin" class="phi-py" style="font-size:18px;"></div>
+        </div>
+      </div>
+      <div id="studyMCChoices" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"></div>
+      <div id="studyMCTapHint" style="min-height:14px;text-align:center;font-size:7px;opacity:.5;letter-spacing:1px;padding:2px 0;flex-shrink:0;"></div>
+      <div id="studyMCExplain" style="font-size:8px;line-height:1.8;min-height:20px;text-align:center;padding:2px;flex-shrink:0;"></div>
+      <div id="studyMCActions" style="flex-shrink:0;"></div>
+    </div>
+    <!-- POS sub-panel -->
+    <div id="studyPOS" style="display:none;flex-direction:column;gap:10px;flex:1;">
+      <div id="studyPOSPrompt" style="border:5px solid;flex:1;display:flex;flex-direction:column;align-items:center;padding:16px;text-align:center;">
+        <div id="studyPOSRank" style="font-size:8px;min-height:20px;width:100%;text-align:center;"></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;">
+          <div class="phi-unit">
+            <div id="studyPOSChar" class="cjk" style="font-size:72px;line-height:1;"></div>
+            <div id="studyPOSPinyin" class="phi-py" style="font-size:18px;"></div>
+          </div>
+        </div>
+        <div id="studyPOSAnswer" style="min-height:36px;width:100%;display:flex;align-items:center;justify-content:center;font-size:12px;"></div>
+        <div id="studyPOSTapHint" style="min-height:14px;text-align:center;font-size:7px;opacity:.5;letter-spacing:1px;width:100%;"></div>
+      </div>
+      <div id="studyPOSChoices" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"></div>
+      <div id="studyPOSTapHint2" style="min-height:14px;text-align:center;font-size:7px;opacity:.5;letter-spacing:1px;padding:2px 0;flex-shrink:0;"></div>
+      <div id="studyPOSWager" style="flex-shrink:0;"></div>
+    </div>
+    <!-- Colloquialism sub-panel -->
+    <div id="studyColl" style="display:none;flex-direction:column;gap:0;flex:1;overflow:hidden;">
+      <div id="studyCollCard" style="flex:1;border:5px solid;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:0;padding:18px;cursor:pointer;text-align:center;overflow:hidden;">
+        <div id="studyCollFront" style="display:flex;flex-direction:column;align-items:center;gap:16px;width:100%;padding-top:20px;padding-bottom:16px;">
+          <div class="phi-unit">
+            <div id="studyCollExpr" style="font-size:42px;font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif;line-height:1.2;"></div>
+            <div id="studyCollPy" class="phi-py" style="font-size:14px;"></div>
+          </div>
+          <div id="studyCollRegister" style="font-size:7px;opacity:.6;letter-spacing:1px;"></div>
+          <div id="studyCollHint" style="font-size:7px;opacity:.7;">TAP TO REVEAL</div>
+        </div>
+        <div id="studyCollBack" style="display:none;flex-direction:column;align-items:center;gap:10px;width:100%;padding-top:12px;border-top:2px solid;overflow-y:auto;">
+          <div id="studyCollMeaning" style="font-size:14px;line-height:1.6;text-align:center;letter-spacing:.5px;"></div>
+          <div id="studyCollBreakdown" style="width:100%;display:flex;flex-direction:column;gap:0;"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Tone sub-panel -->
+    <div id="studyTone">
+      <div id="studyTonePrompt">
+        <div class="phi-unit">
+          <div id="studyToneChar" class="cjk"></div>
+          <div id="studyTonePy"></div>
+        </div>
+      </div>
+      <div id="studyToneChoices"></div>
+      <div id="studyToneTapHint" style="min-height:14px;text-align:center;font-size:7px;opacity:.5;letter-spacing:1px;padding:2px 0;flex-shrink:0;"></div>
+      <div id="studyToneWager" style="flex-shrink:0;"></div>
+    </div>
+  </div>
+
+  <div id="summary">
+    <div id="summary-topbar">
+      <button id="summary-home">◄ HOME</button>
+      <span>SESSION SUMMARY</span>
+      <button id="summary-continue">CONTINUE ►</button>
+    </div>
+    <div id="summary-title">SESSION COMPLETE</div>
+    <div id="summary-stats">
+      <span>CORRECT <span id="sum-correct">0</span></span>
+      <span>WRONG <span id="sum-wrong">0</span></span>
+      <span>XP <span id="sum-xp">+0</span></span>
+    </div>
+    <div id="summary-attention"></div>
+    <div id="summary-list"></div>
+  </div>
+
+  <div id="wordSearch" style="display:none;flex-direction:column;padding:16px;gap:8px;flex:1;">
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:8px;">
+      <button id="ws-quit" style="font-family:inherit;font-size:8px;padding:8px;border:3px solid;background:transparent;cursor:pointer;">◄ BACK</button>
+      <span id="ws-score" style="font-size:8px;">0/0</span>
+    </div>
+    <div id="ws-card" style="border:5px solid;flex:1;display:flex;flex-direction:column;overflow:hidden;">
+      <div id="ws-header" style="padding:14px 14px 10px;border-bottom:2px solid;display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <div id="ws-target" style="font-size:28px;font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif;"></div>
+        <div id="ws-target-def" style="font-size:9px;letter-spacing:1px;"></div>
+        <div id="ws-instruction" style="font-size:7px;opacity:.6;">TAP EVERY INSTANCE IN THE TEXT BELOW</div>
+      </div>
+      <div id="ws-passage" style="padding:14px;font-size:20px;line-height:2.4;flex:1;overflow-y:auto;font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif;"></div>
+      <div id="ws-result" style="font-size:9px;text-align:center;padding:8px;min-height:28px;display:flex;align-items:center;justify-content:center;"></div>
+    </div>
+    <button id="ws-next" style="font-family:inherit;font-size:9px;padding:12px;border:4px solid;background:transparent;cursor:pointer;display:none;">NEXT ►</button>
+  </div>
+</div>
+<script src="js/app.js"></script>
+</body>
+</html>

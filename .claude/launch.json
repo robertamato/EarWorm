@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "earworm",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "3456", "--directory", "C:\\Users\\Rober\\OneDrive\\Desktop\\Earworm"],
+      "port": 3456
+    }
+  ]
+}

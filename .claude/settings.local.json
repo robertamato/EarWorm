@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(New-Item -ItemType Directory -Force -Path \"C:\\\\Users\\\\Rober\\\\OneDrive\\\\Desktop\\\\Earworm\\\\.claude\")",
+      "Bash(Out-Null)",
+      "mcp__Claude_Preview__preview_start",
+      "PowerShell(Get-Command python, python3, node, npx 2>$null)",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget",
+      "Bash(node --input-type=module)"
+    ]
+  }
+}
