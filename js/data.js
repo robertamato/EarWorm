@@ -251,7 +251,7 @@ function applyAnswer(i, isCorrect, modality, latencyMs){
     const m=st.byModality[modality]||{answers:0,correct:0};
     m.answers++; if(isCorrect) m.correct++;
     st.byModality[modality]=m;
-    if(window.EW&&EW.obs) EW.obs.logEvent('answer',{item:i,modality:modality,correct:!!isCorrect,latencyMs:(typeof latencyMs==='number'?latencyMs:null),course:(typeof ACTIVE_COURSE_KEY!=='undefined'?ACTIVE_COURSE_KEY:null)});
+    if(window.EW&&EW.obs) EW.obs.logEvent('answer',{item:i,modality:modality,correct:!!isCorrect,latencyMs:(typeof latencyMs==='number'?latencyMs:null),course:(typeof ACTIVE_COURSE_KEY!=='undefined'?ACTIVE_COURSE_KEY:null),policy:(newSchedulerPolicy()?'v2':'v1')});
     save();
   }catch(e){ try{ if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'applyAnswer'}); }catch(_){} }
 }
@@ -368,6 +368,45 @@ function charSyl(char){
 
 // Next word to introduce: next on frequency spine not yet introduced
 // Or next unlocked compound if its rank < next spine word's rank
+// Scheduler policy flag. v2 = breadth-first-to-context pivot (demand-pull
+// introduction, recognition-level context unlock, context-forward modality).
+// Default off; toggle via localStorage 'earworm_policy'='v2' or ?earworm_policy=v2
+// or the POLICY button in the debug panel. Gates every pivot branch so v1 and
+// v2 coexist and revert instantly.
+function newSchedulerPolicy(){
+  try{ return localStorage.getItem('earworm_policy')==='v2' || /[?&]earworm_policy=v2/.test(location.search); }catch(e){ return false; }
+}
+
+// Would introducing word w make sentence `zh` fully covered? (Every other
+// D-word in the sentence already introduced; w treated as introduced.)
+function sentenceCoverableIfAdded(zh, w){
+  for(let j=0;j<D.length;j++){
+    if(j===w) continue;
+    if(S.cards[j]&&S.cards[j].exp) continue;
+    if(zh.includes(D[j][0])) return false;
+  }
+  return true;
+}
+
+// v2 demand-pull: among the next few unseen words (bounded Zipf horizon so we
+// never stray far from frequency order), pick the one that newly completes the
+// most example sentences — i.e. the word whose introduction pulls context into
+// reach. Returns -1 when nothing is unlocked (caller falls back to Zipf order).
+function demandPullNextWord(nextSpine){
+  if(nextSpine<0) return -1;
+  const HORIZON=12;
+  const hi=Math.min(D.length, nextSpine+HORIZON);
+  let best=-1, bestGain=0;
+  for(let w=nextSpine; w<hi; w++){
+    if(S.cards[w]&&S.cards[w].exp) continue;
+    let gain=0;
+    const sents=(typeof getPuzzleSentences==='function')?getPuzzleSentences(w):[];
+    for(let k=0;k<sents.length;k++){ if(sentenceCoverableIfAdded(sents[k][0], w)) gain++; }
+    if(gain>bestGain){ bestGain=gain; best=w; }
+  }
+  return bestGain>0?best:-1;
+}
+
 function nextWordToIntroduce(){
   // Next individual word
   let nextSpine=-1;
@@ -375,6 +414,11 @@ function nextWordToIntroduce(){
     if(!S.cards[i]||!S.cards[i].exp){
       nextSpine=i; break;
     }
+  }
+  // v2 demand-pull override (bounded; falls back to Zipf when nothing unlocks).
+  if(newSchedulerPolicy() && nextSpine>=0){
+    const dp=demandPullNextWord(nextSpine);
+    if(dp>=0) nextSpine=dp;
   }
 
   // Front-load component characters before a multi-character compound.

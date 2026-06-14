@@ -155,8 +155,20 @@ const EXAMPLE_SENTENCES={
 // Harder than MC forward — context dependency means choices can be similar words.
 // Unlocks at meaning axis stage >= 2.
 
+// Puzzle-source seam. Static bank today; a generation backend can implement
+// the same signature later (per-course, unique, language-agnostic). Returns an
+// array of [target, pinyin, gloss] sentences for word i.
+function getPuzzleSentences(i){
+  try{ return EXAMPLE_SENTENCES[D[i][0]]||[]; }catch(e){ return []; }
+}
+
 function clozeUnlocked(i){
-  return getAxisStage(i,'meaning')>=2 && (EXAMPLE_SENTENCES[D[i][0]]||[]).length>0;
+  if(getPuzzleSentences(i).length===0) return false;
+  // v2: context is reachable at recognition level — one sighting unlocks it, so
+  // depth accrues THROUGH context instead of being gated behind isolated
+  // mastery. v1 keeps the original meaning-stage-2 gate.
+  if(newSchedulerPolicy()) return (card(i).exp||0)>=1;
+  return getAxisStage(i,'meaning')>=2;
 }
 
 function speakWithBlank(zh,ch,langCode){

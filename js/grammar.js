@@ -372,6 +372,16 @@ function wordModalityFromAxes(i){
   // Subsequent encounters route to MC and other challenge modalities.
   if(exp===0) return 'flash';
 
+  // v2 context-forward: once a word is recognized (exp>=1) and has a coverable
+  // sentence, prefer context puzzles immediately — isolated MC only bridges.
+  // Depth accrues through context. (Full context-dominance is the next step.)
+  if(newSchedulerPolicy() && clozeUnlocked(i)){
+    const rv=Math.random();
+    if(rv<0.6) return 'cloze';
+    if(rv<0.8 && wordOrderUnlocked(i)) return 'word-order';
+    return Math.random()<0.5?'mc-fwd':'mc-rev';
+  }
+
   // Check if convergence question is ready
   if(convergenceUnlocked(i)&&isCardDue(i)){
     const overdue=mostOverdueAxis(i);

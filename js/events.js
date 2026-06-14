@@ -77,6 +77,10 @@ function classifyDistractorError(targetIdx, chosenDef){
 if($('langLabel')) $('langLabel').onclick=cycleCourse;
 if($('statsBtn')) $('statsBtn').onclick=()=>{ renderStats(); show('stats'); };
 if($('stats-back')) $('stats-back').onclick=()=>{ rollBg(); renderHome(); show('home'); };
+if($('debugPolicy')){
+  $('debugPolicy').textContent='⚙ POLICY: '+(newSchedulerPolicy()?'V2 (context)':'V1');
+  $('debugPolicy').onclick=()=>{ try{ if(newSchedulerPolicy()) localStorage.removeItem('earworm_policy'); else localStorage.setItem('earworm_policy','v2'); }catch(e){} location.reload(); };
+}
 $('start').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startStudy(true); };
 $('quit').onclick=endSession;
 
