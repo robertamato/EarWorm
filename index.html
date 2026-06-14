@@ -2,6 +2,32 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- On-page diagnostic: surfaces JS errors on devices with no console (iOS).
+     Runs FIRST so it captures parse/load errors in obs.js and app.js below.
+     Shows a build stamp + UA so we can tell fresh code from a cached page. -->
+<script>
+(function(){
+  var BUILD='diag-1';
+  function box(){
+    var d=document.getElementById('__diag');
+    if(!d){
+      d=document.createElement('div');
+      d.id='__diag';
+      d.style.cssText='position:fixed;top:0;left:0;right:0;z-index:2147483647;font:11px/1.4 monospace;padding:6px;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow:auto;background:#012;color:#7fb;';
+      (document.body||document.documentElement).appendChild(d);
+    }
+    return d;
+  }
+  function err(m){ var d=box(); d.style.background='#900'; d.style.color='#fff'; d.textContent+=m+'\n'; }
+  function info(m){ var d=box(); d.textContent+=m+'\n'; }
+  window.addEventListener('error',function(e){
+    if(e.message) err('ERR: '+e.message+' @ '+String(e.filename||'?').split('/').pop()+':'+(e.lineno||'?')+':'+(e.colno||'?'));
+    else if(e.target&&(e.target.src||e.target.href)) err('LOAD FAIL: '+(e.target.src||e.target.href));
+  },true);
+  window.addEventListener('unhandledrejection',function(e){ err('PROMISE: '+(e.reason&&(e.reason.stack||e.reason.message)||e.reason)); });
+  document.addEventListener('DOMContentLoaded',function(){ info('BUILD '+BUILD+' · '+navigator.userAgent); });
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="light only">
 <meta name="apple-mobile-web-app-capable" content="yes">
