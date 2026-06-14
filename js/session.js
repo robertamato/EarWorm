@@ -376,11 +376,14 @@ function buildStudyQueue(){
 
   const grammarDuePool=[],vocabDue=[],vocabSeen=[];
 
-  // Add due sub-axis drills sorted by most overdue.
-  // Grammar exemplars are Mandarin-specific — skip entirely for courses
-  // that have no grammar track (e.g. Japanese).
-  const hasGrammar=!activeCourse||!activeCourse()||activeCourse().hasGrammar!==false;
-  const dueDrills=hasGrammar?dueGrammarDrills():[]; // already filtered by sessionGrammarAnswered
+  // Grammar metalanguage drills (名词/动词…, the tl_integration axis) are NO
+  // LONGER auto-interleaved into normal study. They test untaught Chinese
+  // metavocabulary and are incomprehensible mid-acquisition — the opposite of
+  // comprehensible input. They remain reachable via the explicit GRAMMAR DRILL
+  // debug button, which builds its own queue in startStudy and does not use this
+  // pool. Re-enable here only once a progressive-localization design teaches the
+  // terms first (each Chinese grammar term introduced as a flashcard before use).
+  const dueDrills=[]; // was: (course hasGrammar) ? dueGrammarDrills() : []
   dueDrills.forEach(({cat,axis})=>{
     grammarDuePool.push(grammarQueueKey(cat,axis));
   });
