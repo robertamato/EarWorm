@@ -1,9 +1,4 @@
 
-/* ── Console suppression (dev build) ─────────────────────────── */
-// Roadmap: re-enable with debug flag for development builds
-const _noop = () => {};
-const console = { log:_noop, warn:_noop, error:_noop, debug:_noop, info:_noop, dir:_noop, group:_noop, groupEnd:_noop, time:_noop, timeEnd:_noop };
-
 /* ================================================================
    EARWORM v2 — Layered Architecture
    ================================================================
