@@ -195,7 +195,10 @@ function defaultState(){
   return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',ordered:false,decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},
     // Independent grammar track — multi-dimensional, per-category
     // Each category has 5 independent sub-axes with their own SRS schedules
-    grammar:{}
+    grammar:{},
+    // Durable learning stats (per course) — fed by applyAnswer(), read by
+    // renderStats(). days keyed by toDateString(); frontier is end-of-day snapshot.
+    stats:{days:{},totalAnswers:0,totalCorrect:0,byModality:{}}
   }; // sound: auto|tap|mute
 }
 let S=defaultState();
@@ -216,6 +219,9 @@ function load(){
       if(typeof S.streak!=='number') S.streak=0;
       if(!S.cards||typeof S.cards!=='object') S.cards={};
       if(!S.grammarMastery||typeof S.grammarMastery!=='object') S.grammarMastery={};
+      if(!S.stats||typeof S.stats!=='object') S.stats={days:{},totalAnswers:0,totalCorrect:0,byModality:{}};
+      if(!S.stats.days||typeof S.stats.days!=='object') S.stats.days={};
+      if(!S.stats.byModality||typeof S.stats.byModality!=='object') S.stats.byModality={};
       // Ensure grammar track exists with all categories
       if(!S.grammar||typeof S.grammar!=='object') S.grammar={};
       if(!S.decks||typeof S.decks!=='object') S.decks={};
@@ -224,6 +230,30 @@ function load(){
 }
 function save(){
   try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){}
+}
+
+// Single funnel for every graded answer. Accumulates durable per-course stats
+// (S.stats) for the "your learning" view and emits a telemetry event onto the
+// observability bus. logAnswer() routes through here, so every modality lands
+// in one place. modality/latencyMs are optional (graceful: 'unknown'/skip).
+function applyAnswer(i, isCorrect, modality, latencyMs){
+  try{
+    modality = modality || 'unknown';
+    if(!S.stats||typeof S.stats!=='object') S.stats={days:{},totalAnswers:0,totalCorrect:0,byModality:{}};
+    const st=S.stats;
+    const day=new Date().toDateString();
+    let d=st.days[day];
+    if(!d){ d={answers:0,correct:0,sumLatency:0,latencyN:0,frontier:0}; st.days[day]=d; }
+    d.answers++; if(isCorrect) d.correct++;
+    if(typeof latencyMs==='number' && latencyMs>0 && latencyMs<120000){ d.sumLatency+=latencyMs; d.latencyN++; }
+    d.frontier=frontier(); // end-of-day acquisition snapshot (monotonic)
+    st.totalAnswers++; if(isCorrect) st.totalCorrect++;
+    const m=st.byModality[modality]||{answers:0,correct:0};
+    m.answers++; if(isCorrect) m.correct++;
+    st.byModality[modality]=m;
+    if(window.EW&&EW.obs) EW.obs.logEvent('answer',{item:i,modality:modality,correct:!!isCorrect,latencyMs:(typeof latencyMs==='number'?latencyMs:null),course:(typeof ACTIVE_COURSE_KEY!=='undefined'?ACTIVE_COURSE_KEY:null)});
+    save();
+  }catch(e){ try{ if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'applyAnswer'}); }catch(_){} }
 }
 function card(i){
   if(!S.cards[i]) S.cards[i]={reps:0,lapses:0,iv:0,due:0,seen:false,m:0,exp:0,flipMs:0,axisStage:{pos:0,meaning:0},axisCorrect:{pos:0,meaning:0}};

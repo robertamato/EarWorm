@@ -558,7 +558,7 @@ function showStudyPOSStaged(i, axisStage){
       recordAxisResultNew(i,'pos',isCorrect,posRespMs);
       recordAxisResult(i,'pos',isCorrect);
       recordGrammarAttempt(D[i][4],isCorrect);
-      logAnswer(i,isCorrect);
+      logAnswer(i,isCorrect,'pos',posRespMs);
       const posSpeedMult=posRespMs<1500?1.3:posRespMs<4000?1.0:posRespMs<8000?0.8:0.6;
       const posWagerMult=Math.max(0.5,Math.min(1.5,currentMultIdx/Math.max(1,defaultMultIdx)));
       if(isCorrect){ 

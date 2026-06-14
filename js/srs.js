@@ -48,6 +48,53 @@ function show(view){
   if(view!=='study' && $('studyPOS')) $('studyPOS').style.display='none';
   $('summary').style.display=view==='summary'?'flex':'none';
   $('wordSearch').style.display=view==='wordSearch'?'flex':'none';
+  if($('stats')) $('stats').style.display=view==='stats'?'flex':'none';
+}
+
+// "Your learning" view — durable per-course stats from S.stats + live mastery
+// bands from S.cards. Read-only; pure render into #statsBody.
+function renderStats(){
+  const body=document.getElementById('statsBody');
+  if(!body) return;
+  const st=(S.stats&&typeof S.stats==='object')?S.stats:{days:{},totalAnswers:0,totalCorrect:0,byModality:{}};
+  const totA=st.totalAnswers||0, totC=st.totalCorrect||0;
+  const acc=totA?Math.round(totC/totA*100):0;
+  let familiar=0,mastered=0;
+  for(let i=0;i<D.length;i++){ const s=state(i); if(s===2)familiar++; else if(s===3)mastered++; }
+  const known=familiar+mastered;
+  const fr=frontier();
+  const dayKeys=Object.keys(st.days||{}).sort(function(a,b){return new Date(a)-new Date(b);});
+  const daysActive=dayKeys.length;
+  let sumL=0,nL=0; dayKeys.forEach(function(k){var d=st.days[k]; sumL+=d.sumLatency||0; nL+=d.latencyN||0;});
+  const avgL=nL?(sumL/nL/1000).toFixed(1)+'s':'—';
+  let running=0; const newByDay={};
+  dayKeys.forEach(function(k){var f=st.days[k].frontier||running; newByDay[k]=Math.max(0,f-running); running=Math.max(running,f);});
+  const weekAgo=Date.now()-7*86400000;
+  let wkNew=0; dayKeys.forEach(function(k){ if(new Date(k).getTime()>=weekAgo) wkNew+=newByDay[k]; });
+  const last=dayKeys.slice(-7);
+  const fmt=function(k){var d=new Date(k); return (d.getMonth()+1)+'/'+d.getDate();};
+  const tile=function(label,val){ return '<div style="flex:1;border:2px solid currentColor;padding:10px 6px;text-align:center;"><div style="font-size:22px;line-height:1;">'+val+'</div><div style="font-size:7px;opacity:.7;margin-top:6px;letter-spacing:1px;">'+label+'</div></div>'; };
+  const row=function(l,v){ return '<div style="display:flex;justify-content:space-between;font-size:9px;margin-top:5px;"><span>'+l+'</span><span>'+v+'</span></div>'; };
+  let html='';
+  html+='<div style="display:flex;gap:8px;">'+tile('ACCURACY',acc+'%')+tile('WORDS KNOWN',known)+tile('DAY STREAK',(S.streak||0))+'</div>';
+  html+='<div style="border:2px solid currentColor;padding:10px;margin-top:10px;"><div style="font-size:8px;opacity:.7;letter-spacing:1px;margin-bottom:8px;">ACQUISITION</div>';
+  html+=row('FRONTIER',fr+' / '+D.length)+row('NEW THIS WEEK',wkNew)+row('DAYS ACTIVE',daysActive)+row('TOTAL ANSWERS',totA)+row('AVG RESPONSE',avgL)+'</div>';
+  html+='<div style="border:2px solid currentColor;padding:10px;margin-top:10px;"><div style="font-size:8px;opacity:.7;letter-spacing:1px;margin-bottom:8px;">ACCURACY · LAST '+last.length+' ACTIVE DAYS</div>';
+  if(!last.length) html+='<div style="font-size:8px;opacity:.6;">No sessions yet — study to start your curve.</div>';
+  last.forEach(function(k){ var d=st.days[k]; var a=d.answers?Math.round(d.correct/d.answers*100):0;
+    html+='<div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:8px;"><span style="width:34px;opacity:.7;">'+fmt(k)+'</span><div style="flex:1;height:10px;border:1px solid currentColor;"><div style="height:100%;width:'+a+'%;background:currentColor;"></div></div><span style="width:58px;text-align:right;opacity:.8;">'+a+'% · '+d.answers+'</span></div>';
+  });
+  html+='</div>';
+  const mods=Object.keys(st.byModality||{});
+  if(mods.length){
+    html+='<div style="border:2px solid currentColor;padding:10px;margin-top:10px;"><div style="font-size:8px;opacity:.7;letter-spacing:1px;margin-bottom:8px;">BY MODE</div>';
+    mods.sort(function(a,b){return st.byModality[b].answers-st.byModality[a].answers;}).forEach(function(m){
+      var mm=st.byModality[m]; var a=mm.answers?Math.round(mm.correct/mm.answers*100):0;
+      html+='<div style="display:flex;justify-content:space-between;font-size:8px;margin-top:4px;"><span>'+m.toUpperCase()+'</span><span style="opacity:.8;">'+a+'% · '+mm.answers+'</span></div>';
+    });
+    html+='</div>';
+  }
+  body.innerHTML=html;
 }
 
 let cardShownAt=0, queueIdx=0;
@@ -615,7 +662,7 @@ function pickMC(btn,chosen,correct){
   const hist=mcHistory.get(mcCur)||[];
   hist.push(isCorrect);
   mcHistory.set(mcCur,hist);
-  logAnswer(mcCur,isCorrect);
+  logAnswer(mcCur,isCorrect,'mc',cardShownAt?Date.now()-cardShownAt:null);
 
   const stage=meaningStage(masteryScore(mcCur));
   const confident=mcConfidence==='sure';

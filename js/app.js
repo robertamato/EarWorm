@@ -195,7 +195,10 @@ function defaultState(){
   return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',ordered:false,decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},
     // Independent grammar track — multi-dimensional, per-category
     // Each category has 5 independent sub-axes with their own SRS schedules
-    grammar:{}
+    grammar:{},
+    // Durable learning stats (per course) — fed by applyAnswer(), read by
+    // renderStats(). days keyed by toDateString(); frontier is end-of-day snapshot.
+    stats:{days:{},totalAnswers:0,totalCorrect:0,byModality:{}}
   }; // sound: auto|tap|mute
 }
 let S=defaultState();
@@ -216,6 +219,9 @@ function load(){
       if(typeof S.streak!=='number') S.streak=0;
       if(!S.cards||typeof S.cards!=='object') S.cards={};
       if(!S.grammarMastery||typeof S.grammarMastery!=='object') S.grammarMastery={};
+      if(!S.stats||typeof S.stats!=='object') S.stats={days:{},totalAnswers:0,totalCorrect:0,byModality:{}};
+      if(!S.stats.days||typeof S.stats.days!=='object') S.stats.days={};
+      if(!S.stats.byModality||typeof S.stats.byModality!=='object') S.stats.byModality={};
       // Ensure grammar track exists with all categories
       if(!S.grammar||typeof S.grammar!=='object') S.grammar={};
       if(!S.decks||typeof S.decks!=='object') S.decks={};
@@ -224,6 +230,30 @@ function load(){
 }
 function save(){
   try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){}
+}
+
+// Single funnel for every graded answer. Accumulates durable per-course stats
+// (S.stats) for the "your learning" view and emits a telemetry event onto the
+// observability bus. logAnswer() routes through here, so every modality lands
+// in one place. modality/latencyMs are optional (graceful: 'unknown'/skip).
+function applyAnswer(i, isCorrect, modality, latencyMs){
+  try{
+    modality = modality || 'unknown';
+    if(!S.stats||typeof S.stats!=='object') S.stats={days:{},totalAnswers:0,totalCorrect:0,byModality:{}};
+    const st=S.stats;
+    const day=new Date().toDateString();
+    let d=st.days[day];
+    if(!d){ d={answers:0,correct:0,sumLatency:0,latencyN:0,frontier:0}; st.days[day]=d; }
+    d.answers++; if(isCorrect) d.correct++;
+    if(typeof latencyMs==='number' && latencyMs>0 && latencyMs<120000){ d.sumLatency+=latencyMs; d.latencyN++; }
+    d.frontier=frontier(); // end-of-day acquisition snapshot (monotonic)
+    st.totalAnswers++; if(isCorrect) st.totalCorrect++;
+    const m=st.byModality[modality]||{answers:0,correct:0};
+    m.answers++; if(isCorrect) m.correct++;
+    st.byModality[modality]=m;
+    if(window.EW&&EW.obs) EW.obs.logEvent('answer',{item:i,modality:modality,correct:!!isCorrect,latencyMs:(typeof latencyMs==='number'?latencyMs:null),course:(typeof ACTIVE_COURSE_KEY!=='undefined'?ACTIVE_COURSE_KEY:null)});
+    save();
+  }catch(e){ try{ if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'applyAnswer'}); }catch(_){} }
 }
 function card(i){
   if(!S.cards[i]) S.cards[i]={reps:0,lapses:0,iv:0,due:0,seen:false,m:0,exp:0,flipMs:0,axisStage:{pos:0,meaning:0},axisCorrect:{pos:0,meaning:0}};
@@ -955,6 +985,53 @@ function show(view){
   if(view!=='study' && $('studyPOS')) $('studyPOS').style.display='none';
   $('summary').style.display=view==='summary'?'flex':'none';
   $('wordSearch').style.display=view==='wordSearch'?'flex':'none';
+  if($('stats')) $('stats').style.display=view==='stats'?'flex':'none';
+}
+
+// "Your learning" view — durable per-course stats from S.stats + live mastery
+// bands from S.cards. Read-only; pure render into #statsBody.
+function renderStats(){
+  const body=document.getElementById('statsBody');
+  if(!body) return;
+  const st=(S.stats&&typeof S.stats==='object')?S.stats:{days:{},totalAnswers:0,totalCorrect:0,byModality:{}};
+  const totA=st.totalAnswers||0, totC=st.totalCorrect||0;
+  const acc=totA?Math.round(totC/totA*100):0;
+  let familiar=0,mastered=0;
+  for(let i=0;i<D.length;i++){ const s=state(i); if(s===2)familiar++; else if(s===3)mastered++; }
+  const known=familiar+mastered;
+  const fr=frontier();
+  const dayKeys=Object.keys(st.days||{}).sort(function(a,b){return new Date(a)-new Date(b);});
+  const daysActive=dayKeys.length;
+  let sumL=0,nL=0; dayKeys.forEach(function(k){var d=st.days[k]; sumL+=d.sumLatency||0; nL+=d.latencyN||0;});
+  const avgL=nL?(sumL/nL/1000).toFixed(1)+'s':'—';
+  let running=0; const newByDay={};
+  dayKeys.forEach(function(k){var f=st.days[k].frontier||running; newByDay[k]=Math.max(0,f-running); running=Math.max(running,f);});
+  const weekAgo=Date.now()-7*86400000;
+  let wkNew=0; dayKeys.forEach(function(k){ if(new Date(k).getTime()>=weekAgo) wkNew+=newByDay[k]; });
+  const last=dayKeys.slice(-7);
+  const fmt=function(k){var d=new Date(k); return (d.getMonth()+1)+'/'+d.getDate();};
+  const tile=function(label,val){ return '<div style="flex:1;border:2px solid currentColor;padding:10px 6px;text-align:center;"><div style="font-size:22px;line-height:1;">'+val+'</div><div style="font-size:7px;opacity:.7;margin-top:6px;letter-spacing:1px;">'+label+'</div></div>'; };
+  const row=function(l,v){ return '<div style="display:flex;justify-content:space-between;font-size:9px;margin-top:5px;"><span>'+l+'</span><span>'+v+'</span></div>'; };
+  let html='';
+  html+='<div style="display:flex;gap:8px;">'+tile('ACCURACY',acc+'%')+tile('WORDS KNOWN',known)+tile('DAY STREAK',(S.streak||0))+'</div>';
+  html+='<div style="border:2px solid currentColor;padding:10px;margin-top:10px;"><div style="font-size:8px;opacity:.7;letter-spacing:1px;margin-bottom:8px;">ACQUISITION</div>';
+  html+=row('FRONTIER',fr+' / '+D.length)+row('NEW THIS WEEK',wkNew)+row('DAYS ACTIVE',daysActive)+row('TOTAL ANSWERS',totA)+row('AVG RESPONSE',avgL)+'</div>';
+  html+='<div style="border:2px solid currentColor;padding:10px;margin-top:10px;"><div style="font-size:8px;opacity:.7;letter-spacing:1px;margin-bottom:8px;">ACCURACY · LAST '+last.length+' ACTIVE DAYS</div>';
+  if(!last.length) html+='<div style="font-size:8px;opacity:.6;">No sessions yet — study to start your curve.</div>';
+  last.forEach(function(k){ var d=st.days[k]; var a=d.answers?Math.round(d.correct/d.answers*100):0;
+    html+='<div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:8px;"><span style="width:34px;opacity:.7;">'+fmt(k)+'</span><div style="flex:1;height:10px;border:1px solid currentColor;"><div style="height:100%;width:'+a+'%;background:currentColor;"></div></div><span style="width:58px;text-align:right;opacity:.8;">'+a+'% · '+d.answers+'</span></div>';
+  });
+  html+='</div>';
+  const mods=Object.keys(st.byModality||{});
+  if(mods.length){
+    html+='<div style="border:2px solid currentColor;padding:10px;margin-top:10px;"><div style="font-size:8px;opacity:.7;letter-spacing:1px;margin-bottom:8px;">BY MODE</div>';
+    mods.sort(function(a,b){return st.byModality[b].answers-st.byModality[a].answers;}).forEach(function(m){
+      var mm=st.byModality[m]; var a=mm.answers?Math.round(mm.correct/mm.answers*100):0;
+      html+='<div style="display:flex;justify-content:space-between;font-size:8px;margin-top:4px;"><span>'+m.toUpperCase()+'</span><span style="opacity:.8;">'+a+'% · '+mm.answers+'</span></div>';
+    });
+    html+='</div>';
+  }
+  body.innerHTML=html;
 }
 
 let cardShownAt=0, queueIdx=0;
@@ -1522,7 +1599,7 @@ function pickMC(btn,chosen,correct){
   const hist=mcHistory.get(mcCur)||[];
   hist.push(isCorrect);
   mcHistory.set(mcCur,hist);
-  logAnswer(mcCur,isCorrect);
+  logAnswer(mcCur,isCorrect,'mc',cardShownAt?Date.now()-cardShownAt:null);
 
   const stage=meaningStage(masteryScore(mcCur));
   const confident=mcConfidence==='sure';
@@ -2604,7 +2681,7 @@ function pickStudyMC(btn,chosen,correct,i){
     b.style.pointerEvents='none';
   });
 
-  logAnswer(i,isCorrect);
+  logAnswer(i,isCorrect, mcReverse?'mc-rev':'mc-fwd', Date.now()-cardShownAtMC);
   if(!isCorrect){
     // Classify distractor error for targeted re-scheduling
     const errType=classifyDistractorError(i,chosen);
@@ -2794,7 +2871,7 @@ function showStudyTone(i){
       const toneMs=Date.now()-cardShownAtMC;
       recordChallengeResult(i,'tone',ok,toneMs);
       recordWagerDecision(i,ok,currentMultIdx,defaultMultIdx,toneMs);
-      logAnswer(i,ok);
+      logAnswer(i,ok,'tone',toneMs);
       const tSpeedM=toneMs<1500?1.3:toneMs<4000?1.0:0.8;
       if(ok){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,toneMs)*fatigueXPMultiplier()); addMastery(i,0.25*tSpeedM); }
       else { resetMult(); addMastery(i,-0.1); studyPending.push(i); }
@@ -2833,13 +2910,14 @@ const sessionLog=new Map();
 let sessionXPStart=0;
 let summaryReturnView='home'; // which view CONTINUE goes back to
 
-function logAnswer(i, isCorrect){
+function logAnswer(i, isCorrect, modality, latencyMs){
   const entry=sessionLog.get(i)||{correct:0,wrong:0,masteryBefore:masteryScore(i)};
   if(isCorrect) entry.correct++;
   else entry.wrong++;
   sessionLog.set(i,entry);
   sessionAnswerRing.push(!!isCorrect);
   if(sessionAnswerRing.length>ANSWER_RING_SIZE) sessionAnswerRing.shift();
+  applyAnswer(i, isCorrect, modality, latencyMs); // funnel: durable stats + telemetry
 }
 
 function showSummary(returnView){
@@ -3144,7 +3222,7 @@ function showStudyPOS(i){
       conf.textContent=(isCorrect?'✓ ':'→ ')+correctCat.toUpperCase();
       if(stage===1) $('studyPOSPrompt').appendChild(conf);
 
-      logAnswer(i,isCorrect);
+      logAnswer(i,isCorrect,'pos');
       if(isCorrect){ S.xp+=Math.round(8*(mcCombo>=5?2:1)*fatigueXPMultiplier()); addMastery(i,0.5); }
       else { addMastery(i,-0.25); studyPending.push(i); }
       save();
@@ -4397,7 +4475,7 @@ function showStudyPOSStaged(i, axisStage){
       recordAxisResultNew(i,'pos',isCorrect,posRespMs);
       recordAxisResult(i,'pos',isCorrect);
       recordGrammarAttempt(D[i][4],isCorrect);
-      logAnswer(i,isCorrect);
+      logAnswer(i,isCorrect,'pos',posRespMs);
       const posSpeedMult=posRespMs<1500?1.3:posRespMs<4000?1.0:posRespMs<8000?0.8:0.6;
       const posWagerMult=Math.max(0.5,Math.min(1.5,currentMultIdx/Math.max(1,defaultMultIdx)));
       if(isCorrect){ 
@@ -5825,7 +5903,7 @@ function showStudyCloze(i){
       recordChallengeResult(i,'cloze',isCorrect,respMs);
       recordAxisResultNew(i,'meaning',isCorrect,respMs);
       recordWagerDecision(i,isCorrect,currentMultIdx,defaultMultIdx,respMs);
-      logAnswer(i,isCorrect);
+      logAnswer(i,isCorrect,'cloze',respMs);
       const speedM=respMs<1500?1.3:respMs<4000?1.0:0.8;
       if(isCorrect){
         advanceMult();
@@ -6000,7 +6078,7 @@ function showWordOrderDrill(i){
         }
         recordChallengeResult(i,'word-order',isCorrect,respMs);
         recordAxisResultNew(i,'meaning',isCorrect,respMs);
-        logAnswer(i,isCorrect);
+        logAnswer(i,isCorrect,'word-order',respMs);
         if(isCorrect){
           advanceMult();
           S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier());
@@ -6328,6 +6406,8 @@ function classifyDistractorError(targetIdx, chosenDef){
 /* ============ EVENTS ============ */
 // Tap the language label under the title to cycle courses.
 if($('langLabel')) $('langLabel').onclick=cycleCourse;
+if($('statsBtn')) $('statsBtn').onclick=()=>{ renderStats(); show('stats'); };
+if($('stats-back')) $('stats-back').onclick=()=>{ rollBg(); renderHome(); show('home'); };
 $('start').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startStudy(true); };
 $('quit').onclick=endSession;
 

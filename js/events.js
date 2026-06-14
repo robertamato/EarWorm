@@ -75,6 +75,8 @@ function classifyDistractorError(targetIdx, chosenDef){
 /* ============ EVENTS ============ */
 // Tap the language label under the title to cycle courses.
 if($('langLabel')) $('langLabel').onclick=cycleCourse;
+if($('statsBtn')) $('statsBtn').onclick=()=>{ renderStats(); show('stats'); };
+if($('stats-back')) $('stats-back').onclick=()=>{ rollBg(); renderHome(); show('home'); };
 $('start').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startStudy(true); };
 $('quit').onclick=endSession;
 

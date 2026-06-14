@@ -355,7 +355,7 @@ function showStudyCloze(i){
       recordChallengeResult(i,'cloze',isCorrect,respMs);
       recordAxisResultNew(i,'meaning',isCorrect,respMs);
       recordWagerDecision(i,isCorrect,currentMultIdx,defaultMultIdx,respMs);
-      logAnswer(i,isCorrect);
+      logAnswer(i,isCorrect,'cloze',respMs);
       const speedM=respMs<1500?1.3:respMs<4000?1.0:0.8;
       if(isCorrect){
         advanceMult();
@@ -530,7 +530,7 @@ function showWordOrderDrill(i){
         }
         recordChallengeResult(i,'word-order',isCorrect,respMs);
         recordAxisResultNew(i,'meaning',isCorrect,respMs);
-        logAnswer(i,isCorrect);
+        logAnswer(i,isCorrect,'word-order',respMs);
         if(isCorrect){
           advanceMult();
           S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier());

@@ -909,7 +909,7 @@ function pickStudyMC(btn,chosen,correct,i){
     b.style.pointerEvents='none';
   });
 
-  logAnswer(i,isCorrect);
+  logAnswer(i,isCorrect, mcReverse?'mc-rev':'mc-fwd', Date.now()-cardShownAtMC);
   if(!isCorrect){
     // Classify distractor error for targeted re-scheduling
     const errType=classifyDistractorError(i,chosen);
@@ -1099,7 +1099,7 @@ function showStudyTone(i){
       const toneMs=Date.now()-cardShownAtMC;
       recordChallengeResult(i,'tone',ok,toneMs);
       recordWagerDecision(i,ok,currentMultIdx,defaultMultIdx,toneMs);
-      logAnswer(i,ok);
+      logAnswer(i,ok,'tone',toneMs);
       const tSpeedM=toneMs<1500?1.3:toneMs<4000?1.0:0.8;
       if(ok){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,toneMs)*fatigueXPMultiplier()); addMastery(i,0.25*tSpeedM); }
       else { resetMult(); addMastery(i,-0.1); studyPending.push(i); }
@@ -1138,13 +1138,14 @@ const sessionLog=new Map();
 let sessionXPStart=0;
 let summaryReturnView='home'; // which view CONTINUE goes back to
 
-function logAnswer(i, isCorrect){
+function logAnswer(i, isCorrect, modality, latencyMs){
   const entry=sessionLog.get(i)||{correct:0,wrong:0,masteryBefore:masteryScore(i)};
   if(isCorrect) entry.correct++;
   else entry.wrong++;
   sessionLog.set(i,entry);
   sessionAnswerRing.push(!!isCorrect);
   if(sessionAnswerRing.length>ANSWER_RING_SIZE) sessionAnswerRing.shift();
+  applyAnswer(i, isCorrect, modality, latencyMs); // funnel: durable stats + telemetry
 }
 
 function showSummary(returnView){
@@ -1449,7 +1450,7 @@ function showStudyPOS(i){
       conf.textContent=(isCorrect?'✓ ':'→ ')+correctCat.toUpperCase();
       if(stage===1) $('studyPOSPrompt').appendChild(conf);
 
-      logAnswer(i,isCorrect);
+      logAnswer(i,isCorrect,'pos');
       if(isCorrect){ S.xp+=Math.round(8*(mcCombo>=5?2:1)*fatigueXPMultiplier()); addMastery(i,0.5); }
       else { addMastery(i,-0.25); studyPending.push(i); }
       save();
