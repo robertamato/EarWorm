@@ -5,6 +5,8 @@
   $('frontierDisplay').textContent=frVal;
   const course=activeCourse&&activeCourse();
   $('frontierSub').textContent=(course?course.langName.toUpperCase():'MANDARIN CHINESE')+' · '+frVal+' / '+D.length+' WORDS';
+  const ll=$('langLabel');
+  if(ll&&course){ ll.textContent=course.langName.toUpperCase()+'  ⇄'; ll.style.cursor='pointer'; }
 
   // Daily progress bar
   const today=new Date().toDateString();

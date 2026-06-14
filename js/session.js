@@ -198,14 +198,20 @@ const BUILTIN_DECKS = {
 function allDecks(){ return {...BUILTIN_DECKS, ...S.decks}; }
 
 // Active deck index list
+// The core deck spans every index in the active lexicon. Computed from
+// D.length so it tracks the active course's size (Mandarin 100, Japanese 50…).
+function coreIndices(){ return Array.from({length:D.length},(_,i)=>i); }
+
 function activeDeckIndices(){
+  if(S.activeDeck==='core'||!S.activeDeck) return coreIndices();
   const d = allDecks()[S.activeDeck];
-  return d ? d.indices : BUILTIN_DECKS.core.indices;
+  return d ? d.indices : coreIndices();
 }
 
 function activeDeckName(){
+  if(S.activeDeck==='core'||!S.activeDeck) return 'CORE '+D.length;
   const d = allDecks()[S.activeDeck];
-  return d ? d.name : 'CORE 100';
+  return d ? d.name : 'CORE '+D.length;
 }
 
 function createDeck(name){
@@ -368,8 +374,11 @@ function buildStudyQueue(){
 
   const grammarDuePool=[],vocabDue=[],vocabSeen=[];
 
-  // Add due sub-axis drills sorted by most overdue
-  const dueDrills=dueGrammarDrills(); // already filtered by sessionGrammarAnswered
+  // Add due sub-axis drills sorted by most overdue.
+  // Grammar exemplars are Mandarin-specific — skip entirely for courses
+  // that have no grammar track (e.g. Japanese).
+  const hasGrammar=!activeCourse||!activeCourse()||activeCourse().hasGrammar!==false;
+  const dueDrills=hasGrammar?dueGrammarDrills():[]; // already filtered by sessionGrammarAnswered
   dueDrills.forEach(({cat,axis})=>{
     grammarDuePool.push(grammarQueueKey(cat,axis));
   });

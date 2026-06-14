@@ -26,7 +26,9 @@ const console = { log:_noop, warn:_noop, error:_noop, debug:_noop, info:_noop, d
 /* [char, [[syllable,tone],...], definition, [[radical,strokes],...], pos]
    Frequency rank = array index. Corpus policy: spoken/subtitle frequency
    (SUBTLEX-CH ordering) is authoritative for all expansion beyond 100. */
-const D=[
+// D is the ACTIVE lexicon pointer — reassigned by switchCourse(). The Mandarin
+// data below is the default; D_MANDARIN captures it so the pointer can return.
+let D=[
 ["的",[["de",0]],"possessive particle",[["勺", 3], ["白", 5]],"particle"],
 ["我",[["wǒ",3]],"I, me",[["手",4],["戈",4]],"pronoun"],
 ["你",[["nǐ",3]],"you",[["亻",2],["尔",5]],"pronoun"],
@@ -129,15 +131,33 @@ const D=[
 ["错",[["cuò",4]],"wrong, mistake",[["钅",5],["昔",8]],"adjective"],
 ["再见",[["zài",4],["jiàn",4]],"goodbye",[["冂",2],["土",3],["见",4],["目",5]],"interjection"]
 ];
+// Capture the Mandarin array so switchCourse() can repoint D back to it.
+const D_MANDARIN=D;
+
+/* ============ JAPANESE (placeholder) ============ */
+// PLACEHOLDER stub so course-switching is testable. Replace the contents of
+// this array with the generated 50-word Japanese course. Schema:
+//   [word(native script), [[mora,...]], "english def", [], "pos"]
+let D_JA=[
+["は",[["wa"]],"topic marker",[],"particle"],
+["です",[["de","su"]],"to be (polite)",[],"verb"],
+["私",[["wa","ta","shi"]],"I, me",[],"pronoun"],
+["これ",[["ko","re"]],"this",[],"pronoun"],
+["何",[["na","ni"]],"what",[],"pronoun"]
+];
 
 
 /* ============ STATE ============ */
-const KEY='earworm-mandarin-v1';
-let S={cards:{},xp:0,lastDay:null,streak:0,sound:'auto',ordered:false,decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},
-  // Independent grammar track — multi-dimensional, per-category
-  // Each category has 5 independent sub-axes with their own SRS schedules
-  grammar:{}
-}; // sound: auto|tap|mute
+// KEY is the ACTIVE course's localStorage key — reassigned by switchCourse().
+let KEY='earworm-mandarin-v1';
+function defaultState(){
+  return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',ordered:false,decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},
+    // Independent grammar track — multi-dimensional, per-category
+    // Each category has 5 independent sub-axes with their own SRS schedules
+    grammar:{}
+  }; // sound: auto|tap|mute
+}
+let S=defaultState();
 let mem=true;
 function load(){
   try{

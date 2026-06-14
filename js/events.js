@@ -73,6 +73,8 @@ function classifyDistractorError(targetIdx, chosenDef){
 }
 
 /* ============ EVENTS ============ */
+// Tap the language label under the title to cycle courses.
+if($('langLabel')) $('langLabel').onclick=cycleCourse;
 $('start').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startStudy(true); };
 $('quit').onclick=endSession;
 
@@ -178,6 +180,7 @@ if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   // Destroy any lingering fatigue overlay from previous session
   const lo=document.getElementById('fatigueOverlay');
   if(lo) lo.remove();
+  restoreActiveCourse(); // point D + KEY at last-used course before loading state
   load();
   loadSessionRings(); // restore ring state if page was minimized mid-session
   initGrammarState(); // ensure grammar sub-axis structure exists
@@ -193,8 +196,8 @@ if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
 // Note: data constants are already declared in L1 with same values.
 // New course data (future: Arabic, etc.) added here only.
 // ACTIVE_COURSE_KEY and activeCourse() now canonical here:
-// ACTIVE_COURSE_KEY already declared in L1 — using assignment
-ACTIVE_COURSE_KEY = 'mandarin';
+// Active course is restored from localStorage in the init IIFE above via
+// restoreActiveCourse(); do NOT hardcode it here (would clobber the restore).
 // activeCourse and activeLexicon already defined in L1
 
 // ═══════════════════════════════════════════════════════════════

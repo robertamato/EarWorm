@@ -26,7 +26,9 @@ const console = { log:_noop, warn:_noop, error:_noop, debug:_noop, info:_noop, d
 /* [char, [[syllable,tone],...], definition, [[radical,strokes],...], pos]
    Frequency rank = array index. Corpus policy: spoken/subtitle frequency
    (SUBTLEX-CH ordering) is authoritative for all expansion beyond 100. */
-const D=[
+// D is the ACTIVE lexicon pointer — reassigned by switchCourse(). The Mandarin
+// data below is the default; D_MANDARIN captures it so the pointer can return.
+let D=[
 ["的",[["de",0]],"possessive particle",[["勺", 3], ["白", 5]],"particle"],
 ["我",[["wǒ",3]],"I, me",[["手",4],["戈",4]],"pronoun"],
 ["你",[["nǐ",3]],"you",[["亻",2],["尔",5]],"pronoun"],
@@ -129,15 +131,33 @@ const D=[
 ["错",[["cuò",4]],"wrong, mistake",[["钅",5],["昔",8]],"adjective"],
 ["再见",[["zài",4],["jiàn",4]],"goodbye",[["冂",2],["土",3],["见",4],["目",5]],"interjection"]
 ];
+// Capture the Mandarin array so switchCourse() can repoint D back to it.
+const D_MANDARIN=D;
+
+/* ============ JAPANESE (placeholder) ============ */
+// PLACEHOLDER stub so course-switching is testable. Replace the contents of
+// this array with the generated 50-word Japanese course. Schema:
+//   [word(native script), [[mora,...]], "english def", [], "pos"]
+let D_JA=[
+["は",[["wa"]],"topic marker",[],"particle"],
+["です",[["de","su"]],"to be (polite)",[],"verb"],
+["私",[["wa","ta","shi"]],"I, me",[],"pronoun"],
+["これ",[["ko","re"]],"this",[],"pronoun"],
+["何",[["na","ni"]],"what",[],"pronoun"]
+];
 
 
 /* ============ STATE ============ */
-const KEY='earworm-mandarin-v1';
-let S={cards:{},xp:0,lastDay:null,streak:0,sound:'auto',ordered:false,decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},
-  // Independent grammar track — multi-dimensional, per-category
-  // Each category has 5 independent sub-axes with their own SRS schedules
-  grammar:{}
-}; // sound: auto|tap|mute
+// KEY is the ACTIVE course's localStorage key — reassigned by switchCourse().
+let KEY='earworm-mandarin-v1';
+function defaultState(){
+  return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',ordered:false,decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},
+    // Independent grammar track — multi-dimensional, per-category
+    // Each category has 5 independent sub-axes with their own SRS schedules
+    grammar:{}
+  }; // sound: auto|tap|mute
+}
+let S=defaultState();
 let mem=true;
 function load(){
   try{
@@ -809,7 +829,7 @@ function renderHome(){
   const fg=hsl(bgHue+GA,80,24);
   const stCol=[ 'transparent', hsl(bgHue,60,30), hsl(bgHue,60,20), hsl(bgHue,60,12) ];
   const fr=frontier();
-  for(let i=0;i<100;i++){
+  for(let i=0;i<D.length;i++){
     const c=document.createElement('div');
     c.className='cell';
     const locked=i>=fr;
@@ -851,6 +871,8 @@ function renderHome(){
   $('frontierDisplay').textContent=frVal;
   const course=activeCourse&&activeCourse();
   $('frontierSub').textContent=(course?course.langName.toUpperCase():'MANDARIN CHINESE')+' · '+frVal+' / '+D.length+' WORDS';
+  const ll=$('langLabel');
+  if(ll&&course){ ll.textContent=course.langName.toUpperCase()+'  ⇄'; ll.style.cursor='pointer'; }
 
   // Daily progress bar
   const today=new Date().toDateString();
@@ -1830,14 +1852,20 @@ const BUILTIN_DECKS = {
 function allDecks(){ return {...BUILTIN_DECKS, ...S.decks}; }
 
 // Active deck index list
+// The core deck spans every index in the active lexicon. Computed from
+// D.length so it tracks the active course's size (Mandarin 100, Japanese 50…).
+function coreIndices(){ return Array.from({length:D.length},(_,i)=>i); }
+
 function activeDeckIndices(){
+  if(S.activeDeck==='core'||!S.activeDeck) return coreIndices();
   const d = allDecks()[S.activeDeck];
-  return d ? d.indices : BUILTIN_DECKS.core.indices;
+  return d ? d.indices : coreIndices();
 }
 
 function activeDeckName(){
+  if(S.activeDeck==='core'||!S.activeDeck) return 'CORE '+D.length;
   const d = allDecks()[S.activeDeck];
-  return d ? d.name : 'CORE 100';
+  return d ? d.name : 'CORE '+D.length;
 }
 
 function createDeck(name){
@@ -2000,8 +2028,11 @@ function buildStudyQueue(){
 
   const grammarDuePool=[],vocabDue=[],vocabSeen=[];
 
-  // Add due sub-axis drills sorted by most overdue
-  const dueDrills=dueGrammarDrills(); // already filtered by sessionGrammarAnswered
+  // Add due sub-axis drills sorted by most overdue.
+  // Grammar exemplars are Mandarin-specific — skip entirely for courses
+  // that have no grammar track (e.g. Japanese).
+  const hasGrammar=!activeCourse||!activeCourse()||activeCourse().hasGrammar!==false;
+  const dueDrills=hasGrammar?dueGrammarDrills():[]; // already filtered by sessionGrammarAnswered
   dueDrills.forEach(({cat,axis})=>{
     grammarDuePool.push(grammarQueueKey(cat,axis));
   });
@@ -4586,13 +4617,62 @@ const COURSES={
     langName:'Mandarin Chinese',
     langNameNative:'普通话',
     script:'CJK',
-    lexicon:null, // set to D after D is defined
+    lexicon:D_MANDARIN,
     storageKey:'earworm-mandarin-v1',
+    hasGrammar:true,
+  },
+  'japanese':{
+    langCode:'ja-JP',
+    langName:'Japanese',
+    langNameNative:'日本語',
+    script:'Japanese',
+    lexicon:D_JA,
+    storageKey:'earworm-japanese-v1',
+    hasGrammar:false, // no grammar exemplar data yet
   }
 };
+const ACTIVE_COURSE_PREF='earworm-active-course';
 let ACTIVE_COURSE_KEY='mandarin';
 function activeCourse(){ return COURSES[ACTIVE_COURSE_KEY]; }
-function activeLexicon(){ return D; } // D is always the active lexicon for now
+function activeLexicon(){ return COURSES[ACTIVE_COURSE_KEY].lexicon; }
+
+// Point the global lexicon (D) and state key (KEY) at the given course.
+// Does NOT touch S — caller decides whether to load/reset.
+function applyCoursePointers(key){
+  ACTIVE_COURSE_KEY=key;
+  D=COURSES[key].lexicon;
+  KEY=COURSES[key].storageKey;
+}
+
+// Called once at startup — restore the last-used course from localStorage.
+function restoreActiveCourse(){
+  let key='mandarin';
+  try{ const s=localStorage.getItem(ACTIVE_COURSE_PREF); if(s&&COURSES[s]) key=s; }catch(e){}
+  applyCoursePointers(key);
+}
+
+// User-facing course switch: persist current progress, repoint to the new
+// course, load its saved progress (or start fresh), and re-render home.
+function switchCourse(key){
+  if(!COURSES[key]||key===ACTIVE_COURSE_KEY) return;
+  save();                       // flush current course under its KEY
+  applyCoursePointers(key);     // repoint D + KEY
+  try{ localStorage.setItem(ACTIVE_COURSE_PREF,key); }catch(e){}
+  S=defaultState();             // clear in-memory state
+  load();                       // hydrate from the new course's KEY (no-op if none)
+  S.activeDeck='core';          // deck indices are course-specific
+  if(typeof resetSessionFatigue==='function') resetSessionFatigue();
+  if(typeof rollBg==='function') rollBg();
+  renderHome();
+  if(typeof renderTTSStatus==='function') renderTTSStatus();
+  show('home');
+}
+
+function cycleCourse(){
+  const keys=Object.keys(COURSES);
+  const idx=keys.indexOf(ACTIVE_COURSE_KEY);
+  switchCourse(keys[(idx+1)%keys.length]);
+}
 
 // Rank of word i within the active deck's frequency ordering
 // Returns 1-based position among words the user has been introduced to
@@ -6203,6 +6283,8 @@ function classifyDistractorError(targetIdx, chosenDef){
 }
 
 /* ============ EVENTS ============ */
+// Tap the language label under the title to cycle courses.
+if($('langLabel')) $('langLabel').onclick=cycleCourse;
 $('start').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startStudy(true); };
 $('quit').onclick=endSession;
 
@@ -6308,6 +6390,7 @@ if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   // Destroy any lingering fatigue overlay from previous session
   const lo=document.getElementById('fatigueOverlay');
   if(lo) lo.remove();
+  restoreActiveCourse(); // point D + KEY at last-used course before loading state
   load();
   loadSessionRings(); // restore ring state if page was minimized mid-session
   initGrammarState(); // ensure grammar sub-axis structure exists
@@ -6323,8 +6406,8 @@ if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
 // Note: data constants are already declared in L1 with same values.
 // New course data (future: Arabic, etc.) added here only.
 // ACTIVE_COURSE_KEY and activeCourse() now canonical here:
-// ACTIVE_COURSE_KEY already declared in L1 — using assignment
-ACTIVE_COURSE_KEY = 'mandarin';
+// Active course is restored from localStorage in the init IIFE above via
+// restoreActiveCourse(); do NOT hardcode it here (would clobber the restore).
 // activeCourse and activeLexicon already defined in L1
 
 // ═══════════════════════════════════════════════════════════════

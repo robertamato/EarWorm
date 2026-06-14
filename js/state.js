@@ -152,7 +152,7 @@ function renderHome(){
   const fg=hsl(bgHue+GA,80,24);
   const stCol=[ 'transparent', hsl(bgHue,60,30), hsl(bgHue,60,20), hsl(bgHue,60,12) ];
   const fr=frontier();
-  for(let i=0;i<100;i++){
+  for(let i=0;i<D.length;i++){
     const c=document.createElement('div');
     c.className='cell';
     const locked=i>=fr;

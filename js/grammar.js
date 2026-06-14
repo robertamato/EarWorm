@@ -821,13 +821,62 @@ const COURSES={
     langName:'Mandarin Chinese',
     langNameNative:'普通话',
     script:'CJK',
-    lexicon:null, // set to D after D is defined
+    lexicon:D_MANDARIN,
     storageKey:'earworm-mandarin-v1',
+    hasGrammar:true,
+  },
+  'japanese':{
+    langCode:'ja-JP',
+    langName:'Japanese',
+    langNameNative:'日本語',
+    script:'Japanese',
+    lexicon:D_JA,
+    storageKey:'earworm-japanese-v1',
+    hasGrammar:false, // no grammar exemplar data yet
   }
 };
+const ACTIVE_COURSE_PREF='earworm-active-course';
 let ACTIVE_COURSE_KEY='mandarin';
 function activeCourse(){ return COURSES[ACTIVE_COURSE_KEY]; }
-function activeLexicon(){ return D; } // D is always the active lexicon for now
+function activeLexicon(){ return COURSES[ACTIVE_COURSE_KEY].lexicon; }
+
+// Point the global lexicon (D) and state key (KEY) at the given course.
+// Does NOT touch S — caller decides whether to load/reset.
+function applyCoursePointers(key){
+  ACTIVE_COURSE_KEY=key;
+  D=COURSES[key].lexicon;
+  KEY=COURSES[key].storageKey;
+}
+
+// Called once at startup — restore the last-used course from localStorage.
+function restoreActiveCourse(){
+  let key='mandarin';
+  try{ const s=localStorage.getItem(ACTIVE_COURSE_PREF); if(s&&COURSES[s]) key=s; }catch(e){}
+  applyCoursePointers(key);
+}
+
+// User-facing course switch: persist current progress, repoint to the new
+// course, load its saved progress (or start fresh), and re-render home.
+function switchCourse(key){
+  if(!COURSES[key]||key===ACTIVE_COURSE_KEY) return;
+  save();                       // flush current course under its KEY
+  applyCoursePointers(key);     // repoint D + KEY
+  try{ localStorage.setItem(ACTIVE_COURSE_PREF,key); }catch(e){}
+  S=defaultState();             // clear in-memory state
+  load();                       // hydrate from the new course's KEY (no-op if none)
+  S.activeDeck='core';          // deck indices are course-specific
+  if(typeof resetSessionFatigue==='function') resetSessionFatigue();
+  if(typeof rollBg==='function') rollBg();
+  renderHome();
+  if(typeof renderTTSStatus==='function') renderTTSStatus();
+  show('home');
+}
+
+function cycleCourse(){
+  const keys=Object.keys(COURSES);
+  const idx=keys.indexOf(ACTIVE_COURSE_KEY);
+  switchCourse(keys[(idx+1)%keys.length]);
+}
 
 // Rank of word i within the active deck's frequency ordering
 // Returns 1-based position among words the user has been introduced to
