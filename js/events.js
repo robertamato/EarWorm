@@ -87,8 +87,7 @@ let _startStudyPending=false;
 $('start').onclick=()=>{
   if(_startStudyPending) return;
   _startStudyPending=true;
-  primeSpeechEngine(activeCourse().langCode);
-  setTimeout(()=>{ _startStudyPending=false; startStudy(true); },180);
+  primeSpeechEngine(activeCourse().langCode,()=>{ _startStudyPending=false; startStudy(true); });
 };
 $('quit').onclick=endSession;
 
@@ -127,19 +126,15 @@ $('charDetail-back').onclick=()=>{
     show('session'); renderCard();
   }
 };
-// 180ms after prime gives the warm-up utterance time to load the voice pack before
-// the first real card fires.
 $('startTone').onclick=()=>{
   if(_startStudyPending) return;
   _startStudyPending=true;
-  primeSpeechEngine(activeCourse().langCode);
-  setTimeout(()=>{ _startStudyPending=false; startTone(); },180);
+  primeSpeechEngine(activeCourse().langCode,()=>{ _startStudyPending=false; startTone(); });
 };
 $('startStudy').onclick=()=>{
   if(_startStudyPending) return;
   _startStudyPending=true;
-  primeSpeechEngine(activeCourse().langCode);
-  setTimeout(()=>{ _startStudyPending=false; startStudy(); },180);
+  primeSpeechEngine(activeCourse().langCode,()=>{ _startStudyPending=false; startStudy(); });
 };
 $('study-quit').onclick=()=>{ studyActive=false; goHome(); };
 $('startWS').onclick=()=>{ startWordSearch(); };

@@ -762,21 +762,29 @@ function getAudioCtx(){
 }
 
 // Called on study-button click (user gesture). Warms AudioContext and TTS voice.
-// Uses a real character at near-zero volume so the engine actually loads the voice —
-// a zero-width space may be optimised away without triggering voice initialisation.
-function primeSpeechEngine(lang){
-  if(!lang) return;
-  if(typeof speechSynthesis==='undefined') return;
+// Calls onReady once the engine has settled — either when the warm-up utterance
+// ends/errors, or after a 500ms backstop (whichever comes first). This guarantees
+// startStudy/startTone runs only AFTER the engine is in a stable idle state, so
+// the first real card's speak() never has to cancel a still-pending prime and risk
+// the interrupted → synthesis-failed cascade that hits iOS.
+function primeSpeechEngine(lang, onReady){
+  if(!lang){ if(onReady) onReady(); return; }
   try{ getAudioCtx(); }catch(e){}
+  let fired=false;
+  const done=()=>{ if(!fired){ fired=true; if(onReady) onReady(); } };
+  if(typeof speechSynthesis==='undefined'){ done(); return; }
   try{
     const v=getBestVoice(lang);
     const sample=lang.startsWith('ja')?'の':'的';
     const u=new SpeechSynthesisUtterance(sample);
     u.lang=lang; u.volume=0; u.rate=1;
-    if(v) u.voice=v; // null = lang-only; still queues so engine loads the voice pack
+    if(v) u.voice=v;
+    u.onend=done;
+    u.onerror=done; // any error (synthesis-failed, interrupted): proceed anyway
     speechSynthesis.speak(u);
     if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
-  }catch(e){}
+  }catch(e){ done(); return; }
+  setTimeout(done, 500); // backstop: never block start for more than 500ms
 }
 
 // Global generation counter — incremented on every speak() call.
@@ -6563,8 +6571,7 @@ let _startStudyPending=false;
 $('start').onclick=()=>{
   if(_startStudyPending) return;
   _startStudyPending=true;
-  primeSpeechEngine(activeCourse().langCode);
-  setTimeout(()=>{ _startStudyPending=false; startStudy(true); },180);
+  primeSpeechEngine(activeCourse().langCode,()=>{ _startStudyPending=false; startStudy(true); });
 };
 $('quit').onclick=endSession;
 
@@ -6603,19 +6610,15 @@ $('charDetail-back').onclick=()=>{
     show('session'); renderCard();
   }
 };
-// 180ms after prime gives the warm-up utterance time to load the voice pack before
-// the first real card fires.
 $('startTone').onclick=()=>{
   if(_startStudyPending) return;
   _startStudyPending=true;
-  primeSpeechEngine(activeCourse().langCode);
-  setTimeout(()=>{ _startStudyPending=false; startTone(); },180);
+  primeSpeechEngine(activeCourse().langCode,()=>{ _startStudyPending=false; startTone(); });
 };
 $('startStudy').onclick=()=>{
   if(_startStudyPending) return;
   _startStudyPending=true;
-  primeSpeechEngine(activeCourse().langCode);
-  setTimeout(()=>{ _startStudyPending=false; startStudy(); },180);
+  primeSpeechEngine(activeCourse().langCode,()=>{ _startStudyPending=false; startStudy(); });
 };
 $('study-quit').onclick=()=>{ studyActive=false; goHome(); };
 $('startWS').onclick=()=>{ startWordSearch(); };
