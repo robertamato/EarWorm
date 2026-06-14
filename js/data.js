@@ -134,16 +134,62 @@ let D=[
 // Capture the Mandarin array so switchCourse() can repoint D back to it.
 const D_MANDARIN=D;
 
-/* ============ JAPANESE (placeholder) ============ */
-// PLACEHOLDER stub so course-switching is testable. Replace the contents of
-// this array with the generated 50-word Japanese course. Schema:
-//   [word(native script), [[mora,...]], "english def", [], "pos"]
+/* ============ JAPANESE — 50 core words ============ */
+// Subtitle/spoken-frequency ordering (OpenSubtitles-JP / SUBTLEX-JP basis).
+// Schema: [word(native script), [[mora,...]], "english def", [], "pos"]
+// No tone/pitch modeled; slot 3 (radicals) intentionally empty.
+// Particles are regular cards. Hiragana/katakana treated identically.
 let D_JA=[
+["の",[["no"]],"possessive particle",[],"particle"],
 ["は",[["wa"]],"topic marker",[],"particle"],
-["です",[["de","su"]],"to be (polite)",[],"verb"],
-["私",[["wa","ta","shi"]],"I, me",[],"pronoun"],
-["これ",[["ko","re"]],"this",[],"pronoun"],
-["何",[["na","ni"]],"what",[],"pronoun"]
+["に",[["ni"]],"to, at, in",[],"particle"],
+["を",[["o"]],"object marker",[],"particle"],
+["が",[["ga"]],"subject marker",[],"particle"],
+["で",[["de"]],"at, by, with",[],"particle"],
+["と",[["to"]],"and, with",[],"particle"],
+["も",[["mo"]],"also, too",[],"particle"],
+["です",[["de"],["su"]],"to be (polite)",[],"verb"],
+["する",[["su"],["ru"]],"to do",[],"verb"],
+["いる",[["i"],["ru"]],"to exist (animate)",[],"verb"],
+["ある",[["a"],["ru"]],"to exist (thing)",[],"verb"],
+["これ",[["ko"],["re"]],"this one",[],"pronoun"],
+["それ",[["so"],["re"]],"that one",[],"pronoun"],
+["あれ",[["a"],["re"]],"that over there",[],"pronoun"],
+["私",[["wa"],["ta"],["shi"]],"I, me",[],"pronoun"],
+["あなた",[["a"],["na"],["ta"]],"you",[],"pronoun"],
+["何",[["na"],["ni"]],"what",[],"pronoun"],
+["誰",[["da"],["re"]],"who",[],"pronoun"],
+["どこ",[["do"],["ko"]],"where",[],"pronoun"],
+["今",[["i"],["ma"]],"now",[],"noun"],
+["人",[["hi"],["to"]],"person",[],"noun"],
+["事",[["ko"],["to"]],"thing, matter",[],"noun"],
+["物",[["mo"],["no"]],"thing (object)",[],"noun"],
+["時",[["to"],["ki"]],"time, when",[],"noun"],
+["日",[["hi"]],"day, sun",[],"noun"],
+["行く",[["i"],["ku"]],"to go",[],"verb"],
+["来る",[["ku"],["ru"]],"to come",[],"verb"],
+["見る",[["mi"],["ru"]],"to see, watch",[],"verb"],
+["言う",[["i"],["u"]],"to say",[],"verb"],
+["思う",[["o"],["mo"],["u"]],"to think",[],"verb"],
+["知る",[["shi"],["ru"]],"to know",[],"verb"],
+["分かる",[["wa"],["ka"],["ru"]],"to understand",[],"verb"],
+["食べる",[["ta"],["be"],["ru"]],"to eat",[],"verb"],
+["飲む",[["no"],["mu"]],"to drink",[],"verb"],
+["なる",[["na"],["ru"]],"to become",[],"verb"],
+["いい",[["i"],["i"]],"good",[],"adjective"],
+["悪い",[["wa"],["ru"],["i"]],"bad",[],"adjective"],
+["大きい",[["o"],["o"],["ki"],["i"]],"big",[],"adjective"],
+["小さい",[["chi"],["i"],["sa"],["i"]],"small",[],"adjective"],
+["とても",[["to"],["te"],["mo"]],"very",[],"adverb"],
+["もう",[["mo"],["u"]],"already",[],"adverb"],
+["まだ",[["ma"],["da"]],"still, not yet",[],"adverb"],
+["はい",[["ha"],["i"]],"yes",[],"interjection"],
+["いいえ",[["i"],["i"],["e"]],"no",[],"interjection"],
+["ありがとう",[["a"],["ri"],["ga"],["to"],["u"]],"thank you",[],"interjection"],
+["すみません",[["su"],["mi"],["ma"],["se"],["n"]],"excuse me, sorry",[],"interjection"],
+["家",[["i"],["e"]],"house, home",[],"noun"],
+["水",[["mi"],["zu"]],"water",[],"noun"],
+["から",[["ka"],["ra"]],"from, because",[],"particle"]
 ];
 
 

@@ -190,8 +190,10 @@ function pickTone(btn,chosen,correctTones){
 /* ============ DECK MANAGEMENT ============ */
 
 // Built-in decks (non-deletable)
+// Core deck has no fixed indices/name — see coreIndices()/activeDeckName(),
+// which derive from the active lexicon (D) so they track the active course.
 const BUILTIN_DECKS = {
-  'core': { name:'CORE 100', indices: Array.from({length:100},(_,i)=>i) }
+  'core': { name:'CORE' }
 };
 
 // Get merged deck list: builtins + user-created
