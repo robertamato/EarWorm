@@ -2450,6 +2450,15 @@ function showStudyCard(i){
   // Axis-stage driven modality — each word progresses through defined stages
   let mod;
   try{ mod=wordModalityFromAxes(i); }catch(e){ document.title='MOD:'+e.message+' stk:'+e.stack.slice(0,80); console.error('wordModality error',e); mod='mc-fwd'; }
+  // HARD INVARIANT: a word is NEVER presented in a test modality before it has
+  // been shown as a flashcard. First contact is always recognition. If anything
+  // resolves a non-flash modality for an unseen word (exp===0), force the
+  // flashcard and log a violation — this should be impossible, so it's logged to
+  // the observability bus to make any future breach visible rather than silent.
+  if(mod!=='flash' && (card(i).exp||0)===0){
+    try{ if(window.EW&&EW.obs) EW.obs.logEvent('violation',{type:'unseen-in-test',item:i,modality:mod,char:(D[i]&&D[i][0])}); }catch(e){}
+    mod='flash';
+  }
   lastModality.set(i,mod);
   if(mod==='flash'){
     showStudyFlash(i);
