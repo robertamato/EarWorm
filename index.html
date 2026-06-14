@@ -2,59 +2,6 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<!-- On-page diagnostic: surfaces JS errors on devices with no console (iOS).
-     Runs FIRST so it captures parse/load errors in obs.js and app.js below.
-     Errors are PERSISTED to localStorage and re-shown on the next load, so a
-     crash that kills the tab still surfaces its cause. Identical errors are
-     deduped to bound memory, and the banner is tap-to-dismiss so it never
-     blocks the UI. Shows a build stamp + UA to tell fresh code from cache. -->
-<script>
-(function(){
-  var BUILD='diag-3';
-  var LSKEY='earworm_diag_errs';
-  var seen={};
-  function box(){
-    var d=document.getElementById('__diag');
-    if(!d){
-      d=document.createElement('div');
-      d.id='__diag';
-      d.style.cssText='position:fixed;top:0;left:0;right:0;z-index:2147483647;font:11px/1.4 monospace;padding:6px;white-space:pre-wrap;word-break:break-all;max-height:55vh;overflow:auto;background:#012;color:#7fb;';
-      var x=document.createElement('div');
-      x.textContent='✕ tap to dismiss';
-      x.style.cssText='text-align:right;opacity:.7;';
-      d.appendChild(x);
-      d.onclick=function(){ d.remove(); };
-      (document.body||document.documentElement).appendChild(d);
-    }
-    return d;
-  }
-  function line(m,isErr){
-    var d=box();
-    if(isErr){ d.style.background='#900'; d.style.color='#fff'; }
-    var p=document.createElement('div'); p.textContent=m; d.appendChild(p);
-  }
-  function persist(m){
-    try{
-      var a=JSON.parse(localStorage.getItem(LSKEY)||'[]');
-      a.push(m); while(a.length>10) a.shift();
-      localStorage.setItem(LSKEY,JSON.stringify(a));
-    }catch(e){}
-  }
-  function err(m){ if(seen[m]) return; seen[m]=1; line(m,true); persist(m); }
-  window.addEventListener('error',function(e){
-    if(e.message) err('ERR: '+e.message+' @ '+String(e.filename||'?').split('/').pop()+':'+(e.lineno||'?')+':'+(e.colno||'?'));
-    else if(e.target&&(e.target.src||e.target.href)) err('LOAD FAIL: '+(e.target.src||e.target.href));
-  },true);
-  window.addEventListener('unhandledrejection',function(e){ err('PROMISE: '+(e.reason&&(e.reason.stack||e.reason.message)||e.reason)); });
-  document.addEventListener('DOMContentLoaded',function(){
-    try{
-      var a=JSON.parse(localStorage.getItem(LSKEY)||'[]');
-      if(a.length){ line('— PREV SESSION ('+a.length+') —',true); a.slice().reverse().forEach(function(m){ line('PREV '+m,true); }); localStorage.removeItem(LSKEY); }
-    }catch(e){}
-    line('BUILD '+BUILD+' · '+navigator.userAgent,false);
-  });
-})();
-</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="light only">
 <meta name="apple-mobile-web-app-capable" content="yes">
