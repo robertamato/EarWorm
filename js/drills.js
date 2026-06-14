@@ -171,42 +171,75 @@ function clozeUnlocked(i){
   return getAxisStage(i,'meaning')>=2;
 }
 
+// Returns true if s has any character a TTS engine can actually pronounce.
+// Guards against speaking pure-punctuation segments (e.g. "。") that cause synthesis-failed.
+function hasPhoneticContent(s){
+  return /[一-鿿㐀-䶿豈-﫿぀-ゟ゠-ヿ가-힯A-Za-z0-9]/.test(s);
+}
+
+// Speaks zh with the target word ch replaced by a beep.
+//
+// Strategy: speak the full sentence as one utterance so prosody is natural.
+// SpeechSynthesisEvent.onboundary fires just before the engine produces audio
+// for each word — when charIndex reaches the target word we cancel immediately.
+// The cut lands at the exact natural timing of the missing word with no timing math.
+// After the cancel we beep, then speak the remaining suffix.
+//
+// Degradation: if onboundary never fires (iOS Safari), onend fires after the full
+// sentence plays. A trailing beep signals the blank was tested.
+// Any unexpected error falls back to speaking the full sentence with no bleep.
 function speakWithBlank(zh,ch,langCode){
   const idx=zh.indexOf(ch);
   if(idx<0){ speak(zh,langCode); return; }
-  const before=zh.slice(0,idx);
   const after=zh.slice(idx+ch.length);
-  if(!before&&!after){ speak(zh,langCode); return; }
 
-  if(!before){
-    // Blank at start: cancel stale speech, bump gen so any deferred speak() aborts,
-    // then beep → speak suffix.
+  if(typeof speechSynthesis==='undefined') return;
+
+  const myGen=++_ttsGen;
+  const v=getBestVoice(langCode);
+  const u=new SpeechSynthesisUtterance(zh);
+  u.lang=langCode; u.rate=0.85;
+  if(v) u.voice=v;
+
+  let cut=false;
+
+  u.onboundary=function(ev){
+    if(cut||ev.name!=='word'||ev.charIndex<idx) return;
+    cut=true;
     try{ speechSynthesis.cancel(); }catch(e){}
-    ++_ttsGen;
-    const myGen=_ttsGen;
-    beepBlank(function(){ if(_ttsGen===myGen) speak(after,langCode); });
-    return;
-  }
-  if(!after){
-    // Blank at end: speak prefix → beep (no further chain).
-    speak(before,langCode,function(){ beepBlank(); });
-    return;
-  }
-  // Blank in middle: speak prefix → beep → speak suffix.
-  // expectedGen is the gen that speak(before) is about to claim (++_ttsGen).
-  // fireBeep is guarded by both the beeped flag (prevents double-fire) and the
-  // gen check (prevents firing if a newer card has taken over).
-  // Backstop timer fires if onend is unreliable on Windows for short syllables.
-  const expectedGen=_ttsGen+1;
-  const cjk=(before.match(/[一-鿿㐀-䶿]/g)||[]).length;
-  let beeped=false;
-  const fireBeep=function(){
-    if(beeped||_ttsGen!==expectedGen) return;
-    beeped=true;
-    beepBlank(function(){ if(_ttsGen===expectedGen) speak(after,langCode); });
+    if(_ttsGen!==myGen) return;
+    beepBlank(function(){
+      if(_ttsGen!==myGen) return;
+      if(hasPhoneticContent(after)) speak(after,langCode);
+    });
   };
-  speak(before,langCode,fireBeep);
-  setTimeout(fireBeep,400+cjk*500);
+
+  // onboundary not supported (iOS) or target was at the very end —
+  // full sentence already played; trailing beep marks the blank.
+  u.onend=function(){
+    if(!cut&&_ttsGen===myGen) beepBlank();
+  };
+
+  // We cancelled at the boundary — 'interrupted' is expected, ignore it.
+  // Any other error: degrade to speaking the full sentence without a bleep.
+  u.onerror=function(ev){
+    if(cut&&ev&&ev.error==='interrupted') return;
+    if(!cut&&_ttsGen===myGen) speak(zh,langCode);
+  };
+
+  const wasSpeaking=speechSynthesis.speaking||speechSynthesis.pending;
+  if(wasSpeaking){
+    speechSynthesis.cancel();
+    const queueGen=myGen;
+    setTimeout(function(){
+      if(_ttsGen!==queueGen) return;
+      if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
+      speechSynthesis.speak(u);
+    },30);
+  }else{
+    if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
+    speechSynthesis.speak(u);
+  }
 }
 
 function showStudyCloze(i){

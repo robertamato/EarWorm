@@ -140,6 +140,7 @@ $('study-quit').onclick=()=>{ studyActive=false; goHome(); };
 $('startWS').onclick=()=>{ startWordSearch(); };
 if($('startGrammar')) $('startGrammar').onclick=()=>{ startGrammarOnlySession(); };
 if($('debugReset')) $('debugReset').onclick=()=>{ debugResetProgress(); };
+if($('debugTTS')) $('debugTTS').onclick=()=>{ showTTSDebug(); };
 if($('debugSetProficiency')) $('debugSetProficiency').onclick=()=>{ debugSetProficiency(); };
 $('debugToggle').onclick=()=>{
   const dm=$('debugModes');

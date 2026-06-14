@@ -683,22 +683,40 @@ let _voices=[];
   speechSynthesis.addEventListener('voiceschanged',load);
 })();
 
-// Returns the best available voice for a language.
-// Preference: localService===true → non-"Online" name → first matching voice.
-// Always returns a voice when any candidate exists; never returns null for a lang
-// that has installed voices. Explicit voice selection is more reliable than lang-only
-// on Windows (Edge/Chrome may not auto-select the installed pack without u.voice set).
+// Experimental / preview voice variants that Edge registers in getVoices() but that
+// frequently never synthesize through the Web Speech API (no onstart, no audio — they
+// just hang pending). Confirmed culprit: "Microsoft Xiaoxiao Dragon HD Flash Latest
+// Online (Natural)" — registered but silent. Deprioritize these so a stable neural
+// voice is chosen instead; fall back to them only if nothing else exists.
+const TTS_EXPERIMENTAL=/\b(dragon|hd|flash|latest|turbo|preview|multilingual)\b/i;
+
+// Returns the best available voice for a language. Order of preference:
+//   1. user-pinned voice (set via the TTS debug panel, persisted per lang prefix)
+//   2. local (offline) voice — most reliable
+//   3. stable online voice (experimental variants filtered out)
+//   4. any remaining candidate (so we never return null when voices exist)
+// Explicit voice selection is more reliable than lang-only on Windows (Edge/Chrome
+// may not auto-select the installed pack without u.voice set).
 function getBestVoice(lang){
   if(typeof speechSynthesis==='undefined') return null;
   const pool=_voices.length?_voices:speechSynthesis.getVoices();
   const prefix=(lang||'zh-CN').split('-')[0];
   const candidates=pool.filter(v=>v&&v.lang&&v.lang.startsWith(prefix));
   if(!candidates.length) return null;
+  // 1. User-pinned voice wins if still present for this language
+  try{
+    const pinned=localStorage.getItem('earworm_voice_'+prefix);
+    if(pinned){ const hit=candidates.find(v=>v.name===pinned); if(hit) return hit; }
+  }catch(e){}
+  // 2. Local voices are the most reliable
   const locals=candidates.filter(v=>v.localService===true);
   if(locals.length) return locals.find(v=>v.default)||locals[0];
-  const nonOnline=candidates.find(v=>v.name&&!v.name.includes('Online'));
+  // 3. Among online voices, drop experimental variants (Dragon HD / Flash / etc.)
+  const stable=candidates.filter(v=>v.name&&!TTS_EXPERIMENTAL.test(v.name));
+  const pickFrom=stable.length?stable:candidates;
+  const nonOnline=pickFrom.find(v=>v.name&&!v.name.includes('Online'));
   if(nonOnline) return nonOnline;
-  return candidates[0]; // prefer explicit selection even for cloud-flagged voices
+  return pickFrom.find(v=>v.default)||pickFrom[0];
 }
 
 function renderTTSStatus(){
@@ -715,7 +733,7 @@ function renderTTSStatus(){
   if(!matching.length){
     el.textContent='⚠ TTS: NO VOICE INSTALLED';
     el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;color:hsl(0,70%,55%);cursor:pointer;opacity:1;';
-    el.onclick=()=>showTTSVoiceDetails(lang);
+    el.onclick=()=>showTTSDebug();
     return;
   }
   const best=getBestVoice(lang);
@@ -724,9 +742,10 @@ function renderTTSStatus(){
   // Microsoft Neural packs report localService=false even when locally installed — don't use
   // that property to decide status. If voices exist for the lang, consider TTS ready.
   // Only warn when no voice is found at all (handled above).
+  // Tap the status line to open the TTS debug panel (essential on iPhone — no console).
   el.textContent='TTS · '+shortName;
-  el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;opacity:.4;cursor:default;';
-  el.onclick=null;
+  el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;opacity:.4;cursor:pointer;';
+  el.onclick=()=>showTTSDebug();
 }
 
 // Diagnostic alert — lists voices for the current language and fires a single test speak.
@@ -748,6 +767,155 @@ function showTTSVoiceDetails(lang){
   msg+=(hasLocal?'Local voice detected — TTS uses it directly.\n':'No local voice — speak() uses lang-only (browser picks your installed pack default).\n');
   msg+='If TTS is silent: Windows Settings → Time & Language → Speech → Add voices.';
   alert(msg);
+}
+
+// ── TTS DEBUG PANEL ─────────────────────────────────────────────────────────
+// On-screen diagnostic overlay (works on iPhone where there's no console).
+// Centerpiece is ttsProbe(): speaks a sentence with a raw utterance and logs every
+// onstart/onboundary/onend/onerror event with a timestamp relative to speak() —
+// this reveals whether a voice fires word boundaries, when, and at what charIndex.
+// The single biggest TTS-reliability question is whether onboundary timing tracks
+// actual audio playback (local voices) or the synthesis timeline (neural/Online
+// voices, which can fire all boundaries before audio is audible).
+let _ttsDbgPoll=null;
+function ttsDbgLog(msg,color){
+  const box=document.getElementById('ttsDbgLog');
+  if(!box) return;
+  const line=document.createElement('div');
+  line.textContent=msg;
+  if(color) line.style.color=color;
+  box.insertBefore(line,box.firstChild);
+}
+function ttsProbe(text,lang){
+  if(typeof speechSynthesis==='undefined'){ ttsDbgLog('NO speechSynthesis','#f55'); return; }
+  try{ speechSynthesis.cancel(); }catch(e){}
+  const t0=(window.performance&&performance.now)?performance.now():Date.now();
+  const ts=()=>'+'+Math.round(((window.performance&&performance.now)?performance.now():Date.now())-t0)+'ms';
+  const v=getBestVoice(lang);
+  ttsDbgLog('── PROBE "'+text+'" ['+lang+'] → '+(v?v.name:'(lang-only)'),'#ff5');
+  let nb=0;
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang=lang; u.rate=.85; if(v) u.voice=v;
+  u.onstart=()=>ttsDbgLog(ts()+' onstart','#7f7');
+  u.onboundary=(e)=>{ nb++; ttsDbgLog(ts()+' boundary #'+nb+' name='+e.name+' charIndex='+e.charIndex+' len='+(e.charLength||'?'),'#7cf'); };
+  u.onend=()=>ttsDbgLog(ts()+' onend ('+nb+' boundaries)','#7f7');
+  u.onerror=(e)=>ttsDbgLog(ts()+' ERROR '+(e&&e.error),'#f55');
+  u.onpause=()=>ttsDbgLog(ts()+' onpause','#fa3');
+  u.onresume=()=>ttsDbgLog(ts()+' onresume','#fa3');
+  try{
+    speechSynthesis.speak(u);
+    if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
+  }catch(e){ ttsDbgLog('speak() threw: '+e,'#f55'); }
+}
+function showTTSDebug(){
+  const old=document.getElementById('ttsDbgOverlay');
+  if(old) old.remove();
+  if(_ttsDbgPoll){ clearInterval(_ttsDbgPoll); _ttsDbgPoll=null; }
+
+  const lang=(typeof activeCourse==='function'&&activeCourse())?activeCourse().langCode:'zh-CN';
+  const zhSample='这是我的书';   // zhè shì wǒ de shū — target 我 at index 2
+  const jaSample='これは本です'; // kore wa hon desu — target 本 at index 3
+  const isJa=lang.startsWith('ja');
+  const clozeSample=isJa?jaSample:zhSample;
+  const clozeTarget=isJa?'本':'我';
+
+  const ov=document.createElement('div');
+  ov.id='ttsDbgOverlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(8,8,12,.97);color:#cfc;font-family:monospace;font-size:11px;line-height:1.5;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px;padding-top:calc(14px + env(safe-area-inset-top));padding-bottom:calc(14px + env(safe-area-inset-bottom));';
+
+  const supported=typeof speechSynthesis!=='undefined';
+  const pool=supported?(_voices.length?_voices:speechSynthesis.getVoices()):[];
+  const zhV=pool.filter(v=>v&&v.lang&&v.lang.startsWith('zh'));
+  const jaV=pool.filter(v=>v&&v.lang&&v.lang.startsWith('ja'));
+  const audioState=(function(){ try{ return _audioCtx?_audioCtx.state:'(none)'; }catch(e){ return '(err)'; } })();
+
+  ov.innerHTML=
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+
+      '<b style="color:#ff5;letter-spacing:1px;">TTS DEBUG</b>'+
+      '<button id="ttsDbgClose" style="background:#400;color:#fcc;border:1px solid #c66;padding:8px 14px;font-family:monospace;font-size:12px;">✕ CLOSE</button>'+
+    '</div>'+
+    '<div style="opacity:.85;margin-bottom:6px;">'+
+      'supported='+supported+' · audioCtx='+audioState+' · activeLang='+lang+'<br>'+
+      'state: <span id="ttsDbgState">—</span>'+
+    '</div>'+
+    '<div style="color:#ff5;margin-top:8px;">ZH VOICES — tap to test + pin (best ★ → <span id="ttsDbgBestZh"></span>)</div>'+
+    '<div id="ttsDbgZh" style="max-height:22vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid #1a1a1a;"></div>'+
+    '<div style="color:#ff5;margin-top:8px;">JA VOICES — tap to test + pin (best ★ → <span id="ttsDbgBestJa"></span>)</div>'+
+    '<div id="ttsDbgJa" style="max-height:22vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid #1a1a1a;"></div>'+
+    '<div id="ttsDbgBtns" style="display:flex;flex-wrap:wrap;gap:6px;margin:12px 0;"></div>'+
+    '<div style="color:#ff5;">EVENT LOG (newest first)</div>'+
+    '<div id="ttsDbgLog" style="background:#000;border:1px solid #2a2;padding:8px;height:30vh;overflow-y:auto;-webkit-overflow-scrolling:touch;white-space:pre-wrap;word-break:break-all;"></div>';
+
+  document.body.appendChild(ov);
+
+  // Render a tappable voice list. Tapping a row pins that voice (persisted per lang
+  // prefix) and auditions it via ttsProbe — the event log then shows whether it
+  // actually fires onstart/onboundary or hangs silently (the Dragon HD failure mode).
+  function renderVoiceList(containerId,list,prefix,sample){
+    const c=document.getElementById(containerId);
+    if(!c) return;
+    c.innerHTML='';
+    if(!list.length){ c.innerHTML='<div style="opacity:.6;padding:6px;">(none installed)</div>'; return; }
+    let pinned=''; try{ pinned=localStorage.getItem('earworm_voice_'+prefix)||''; }catch(e){}
+    const best=getBestVoice(prefix==='zh'?'zh-CN':'ja-JP');
+    list.forEach(v=>{
+      const row=document.createElement('div');
+      const isPinned=v.name===pinned, isBest=best&&v.name===best.name;
+      const exp=TTS_EXPERIMENTAL.test(v.name);
+      row.style.cssText='padding:7px 6px;border-bottom:1px solid #161616;cursor:pointer;'+(exp?'opacity:.45;':'')+(isPinned?'background:#013;':'');
+      row.textContent=(isPinned?'📌 ':isBest?'★ ':'  ')+v.name+'  ['+v.lang+(v.localService?' ·local':'')+(exp?' ·exp':'')+']';
+      row.onclick=()=>{
+        try{ localStorage.setItem('earworm_voice_'+prefix,v.name); }catch(e){}
+        ttsDbgLog('PIN '+prefix+' → '+v.name,'#fa3');
+        ttsProbe(sample,prefix==='zh'?'zh-CN':'ja-JP');
+        refreshVoiceUI();
+      };
+      c.appendChild(row);
+    });
+  }
+  function refreshVoiceUI(){
+    const bz=getBestVoice('zh-CN'), bj=getBestVoice('ja-JP');
+    const ez=ov.querySelector('#ttsDbgBestZh'), ej=ov.querySelector('#ttsDbgBestJa');
+    if(ez) ez.textContent=bz?bz.name:'NONE';
+    if(ej) ej.textContent=bj?bj.name:'NONE';
+    renderVoiceList('ttsDbgZh',zhV,'zh',zhSample);
+    renderVoiceList('ttsDbgJa',jaV,'ja',jaSample);
+  }
+  refreshVoiceUI();
+
+  const mkBtn=(label,fn)=>{
+    const b=document.createElement('button');
+    b.textContent=label;
+    b.style.cssText='background:#022;color:#9f9;border:1px solid #4a4;padding:9px 11px;font-family:monospace;font-size:11px;flex:1 1 auto;min-width:42%;';
+    b.onclick=fn;
+    return b;
+  };
+  const btns=ov.querySelector('#ttsDbgBtns');
+  btns.appendChild(mkBtn('PROBE ZH ('+zhSample+')',()=>ttsProbe(zhSample,'zh-CN')));
+  btns.appendChild(mkBtn('PROBE JA ('+jaSample+')',()=>ttsProbe(jaSample,'ja-JP')));
+  btns.appendChild(mkBtn('speak() ZH 你好',()=>{ ttsDbgLog('→ speak("你好","zh-CN")','#fa3'); speak('你好','zh-CN'); }));
+  btns.appendChild(mkBtn('speak() JA こんにちは',()=>{ ttsDbgLog('→ speak("こんにちは","ja-JP")','#fa3'); speak('こんにちは','ja-JP'); }));
+  btns.appendChild(mkBtn('CLOZE '+clozeTarget+' in '+clozeSample,()=>{ ttsDbgLog('→ speakWithBlank("'+clozeSample+'","'+clozeTarget+'")','#fa3'); speakWithBlank(clozeSample,clozeTarget,isJa?'ja-JP':'zh-CN'); }));
+  btns.appendChild(mkBtn('cancel()',()=>{ try{ speechSynthesis.cancel(); ttsDbgLog('cancel() called','#fa3'); }catch(e){} }));
+  btns.appendChild(mkBtn('resume()',()=>{ try{ speechSynthesis.resume(); ttsDbgLog('resume() called','#fa3'); }catch(e){} }));
+  btns.appendChild(mkBtn('reload voices',()=>{ try{ const v=speechSynthesis.getVoices(); if(v&&v.length) _voices=v; ttsDbgLog('reloaded: '+_voices.length+' voices','#fa3'); refreshVoiceUI(); }catch(e){} }));
+  btns.appendChild(mkBtn('CLEAR PINS',()=>{ try{ localStorage.removeItem('earworm_voice_zh'); localStorage.removeItem('earworm_voice_ja'); }catch(e){} ttsDbgLog('pins cleared','#fa3'); refreshVoiceUI(); }));
+  btns.appendChild(mkBtn('clear log',()=>{ const l=document.getElementById('ttsDbgLog'); if(l) l.innerHTML=''; }));
+
+  ov.querySelector('#ttsDbgClose').onclick=()=>{
+    if(_ttsDbgPoll){ clearInterval(_ttsDbgPoll); _ttsDbgPoll=null; }
+    try{ speechSynthesis.cancel(); }catch(e){}
+    ov.remove();
+  };
+
+  const stateEl=ov.querySelector('#ttsDbgState');
+  _ttsDbgPoll=setInterval(()=>{
+    if(!document.getElementById('ttsDbgOverlay')){ clearInterval(_ttsDbgPoll); _ttsDbgPoll=null; return; }
+    if(!supported){ stateEl.textContent='unsupported'; return; }
+    stateEl.textContent='speaking='+speechSynthesis.speaking+' pending='+speechSynthesis.pending+' paused='+speechSynthesis.paused+' gen='+_ttsGen;
+  },200);
+
+  ttsDbgLog('panel opened · '+pool.length+' voices loaded','#999');
 }
 
 // Singleton AudioContext — avoids per-call creation latency and browser instance limits.
@@ -779,7 +947,7 @@ function primeSpeechEngine(lang, onReady){
     const u=new SpeechSynthesisUtterance(sample);
     u.lang=lang; u.volume=0; u.rate=1;
     if(v) u.voice=v;
-    u.onend=done;
+    u.onend=()=>setTimeout(done,50); // brief gap — SAPI can be in a transient state right at onend on Windows
     u.onerror=done; // any error (synthesis-failed, interrupted): proceed anyway
     speechSynthesis.speak(u);
     if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
@@ -801,14 +969,15 @@ function speak(text,lang,onDone){
     if(!_voices.length){ try{ const v=speechSynthesis.getVoices(); if(v&&v.length) _voices=v; }catch(e){} }
     // Resume before cancel — cancel on a paused engine can deepen the pause on some SAPI versions
     if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
-    // Only cancel when something is actually queued — unconditional cancel corrupts SAPI state
-    if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel();
-    // Re-resume after cancel — many reports of "plays in silence" without this on Windows
+    // Track whether we cancel so we know to delay queuing — SAPI needs ~30ms to settle after cancel
+    // before the next utterance; without the delay, the new utterance often gets synthesis-failed
+    const wasSpeaking=speechSynthesis.speaking||speechSynthesis.pending;
+    if(wasSpeaking) speechSynthesis.cancel();
     if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
     const u=new SpeechSynthesisUtterance(text);
     u.lang=lang; u.rate=.85;
     const v=getBestVoice(lang);
-    if(v) u.voice=v; // null = lang-only; lets browser pick installed pack default
+    if(v) u.voice=v;
     let fired=false;
     const finish=(cancelled)=>{
       if(fired||gen!==_ttsGen) return;
@@ -817,18 +986,19 @@ function speak(text,lang,onDone){
     };
     u.onend=()=>finish(false);
     u.onerror=(ev)=>{
-      finish(true); // suppress original onDone; recovery below re-triggers it on success
       if(window.console&&console.error) console.error('TTS error:',ev&&ev.error,'text:',text,'lang:',lang);
+      finish(true);
       if(ev&&ev.error==='synthesis-failed'){
-        const recoveryGen=gen; // snapshot — checked before touching the engine or queue
+        const recoveryGen=gen;
         setTimeout(()=>{
-          if(recoveryGen!==_ttsGen) return; // user navigated to a new card; abort
+          if(recoveryGen!==_ttsGen) return;
           try{
             if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel();
             if(speechSynthesis.paused) speechSynthesis.resume();
             const recoveryU=new SpeechSynthesisUtterance(text);
             recoveryU.lang=lang; recoveryU.rate=1.0;
-            // On recovery success, invoke onDone so auto-advance still fires
+            const rv2=getBestVoice(lang);
+            if(rv2) recoveryU.voice=rv2;
             recoveryU.onend=()=>{ if(recoveryGen===_ttsGen&&onDone) onDone(); };
             speechSynthesis.speak(recoveryU);
             if(window.console&&console.log) console.log('TTS recovery attempt after synthesis-failed');
@@ -836,8 +1006,19 @@ function speak(text,lang,onDone){
         },180);
       }
     };
-    if(onDone) setTimeout(()=>finish(false),5000); // safety net if onend never fires on Windows
-    speechSynthesis.speak(u);
+    if(onDone) setTimeout(()=>finish(false),5000);
+    // Delay queuing when we just cancelled — SAPI on Windows Edge needs a brief idle before
+    // the next speak() or it fires synthesis-failed on the new utterance
+    if(wasSpeaking){
+      const queueGen=gen;
+      setTimeout(()=>{
+        if(queueGen!==_ttsGen) return;
+        if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
+        speechSynthesis.speak(u);
+      },30);
+    }else{
+      speechSynthesis.speak(u);
+    }
   }catch(e){ if(onDone) onDone(); }
 }
 
@@ -5860,42 +6041,75 @@ function clozeUnlocked(i){
   return getAxisStage(i,'meaning')>=2;
 }
 
+// Returns true if s has any character a TTS engine can actually pronounce.
+// Guards against speaking pure-punctuation segments (e.g. "。") that cause synthesis-failed.
+function hasPhoneticContent(s){
+  return /[一-鿿㐀-䶿豈-﫿぀-ゟ゠-ヿ가-힯A-Za-z0-9]/.test(s);
+}
+
+// Speaks zh with the target word ch replaced by a beep.
+//
+// Strategy: speak the full sentence as one utterance so prosody is natural.
+// SpeechSynthesisEvent.onboundary fires just before the engine produces audio
+// for each word — when charIndex reaches the target word we cancel immediately.
+// The cut lands at the exact natural timing of the missing word with no timing math.
+// After the cancel we beep, then speak the remaining suffix.
+//
+// Degradation: if onboundary never fires (iOS Safari), onend fires after the full
+// sentence plays. A trailing beep signals the blank was tested.
+// Any unexpected error falls back to speaking the full sentence with no bleep.
 function speakWithBlank(zh,ch,langCode){
   const idx=zh.indexOf(ch);
   if(idx<0){ speak(zh,langCode); return; }
-  const before=zh.slice(0,idx);
   const after=zh.slice(idx+ch.length);
-  if(!before&&!after){ speak(zh,langCode); return; }
 
-  if(!before){
-    // Blank at start: cancel stale speech, bump gen so any deferred speak() aborts,
-    // then beep → speak suffix.
+  if(typeof speechSynthesis==='undefined') return;
+
+  const myGen=++_ttsGen;
+  const v=getBestVoice(langCode);
+  const u=new SpeechSynthesisUtterance(zh);
+  u.lang=langCode; u.rate=0.85;
+  if(v) u.voice=v;
+
+  let cut=false;
+
+  u.onboundary=function(ev){
+    if(cut||ev.name!=='word'||ev.charIndex<idx) return;
+    cut=true;
     try{ speechSynthesis.cancel(); }catch(e){}
-    ++_ttsGen;
-    const myGen=_ttsGen;
-    beepBlank(function(){ if(_ttsGen===myGen) speak(after,langCode); });
-    return;
-  }
-  if(!after){
-    // Blank at end: speak prefix → beep (no further chain).
-    speak(before,langCode,function(){ beepBlank(); });
-    return;
-  }
-  // Blank in middle: speak prefix → beep → speak suffix.
-  // expectedGen is the gen that speak(before) is about to claim (++_ttsGen).
-  // fireBeep is guarded by both the beeped flag (prevents double-fire) and the
-  // gen check (prevents firing if a newer card has taken over).
-  // Backstop timer fires if onend is unreliable on Windows for short syllables.
-  const expectedGen=_ttsGen+1;
-  const cjk=(before.match(/[一-鿿㐀-䶿]/g)||[]).length;
-  let beeped=false;
-  const fireBeep=function(){
-    if(beeped||_ttsGen!==expectedGen) return;
-    beeped=true;
-    beepBlank(function(){ if(_ttsGen===expectedGen) speak(after,langCode); });
+    if(_ttsGen!==myGen) return;
+    beepBlank(function(){
+      if(_ttsGen!==myGen) return;
+      if(hasPhoneticContent(after)) speak(after,langCode);
+    });
   };
-  speak(before,langCode,fireBeep);
-  setTimeout(fireBeep,400+cjk*500);
+
+  // onboundary not supported (iOS) or target was at the very end —
+  // full sentence already played; trailing beep marks the blank.
+  u.onend=function(){
+    if(!cut&&_ttsGen===myGen) beepBlank();
+  };
+
+  // We cancelled at the boundary — 'interrupted' is expected, ignore it.
+  // Any other error: degrade to speaking the full sentence without a bleep.
+  u.onerror=function(ev){
+    if(cut&&ev&&ev.error==='interrupted') return;
+    if(!cut&&_ttsGen===myGen) speak(zh,langCode);
+  };
+
+  const wasSpeaking=speechSynthesis.speaking||speechSynthesis.pending;
+  if(wasSpeaking){
+    speechSynthesis.cancel();
+    const queueGen=myGen;
+    setTimeout(function(){
+      if(_ttsGen!==queueGen) return;
+      if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
+      speechSynthesis.speak(u);
+    },30);
+  }else{
+    if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
+    speechSynthesis.speak(u);
+  }
 }
 
 function showStudyCloze(i){
@@ -6624,6 +6838,7 @@ $('study-quit').onclick=()=>{ studyActive=false; goHome(); };
 $('startWS').onclick=()=>{ startWordSearch(); };
 if($('startGrammar')) $('startGrammar').onclick=()=>{ startGrammarOnlySession(); };
 if($('debugReset')) $('debugReset').onclick=()=>{ debugResetProgress(); };
+if($('debugTTS')) $('debugTTS').onclick=()=>{ showTTSDebug(); };
 if($('debugSetProficiency')) $('debugSetProficiency').onclick=()=>{ debugSetProficiency(); };
 $('debugToggle').onclick=()=>{
   const dm=$('debugModes');
