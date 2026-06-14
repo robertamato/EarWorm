@@ -1211,6 +1211,14 @@ function renderHome(){
     c.style.opacity=locked?'0.3':'1';
     g.appendChild(c);
   }
+  // Post-render aspect-ratio fallback for Safari <15 / iOS <15 (no native aspect-ratio support in grid).
+  // Forces square cells by explicit height=width after append (reuses existing .cell creation loop in renderHome).
+  // Safe on modern browsers (aspect-ratio will take precedence or be consistent); called on initial render + re-renders.
+  Array.from(g.children).forEach(function(cell){
+    if(cell.classList && cell.classList.contains('cell')){
+      cell.style.height = cell.offsetWidth + 'px';
+    }
+  });
   ['sw0','sw1','sw2','sw3'].forEach((id,k)=>{$(id).style.backgroundColor=stCol[k];});
   const lvl=Math.floor(S.xp/100)+1;
   $('lvl').textContent=lvl; $('xp').textContent=S.xp;
