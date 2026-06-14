@@ -604,7 +604,7 @@ function recordAxisResultNew(i, axis, isCorrect, responseMs){
 
   // Check if accuracy window threshold met for stage advancement
   const hist=ci.axisHistory[axis]||[];
-  const windowSize=AXIS_ADVANCE_WINDOW[axis]?.[currentStage]||5;
+  const windowSize=(AXIS_ADVANCE_WINDOW[axis]&&AXIS_ADVANCE_WINDOW[axis][currentStage])||5;
   if(hist.length>=windowSize){
     const acc=axisAccuracy(i,axis,windowSize);
     if(acc>=AXIS_ADVANCE_ACCURACY){

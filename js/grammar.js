@@ -477,7 +477,7 @@ function showStudyPOSStaged(i, axisStage){
     // Use Mandarin-specific CAT_DEFS, not word-specific POS definition
     const posInfo=POS_LOGICAL[pos];
     const catName=posInfo?posInfo.cat:'LOGICAL GLUE';
-    const catDef=CAT_DEFS[catName]||posInfo?.def||'a grammatical function word';
+    const catDef=CAT_DEFS[catName]||(posInfo&&posInfo.def)||'a grammatical function word';
     $('studyPOSChar').style.fontFamily='inherit';
     $('studyPOSChar').style.fontSize='12px';
     $('studyPOSChar').style.color=fg;

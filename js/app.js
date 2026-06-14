@@ -604,7 +604,7 @@ function recordAxisResultNew(i, axis, isCorrect, responseMs){
 
   // Check if accuracy window threshold met for stage advancement
   const hist=ci.axisHistory[axis]||[];
-  const windowSize=AXIS_ADVANCE_WINDOW[axis]?.[currentStage]||5;
+  const windowSize=(AXIS_ADVANCE_WINDOW[axis]&&AXIS_ADVANCE_WINDOW[axis][currentStage])||5;
   if(hist.length>=windowSize){
     const acc=axisAccuracy(i,axis,windowSize);
     if(acc>=AXIS_ADVANCE_ACCURACY){
@@ -2171,7 +2171,7 @@ function renderDeckMgr(){
         renderDeckMgr();
         updateDeckSelector();
       } else {
-        if(confirm('Delete deck "'+allDecks()[b.dataset.id]?.name+'"?')){
+        if(confirm('Delete deck "'+(allDecks()[b.dataset.id]&&allDecks()[b.dataset.id].name||'')+'"?')){
           deleteDeck(b.dataset.id);
           renderDeckMgr();
           updateDeckSelector();
@@ -2898,7 +2898,7 @@ function showStudyTone(i){
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
   const fg=getComputedStyle(document.body).color;
   const stage=toneStage(masteryScore(i));
-  const primaryTone=syls.find(([,t])=>t!==0)?.[1]??syls[0][1];
+  const _toneMatch=syls.find(([,t])=>t!==0); const primaryTone=_toneMatch?_toneMatch[1]:syls[0][1];
   const tSym={1:'-',2:'/',3:'v',4:'\u005c',0:'.'};
 
   // Stage label tells user what kind of question this is
@@ -4517,7 +4517,7 @@ function showStudyPOSStaged(i, axisStage){
     // Use Mandarin-specific CAT_DEFS, not word-specific POS definition
     const posInfo=POS_LOGICAL[pos];
     const catName=posInfo?posInfo.cat:'LOGICAL GLUE';
-    const catDef=CAT_DEFS[catName]||posInfo?.def||'a grammatical function word';
+    const catDef=CAT_DEFS[catName]||(posInfo&&posInfo.def)||'a grammatical function word';
     $('studyPOSChar').style.fontFamily='inherit';
     $('studyPOSChar').style.fontSize='12px';
     $('studyPOSChar').style.color=fg;

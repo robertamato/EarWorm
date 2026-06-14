@@ -291,7 +291,7 @@ function renderDeckMgr(){
         renderDeckMgr();
         updateDeckSelector();
       } else {
-        if(confirm('Delete deck "'+allDecks()[b.dataset.id]?.name+'"?')){
+        if(confirm('Delete deck "'+(allDecks()[b.dataset.id]&&allDecks()[b.dataset.id].name||'')+'"?')){
           deleteDeck(b.dataset.id);
           renderDeckMgr();
           updateDeckSelector();
@@ -1018,7 +1018,7 @@ function showStudyTone(i){
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
   const fg=getComputedStyle(document.body).color;
   const stage=toneStage(masteryScore(i));
-  const primaryTone=syls.find(([,t])=>t!==0)?.[1]??syls[0][1];
+  const _toneMatch=syls.find(([,t])=>t!==0); const primaryTone=_toneMatch?_toneMatch[1]:syls[0][1];
   const tSym={1:'-',2:'/',3:'v',4:'\u005c',0:'.'};
 
   // Stage label tells user what kind of question this is
