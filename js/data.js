@@ -542,10 +542,36 @@ function substituteDefTerms(def){
 // Pre-cache voices at startup so speak() never stalls waiting for getVoices()
 let _voices=[];
 (function warmVoices(){
-  const load=()=>{ const v=speechSynthesis.getVoices(); if(v.length) _voices=v; };
+  const load=()=>{ const v=speechSynthesis.getVoices(); if(v.length){ _voices=v; renderTTSStatus(); } };
   load();
   speechSynthesis.addEventListener('voiceschanged',load);
 })();
+
+function renderTTSStatus(){
+  const el=document.getElementById('ttsStatus');
+  if(!el) return;
+  const lang=(typeof activeCourse==='function'&&activeCourse())?activeCourse().langCode:'zh-CN';
+  const prefix=lang.split('-')[0];
+  const pool=_voices.length?_voices:speechSynthesis.getVoices();
+  const matching=pool.filter(v=>v.lang.startsWith(prefix));
+  if(!matching.length){
+    el.textContent='⚠ TTS: NO VOICE INSTALLED';
+    el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;color:hsl(0,70%,55%);cursor:pointer;opacity:1;';
+    el.onclick=()=>alert('No Mandarin TTS voice found.\n\nFix: Windows Settings → Time & Language → Speech → Add voices → Chinese (Simplified, China)\n\nCheck "Text-to-speech" during installation.');
+    return;
+  }
+  const offline=matching.find(v=>!v.name.includes('Online'));
+  if(offline){
+    const short=offline.name.replace(/Microsoft\s*/i,'').split(/\s/)[0].toUpperCase();
+    el.textContent='TTS · LOCAL · '+short;
+    el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;opacity:.4;cursor:default;';
+    el.onclick=null;
+  } else {
+    el.textContent='⚠ TTS: ONLINE ONLY';
+    el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;color:hsl(40,90%,55%);cursor:pointer;opacity:1;';
+    el.onclick=()=>alert('Only cloud-based voices found — TTS will fail when opening the app as a local file.\n\nFix: Windows Settings → Time & Language → Speech → Add voices → Chinese (Simplified, China)\n\nInstall an offline voice pack for reliable local use.');
+  }
+}
 
 // Singleton AudioContext — avoids per-call creation latency and browser instance limits.
 let _audioCtx=null;

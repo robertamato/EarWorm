@@ -183,6 +183,7 @@ if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   initGrammarState(); // ensure grammar sub-axis structure exists
   speechSynthesis.getVoices();
   resetSessionFatigue(); rollBg(); renderHome(); show('home');
+  renderTTSStatus();
 })();
 
 
