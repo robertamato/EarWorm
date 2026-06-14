@@ -324,6 +324,10 @@ let studyActive=false;
 
 // Per-word encounter count across this study session
 const studyEncounters=new Map(); // idx -> count
+const sessionRecentCards=[]; // ring buffer — last N vocab card indices shown
+const sessionAnswerRing=[]; // ring buffer — last M answer booleans (true=correct)
+const RECENCY_WINDOW=10;
+const ANSWER_RING_SIZE=15;
 
 function wordModality(i){
   // Not yet MC-eligible: always flashcard
@@ -465,6 +469,8 @@ function startStudy(flashOnly){
   if(!studyQueue||!studyQueue.length) studyQueue=D.map((_,i)=>i).filter(i=>isUnlocked(i)).slice(0,10);
   studyIdx=0; studyCardCount=0;
   studyEncounters.clear();
+  sessionRecentCards.length=0;
+  sessionAnswerRing.length=0;
   studyPending=[];
   studyActive=true;
   sessionHistory.clear();
@@ -479,6 +485,17 @@ function startStudy(flashOnly){
   }catch(e){ document.title='START:'+e.message.slice(0,60); console.error(e); goHome(); }
 }
 
+function getIntroEvery(){
+  const n=sessionAnswerRing.length;
+  if(n<5) return 4; // not enough data yet
+  const correct=sessionAnswerRing.filter(Boolean).length;
+  const acc=correct/n;
+  if(acc>=0.80) return 2;  // performing well — introduce faster
+  if(acc>=0.65) return 3;
+  if(acc>=0.50) return 5;
+  return 7;               // struggling — slow down introductions
+}
+
 function nextStudyCard(){
   // Check if we should introduce a new word
   // Skip when a modality filter is active — debug modes stay focused
@@ -490,7 +507,7 @@ function nextStudyCard(){
     scheduleNextQueueRebuild();
   }
   const forceIntro=studyCardCount===1;
-  if(!studyModalityFilter&&(forceIntro||studyCardCount%4===0) && shouldIntroduceNewWord()){
+  if(!studyModalityFilter&&(forceIntro||studyCardCount%getIntroEvery()===0) && shouldIntroduceNewWord()){
     const newIdx=introduceNextWord();
     if(newIdx>=0){
       // Rebuild queue to include the new word in rotation
@@ -538,8 +555,21 @@ function nextStudyCard(){
     // If rebuilt queue is empty, session is done
     if(!studyQueue.length){ goHome(); return; }
   }
-  const i=studyQueue[studyIdx++];
+  let i=studyQueue[studyIdx++];
   if(i===undefined||i===null){ goHome(); return; }
+  // Recency filter: avoid repeating a vocab card within RECENCY_WINDOW cards.
+  // Scan ahead for a non-recent alternative and swap it into the current slot.
+  if(!isGrammarKey(i) && sessionRecentCards.includes(i)){
+    const limit=Math.min(studyIdx+RECENCY_WINDOW, studyQueue.length);
+    for(let s=studyIdx; s<limit; s++){
+      const ni=studyQueue[s];
+      if(isGrammarKey(ni) || !sessionRecentCards.includes(ni)){
+        studyQueue[s]=i; // defer i to later
+        i=ni;
+        break;
+      }
+    }
+  }
   // Route grammar pool cards to grammar drill
   if(isGrammarKey(i)){
     if(studyFlashOnly||(studyModalityFilter&&studyModalityFilter!=='grammar')){
@@ -562,6 +592,8 @@ function showStudyCard(i){
   studyCardCount++;
   tickSessionCard();
   studyEncounters.set(i,(studyEncounters.get(i)||0)+1);
+  sessionRecentCards.push(i);
+  if(sessionRecentCards.length>RECENCY_WINDOW) sessionRecentCards.shift();
 
   // Colloquialism interjection: only show if unlocked, frequency-ranked
   // Fire every ~11 cards but only show the highest-priority unlocked coll
@@ -629,7 +661,7 @@ function showStudyFlash(i){
     ci0.seen=true;
     // Set initial due date so MC can fire after short interval
     if(!ci0.axisDue) ci0.axisDue={};
-    const introInterval=Math.round(0.002*DAY); // ~3 min
+    const introInterval=Math.round(0.012*DAY); // ~17 min
     ci0.axisDue['meaning']=Date.now()+introInterval;
     ci0.axisDue['pos']=Date.now()+introInterval*3;
     save();
@@ -1100,6 +1132,8 @@ function logAnswer(i, isCorrect){
   if(isCorrect) entry.correct++;
   else entry.wrong++;
   sessionLog.set(i,entry);
+  sessionAnswerRing.push(!!isCorrect);
+  if(sessionAnswerRing.length>ANSWER_RING_SIZE) sessionAnswerRing.shift();
 }
 
 function showSummary(returnView){

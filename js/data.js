@@ -574,22 +574,36 @@ function primeSpeechEngine(lang){
   }catch(e){}
 }
 
+// Global generation counter — incremented on every speak() call.
+// finish() and speakWithBlank callbacks check gen===_ttsGen before acting,
+// so stale callbacks from superseded cards/sequences are silent no-ops.
+let _ttsGen=0;
+
 function speak(text,lang,onDone){
   if(!lang) lang=activeCourse?activeCourse().langCode:'zh-CN';
   if(S.sound==='mute'){ if(onDone) onDone(); return; }
   try{
+    const gen=++_ttsGen;
+    // Only cancel when something is actually queued — unconditional cancel
+    // corrupts the Windows SAPI engine state even when the queue is empty.
     if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel();
+    // If the engine was left paused by a previous cancel(), un-pause it before
+    // queueing the new utterance, otherwise the utterance plays in silence.
+    if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
     const u=new SpeechSynthesisUtterance(text);
     u.lang=lang; u.rate=.85;
     const pool=_voices.length?_voices:speechSynthesis.getVoices();
-    const v=pool.find(v=>v.lang.startsWith(lang.split('-')[0]));
+    const v=pool.find(w=>w.lang.startsWith(lang.split('-')[0]));
     if(v) u.voice=v;
-    if(onDone){
-      let done=false;
-      const finish=()=>{ if(done)return; done=true; onDone(); };
-      u.onend=finish; u.onerror=finish;
-      setTimeout(finish,4000);
-    }
+    let fired=false;
+    const finish=(cancelled)=>{
+      if(fired||gen!==_ttsGen) return;
+      fired=true;
+      if(!cancelled&&onDone) onDone();
+    };
+    u.onend=()=>finish(false);
+    u.onerror=()=>finish(true); // cancel/interrupt: do NOT advance chain
+    if(onDone) setTimeout(()=>finish(false),5000); // safety net if onend never fires on Windows
     speechSynthesis.speak(u);
   }catch(e){ if(onDone) onDone(); }
 }

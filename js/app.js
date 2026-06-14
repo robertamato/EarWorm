@@ -574,22 +574,36 @@ function primeSpeechEngine(lang){
   }catch(e){}
 }
 
+// Global generation counter — incremented on every speak() call.
+// finish() and speakWithBlank callbacks check gen===_ttsGen before acting,
+// so stale callbacks from superseded cards/sequences are silent no-ops.
+let _ttsGen=0;
+
 function speak(text,lang,onDone){
   if(!lang) lang=activeCourse?activeCourse().langCode:'zh-CN';
   if(S.sound==='mute'){ if(onDone) onDone(); return; }
   try{
+    const gen=++_ttsGen;
+    // Only cancel when something is actually queued — unconditional cancel
+    // corrupts the Windows SAPI engine state even when the queue is empty.
     if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel();
+    // If the engine was left paused by a previous cancel(), un-pause it before
+    // queueing the new utterance, otherwise the utterance plays in silence.
+    if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
     const u=new SpeechSynthesisUtterance(text);
     u.lang=lang; u.rate=.85;
     const pool=_voices.length?_voices:speechSynthesis.getVoices();
-    const v=pool.find(v=>v.lang.startsWith(lang.split('-')[0]));
+    const v=pool.find(w=>w.lang.startsWith(lang.split('-')[0]));
     if(v) u.voice=v;
-    if(onDone){
-      let done=false;
-      const finish=()=>{ if(done)return; done=true; onDone(); };
-      u.onend=finish; u.onerror=finish;
-      setTimeout(finish,4000);
-    }
+    let fired=false;
+    const finish=(cancelled)=>{
+      if(fired||gen!==_ttsGen) return;
+      fired=true;
+      if(!cancelled&&onDone) onDone();
+    };
+    u.onend=()=>finish(false);
+    u.onerror=()=>finish(true); // cancel/interrupt: do NOT advance chain
+    if(onDone) setTimeout(()=>finish(false),5000); // safety net if onend never fires on Windows
     speechSynthesis.speak(u);
   }catch(e){ if(onDone) onDone(); }
 }
@@ -1916,6 +1930,10 @@ let studyActive=false;
 
 // Per-word encounter count across this study session
 const studyEncounters=new Map(); // idx -> count
+const sessionRecentCards=[]; // ring buffer — last N vocab card indices shown
+const sessionAnswerRing=[]; // ring buffer — last M answer booleans (true=correct)
+const RECENCY_WINDOW=10;
+const ANSWER_RING_SIZE=15;
 
 function wordModality(i){
   // Not yet MC-eligible: always flashcard
@@ -2057,6 +2075,8 @@ function startStudy(flashOnly){
   if(!studyQueue||!studyQueue.length) studyQueue=D.map((_,i)=>i).filter(i=>isUnlocked(i)).slice(0,10);
   studyIdx=0; studyCardCount=0;
   studyEncounters.clear();
+  sessionRecentCards.length=0;
+  sessionAnswerRing.length=0;
   studyPending=[];
   studyActive=true;
   sessionHistory.clear();
@@ -2071,6 +2091,17 @@ function startStudy(flashOnly){
   }catch(e){ document.title='START:'+e.message.slice(0,60); console.error(e); goHome(); }
 }
 
+function getIntroEvery(){
+  const n=sessionAnswerRing.length;
+  if(n<5) return 4; // not enough data yet
+  const correct=sessionAnswerRing.filter(Boolean).length;
+  const acc=correct/n;
+  if(acc>=0.80) return 2;  // performing well — introduce faster
+  if(acc>=0.65) return 3;
+  if(acc>=0.50) return 5;
+  return 7;               // struggling — slow down introductions
+}
+
 function nextStudyCard(){
   // Check if we should introduce a new word
   // Skip when a modality filter is active — debug modes stay focused
@@ -2082,7 +2113,7 @@ function nextStudyCard(){
     scheduleNextQueueRebuild();
   }
   const forceIntro=studyCardCount===1;
-  if(!studyModalityFilter&&(forceIntro||studyCardCount%4===0) && shouldIntroduceNewWord()){
+  if(!studyModalityFilter&&(forceIntro||studyCardCount%getIntroEvery()===0) && shouldIntroduceNewWord()){
     const newIdx=introduceNextWord();
     if(newIdx>=0){
       // Rebuild queue to include the new word in rotation
@@ -2130,8 +2161,21 @@ function nextStudyCard(){
     // If rebuilt queue is empty, session is done
     if(!studyQueue.length){ goHome(); return; }
   }
-  const i=studyQueue[studyIdx++];
+  let i=studyQueue[studyIdx++];
   if(i===undefined||i===null){ goHome(); return; }
+  // Recency filter: avoid repeating a vocab card within RECENCY_WINDOW cards.
+  // Scan ahead for a non-recent alternative and swap it into the current slot.
+  if(!isGrammarKey(i) && sessionRecentCards.includes(i)){
+    const limit=Math.min(studyIdx+RECENCY_WINDOW, studyQueue.length);
+    for(let s=studyIdx; s<limit; s++){
+      const ni=studyQueue[s];
+      if(isGrammarKey(ni) || !sessionRecentCards.includes(ni)){
+        studyQueue[s]=i; // defer i to later
+        i=ni;
+        break;
+      }
+    }
+  }
   // Route grammar pool cards to grammar drill
   if(isGrammarKey(i)){
     if(studyFlashOnly||(studyModalityFilter&&studyModalityFilter!=='grammar')){
@@ -2154,6 +2198,8 @@ function showStudyCard(i){
   studyCardCount++;
   tickSessionCard();
   studyEncounters.set(i,(studyEncounters.get(i)||0)+1);
+  sessionRecentCards.push(i);
+  if(sessionRecentCards.length>RECENCY_WINDOW) sessionRecentCards.shift();
 
   // Colloquialism interjection: only show if unlocked, frequency-ranked
   // Fire every ~11 cards but only show the highest-priority unlocked coll
@@ -2221,7 +2267,7 @@ function showStudyFlash(i){
     ci0.seen=true;
     // Set initial due date so MC can fire after short interval
     if(!ci0.axisDue) ci0.axisDue={};
-    const introInterval=Math.round(0.002*DAY); // ~3 min
+    const introInterval=Math.round(0.012*DAY); // ~17 min
     ci0.axisDue['meaning']=Date.now()+introInterval;
     ci0.axisDue['pos']=Date.now()+introInterval*3;
     save();
@@ -2692,6 +2738,8 @@ function logAnswer(i, isCorrect){
   if(isCorrect) entry.correct++;
   else entry.wrong++;
   sessionLog.set(i,entry);
+  sessionAnswerRing.push(!!isCorrect);
+  if(sessionAnswerRing.length>ANSWER_RING_SIZE) sessionAnswerRing.shift();
 }
 
 function showSummary(returnView){
@@ -5438,18 +5486,36 @@ function speakWithBlank(zh,ch,langCode){
   const before=zh.slice(0,idx);
   const after=zh.slice(idx+ch.length);
   if(!before&&!after){ speak(zh,langCode); return; }
-  if(!after){ speak(before,langCode,function(){ beepBlank(); }); return; }
-  const doAfter=function(){ speak(after,langCode); };
-  if(!before){ beepBlank(doAfter); return; }
-  // rAF polling detects speech end within one frame (~16ms) vs onend which lags 200ms+.
-  // onend/onerror passed to speak() serve as a guaranteed fallback.
-  // onend is the primary trigger. Timer fires well after speech would end so it
-  // only activates if onend never fires — never causes overlap.
+
+  if(!before){
+    // Blank at start: cancel stale speech, bump gen so any deferred speak() aborts,
+    // then beep → speak suffix.
+    try{ speechSynthesis.cancel(); }catch(e){}
+    ++_ttsGen;
+    const myGen=_ttsGen;
+    beepBlank(function(){ if(_ttsGen===myGen) speak(after,langCode); });
+    return;
+  }
+  if(!after){
+    // Blank at end: speak prefix → beep (no further chain).
+    speak(before,langCode,function(){ beepBlank(); });
+    return;
+  }
+  // Blank in middle: speak prefix → beep → speak suffix.
+  // expectedGen is the gen that speak(before) is about to claim (++_ttsGen).
+  // fireBeep is guarded by both the beeped flag (prevents double-fire) and the
+  // gen check (prevents firing if a newer card has taken over).
+  // Backstop timer fires if onend is unreliable on Windows for short syllables.
+  const expectedGen=_ttsGen+1;
   const cjk=(before.match(/[一-鿿㐀-䶿]/g)||[]).length;
   let beeped=false;
-  const doBeep=function(){ if(beeped)return; beeped=true; beepBlank(doAfter); };
-  setTimeout(doBeep, 400+cjk*500);
-  speak(before,langCode,doBeep);
+  const fireBeep=function(){
+    if(beeped||_ttsGen!==expectedGen) return;
+    beeped=true;
+    beepBlank(function(){ if(_ttsGen===expectedGen) speak(after,langCode); });
+  };
+  speak(before,langCode,fireBeep);
+  setTimeout(fireBeep,400+cjk*500);
 }
 
 function showStudyCloze(i){

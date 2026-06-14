@@ -165,18 +165,36 @@ function speakWithBlank(zh,ch,langCode){
   const before=zh.slice(0,idx);
   const after=zh.slice(idx+ch.length);
   if(!before&&!after){ speak(zh,langCode); return; }
-  if(!after){ speak(before,langCode,function(){ beepBlank(); }); return; }
-  const doAfter=function(){ speak(after,langCode); };
-  if(!before){ beepBlank(doAfter); return; }
-  // rAF polling detects speech end within one frame (~16ms) vs onend which lags 200ms+.
-  // onend/onerror passed to speak() serve as a guaranteed fallback.
-  // onend is the primary trigger. Timer fires well after speech would end so it
-  // only activates if onend never fires — never causes overlap.
+
+  if(!before){
+    // Blank at start: cancel stale speech, bump gen so any deferred speak() aborts,
+    // then beep → speak suffix.
+    try{ speechSynthesis.cancel(); }catch(e){}
+    ++_ttsGen;
+    const myGen=_ttsGen;
+    beepBlank(function(){ if(_ttsGen===myGen) speak(after,langCode); });
+    return;
+  }
+  if(!after){
+    // Blank at end: speak prefix → beep (no further chain).
+    speak(before,langCode,function(){ beepBlank(); });
+    return;
+  }
+  // Blank in middle: speak prefix → beep → speak suffix.
+  // expectedGen is the gen that speak(before) is about to claim (++_ttsGen).
+  // fireBeep is guarded by both the beeped flag (prevents double-fire) and the
+  // gen check (prevents firing if a newer card has taken over).
+  // Backstop timer fires if onend is unreliable on Windows for short syllables.
+  const expectedGen=_ttsGen+1;
   const cjk=(before.match(/[一-鿿㐀-䶿]/g)||[]).length;
   let beeped=false;
-  const doBeep=function(){ if(beeped)return; beeped=true; beepBlank(doAfter); };
-  setTimeout(doBeep, 400+cjk*500);
-  speak(before,langCode,doBeep);
+  const fireBeep=function(){
+    if(beeped||_ttsGen!==expectedGen) return;
+    beeped=true;
+    beepBlank(function(){ if(_ttsGen===expectedGen) speak(after,langCode); });
+  };
+  speak(before,langCode,fireBeep);
+  setTimeout(fireBeep,400+cjk*500);
 }
 
 function showStudyCloze(i){
