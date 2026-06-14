@@ -25,6 +25,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Stamp the commit SHA onto the app.js URL so each deploy is a unique
+      # path the browser cannot serve stale. Only the deployed copy is
+      # modified (CI checkout is ephemeral); the committed index.html keeps
+      # the plain src for local development.
+      - name: Cache-bust app.js
+        run: sed -i "s|src=\"js/app.js\"|src=\"js/app.js?v=${GITHUB_SHA}\"|" index.html
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
