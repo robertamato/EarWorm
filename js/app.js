@@ -683,9 +683,11 @@ let _voices=[];
   speechSynthesis.addEventListener('voiceschanged',load);
 })();
 
-// Strongly prefers localService===true voices. Falls back to any non-"Online" name heuristic.
-// Returns null (lang-only) when only cloud voices exist — lets browser use installed pack default
-// instead of forcing a cloud voice that causes synthesis-failed on file:// or GitHub Pages.
+// Returns the best available voice for a language.
+// Preference: localService===true → non-"Online" name → first matching voice.
+// Always returns a voice when any candidate exists; never returns null for a lang
+// that has installed voices. Explicit voice selection is more reliable than lang-only
+// on Windows (Edge/Chrome may not auto-select the installed pack without u.voice set).
 function getBestVoice(lang){
   if(typeof speechSynthesis==='undefined') return null;
   const pool=_voices.length?_voices:speechSynthesis.getVoices();
@@ -696,7 +698,7 @@ function getBestVoice(lang){
   if(locals.length) return locals.find(v=>v.default)||locals[0];
   const nonOnline=candidates.find(v=>v.name&&!v.name.includes('Online'));
   if(nonOnline) return nonOnline;
-  return null; // all voices are cloud-flagged; speak() will do lang-only
+  return candidates[0]; // prefer explicit selection even for cloud-flagged voices
 }
 
 function renderTTSStatus(){
