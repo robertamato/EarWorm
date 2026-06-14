@@ -717,18 +717,14 @@ function renderTTSStatus(){
     return;
   }
   const best=getBestVoice(lang);
-  const hasLocal=matching.some(v=>v.localService===true);
   const displayVoice=best||matching[0];
-  const shortName=displayVoice&&displayVoice.name?displayVoice.name.replace(/Microsoft\s*/i,'').split(/\s/)[0].toUpperCase():'VOICE';
-  if(hasLocal){
-    el.textContent='TTS · LOCAL · '+shortName;
-    el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;opacity:.4;cursor:default;';
-    el.onclick=null;
-  } else {
-    el.textContent='⚠ TTS: ONLINE ONLY ('+shortName+')';
-    el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;color:hsl(40,90%,55%);cursor:pointer;opacity:1;';
-    el.onclick=()=>showTTSVoiceDetails(lang);
-  }
+  const shortName=displayVoice&&displayVoice.name?displayVoice.name.replace(/Microsoft\s*/i,'').replace(/\s*Online.*/i,'').trim().split(/\s/)[0].toUpperCase():'VOICE';
+  // Microsoft Neural packs report localService=false even when locally installed — don't use
+  // that property to decide status. If voices exist for the lang, consider TTS ready.
+  // Only warn when no voice is found at all (handled above).
+  el.textContent='TTS · '+shortName;
+  el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;opacity:.4;cursor:default;';
+  el.onclick=null;
 }
 
 // Diagnostic alert — lists voices for the current language and fires a single test speak.
