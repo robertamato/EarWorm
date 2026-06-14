@@ -6557,7 +6557,15 @@ if($('debugPolicy')){
   $('debugPolicy').textContent='⚙ POLICY: '+(newSchedulerPolicy()?'V2 (context)':'V1');
   $('debugPolicy').onclick=()=>{ try{ if(newSchedulerPolicy()) localStorage.removeItem('earworm_policy'); else localStorage.setItem('earworm_policy','v2'); }catch(e){} location.reload(); };
 }
-$('start').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startStudy(true); };
+// Shared debounce flag — prevents double-tap from scheduling two session starts.
+// Declared here so all three start handlers (start / startStudy / startTone) share it.
+let _startStudyPending=false;
+$('start').onclick=()=>{
+  if(_startStudyPending) return;
+  _startStudyPending=true;
+  primeSpeechEngine(activeCourse().langCode);
+  setTimeout(()=>{ _startStudyPending=false; startStudy(true); },180);
+};
 $('quit').onclick=endSession;
 
 $('finish').onclick=()=>{ showSummary('session'); };
@@ -6596,8 +6604,7 @@ $('charDetail-back').onclick=()=>{
   }
 };
 // 180ms after prime gives the warm-up utterance time to load the voice pack before
-// the first real card fires. Debounce flags prevent double-tap from starting two sessions.
-let _startStudyPending=false;
+// the first real card fires.
 $('startTone').onclick=()=>{
   if(_startStudyPending) return;
   _startStudyPending=true;
