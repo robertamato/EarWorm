@@ -678,8 +678,13 @@ function substituteDefTerms(def){
 let _voices=[];
 (function warmVoices(){
   if(typeof speechSynthesis==='undefined') return;
-  const load=()=>{ const v=speechSynthesis.getVoices(); if(v&&v.length){ _voices=v; renderTTSStatus(); } };
-  load();
+  // renderTTSStatus() reaches activeCourse()→COURSES, a const defined later in the
+  // concatenated bundle (grammar.js). Safari returns getVoices() synchronously, so a
+  // direct call here runs during script eval — before COURSES is initialized — and
+  // throws "Cannot access uninitialized variable" (TDZ), aborting the whole script.
+  // Defer the initial render to a macrotask so the full bundle has finished evaluating.
+  const load=()=>{ try{ const v=speechSynthesis.getVoices(); if(v&&v.length){ _voices=v; renderTTSStatus(); } }catch(e){} };
+  setTimeout(load,0);
   speechSynthesis.addEventListener('voiceschanged',load);
 })();
 
