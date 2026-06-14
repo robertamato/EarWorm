@@ -5,12 +5,24 @@
       prompt=tlp.zh;
       correctChoice=tlp.en.toUpperCase();
       var tlOthers=tlpairs.filter(function(p){return p.zh!==tlp.zh;}).map(function(p){return p.en.toUpperCase();});
-      choices=shuffle([tlp.en.toUpperCase(),...tlOthers].filter(function(v,i,a){return a.indexOf(v)===i;})).slice(0,4);
+      var choicePool=[tlp.en.toUpperCase(),...tlOthers].filter(function(v,i,a){return a.indexOf(v)===i;});
+      // Pad to 4 with cross-category EN terms so choice count is always even
+      if(choicePool.length<4){
+        GRAMMAR_CATS.forEach(function(c){
+          var cPairs=(GRAMMAR_CONTENT[c]&&GRAMMAR_CONTENT[c].s4&&GRAMMAR_CONTENT[c].s4.pairs)||[];
+          cPairs.forEach(function(p){
+            if(choicePool.length>=4) return;
+            var en=p.en.toUpperCase();
+            if(!choicePool.includes(en)) choicePool.push(en);
+          });
+        });
+      }
+      choices=shuffle(choicePool.slice(0,4));
       if(choices.indexOf(correctChoice)<0) choices[choices.length-1]=correctChoice;
       choices=shuffle(choices);
       $('studyPOSChar').style.cssText=CJKf3+';font-size:28px;color:'+fg+';text-align:center;';
       $('studyPOSChar').textContent=prompt;
-      if(pyEl) pyEl.innerHTML='<span style="font-size:7px;opacity:.6;letter-spacing:1px;">WHICH ENGLISH TERM MATCHES?</span>';
+      if(pyEl) pyEl.innerHTML='<span style="font-size:9px;opacity:.7;letter-spacing:1px;font-family:inherit;">'+tlp.py+'</span><br><span style="font-size:7px;opacity:.5;letter-spacing:1px;">WHICH ENGLISH TERM MATCHES?</span>';
       prompt='__CJK_HANDLED__';
     } else if(stage===2){
       var tlp2=tlpairs[Math.floor(Math.random()*tlpairs.length)];
@@ -95,40 +107,40 @@ const EXAMPLE_SENTENCES={
   "我":[["我是学生。","wǒ shì xuésheng.","I am a student."],["我不知道。","wǒ bù zhīdào.","I don't know."],["我很好。","wǒ hěn hǎo.","I am fine."]],
   "你":[["你好！","nǐ hǎo!","Hello!"],["你是谁？","nǐ shì shéi?","Who are you?"],["你去哪里？","nǐ qù nǎlǐ?","Where are you going?"]],
   "是":[["他是老师。","tā shì lǎoshī.","He is a teacher."],["这是什么？","zhè shì shénme?","What is this?"],["我是中国人。","wǒ shì zhōngguórén.","I am Chinese."]],
-  "了":[["我吃了。","wǒ chī le.","I ate."],["他走了。","tā zǒu le.","He left."],["下雨了。","xià yǔ le.","It started raining."]],
+  "了":[["我吃了。","wǒ chī le.","I ate."],["他走了。","tā zǒu le.","He left."],["她来了。","tā lái le.","She came."]],
   "不":[["我不去。","wǒ bù qù.","I'm not going."],["他不是学生。","tā bù shì xuésheng.","He is not a student."],["不好。","bù hǎo.","Not good."]],
-  "他":[["他很忙。","tā hěn máng.","He is very busy."],["他去了北京。","tā qù le běijīng.","He went to Beijing."],["他是我的朋友。","tā shì wǒ de péngyou.","He is my friend."]],
-  "她":[["她很漂亮。","tā hěn piàoliang.","She is very beautiful."],["她是我姐姐。","tā shì wǒ jiějie.","She is my older sister."],["她不来了。","tā bù lái le.","She is not coming."]],
+  "他":[["他很好。","tā hěn hǎo.","He is very good."],["他走了。","tā zǒu le.","He left."],["他是我的朋友。","tā shì wǒ de péngyou.","He is my friend."]],
+  "她":[["她很好。","tā hěn hǎo.","She is very good."],["她不来。","tā bù lái.","She is not coming."],["她不来了。","tā bù lái le.","She's not coming anymore."]],
   "们":[["我们去吃饭。","wǒmen qù chīfàn.","Let's go eat."],["他们是朋友。","tāmen shì péngyou.","They are friends."],["你们好！","nǐmen hǎo!","Hello everyone!"]],
-  "在":[["他在家。","tā zài jiā.","He is at home."],["书在桌上。","shū zài zhuō shang.","The book is on the table."],["我在学习。","wǒ zài xuéxí.","I am studying."]],
-  "有":[["我有一个问题。","wǒ yǒu yīgè wèntí.","I have a question."],["这里有很多人。","zhèlǐ yǒu hěn duō rén.","There are many people here."],["他有钱。","tā yǒu qián.","He has money."]],
+  "在":[["他在家。","tā zài jiā.","He is at home."],["书在这里。","shū zài zhèlǐ.","The book is here."],["我在看书。","wǒ zài kàn shū.","I am reading."]],
+  "有":[["我有书。","wǒ yǒu shū.","I have a book."],["这里有很多人。","zhèlǐ yǒu hěn duō rén.","There are many people here."],["他有钱。","tā yǒu qián.","He has money."]],
   "这":[["这是什么？","zhè shì shénme?","What is this?"],["这个很好。","zhège hěn hǎo.","This one is good."],["我要这个。","wǒ yào zhège.","I want this one."]],
   "一":[["一个人。","yīgè rén.","One person."],["一起去。","yīqǐ qù.","Go together."],["一点儿。","yīdiǎnr.","A little bit."]],
-  "说":[["他说中文。","tā shuō zhōngwén.","He speaks Chinese."],["你说什么？","nǐ shuō shénme?","What did you say?"],["她说得很好。","tā shuō de hěn hǎo.","She speaks very well."]],
+  "说":[["他说了。","tā shuō le.","He spoke."],["你说什么？","nǐ shuō shénme?","What did you say?"],["她说很多。","tā shuō hěn duō.","She says a lot."]],
   "没":[["我没有钱。","wǒ méiyǒu qián.","I have no money."],["他没来。","tā méi lái.","He didn't come."],["没问题。","méi wèntí.","No problem."]],
   "那":[["那是什么？","nà shì shénme?","What is that?"],["那个人是谁？","nàgè rén shì shéi?","Who is that person?"],["那很好。","nà hěn hǎo.","That is good."]],
-  "来":[["他来了。","tā lái le.","He came."],["你来这里。","nǐ lái zhèlǐ.","Come here."],["我来帮你。","wǒ lái bāng nǐ.","I'll help you."]],
+  "来":[["他来了。","tā lái le.","He came."],["你来这里。","nǐ lái zhèlǐ.","Come here."],["我来看你。","wǒ lái kàn nǐ.","I'll come see you."]],
   "好":[["你好！","nǐ hǎo!","Hello!"],["很好。","hěn hǎo.","Very good."],["好的。","hǎo de.","Okay."]],
   "到":[["他到了。","tā dào le.","He arrived."],["我到家了。","wǒ dào jiā le.","I arrived home."],["到哪里去？","dào nǎlǐ qù?","Where are you going?"]],
-  "要":[["我要水。","wǒ yào shuǐ.","I want water."],["你要什么？","nǐ yào shénme?","What do you want?"],["我要去北京。","wǒ yào qù běijīng.","I want to go to Beijing."]],
+  "要":[["我要水。","wǒ yào shuǐ.","I want water."],["你要什么？","nǐ yào shénme?","What do you want?"],["我要去。","wǒ yào qù.","I want to go."]],
   "都":[["我们都去。","wǒmen dōu qù.","We are all going."],["他们都是学生。","tāmen dōu shì xuésheng.","They are all students."],["都好。","dōu hǎo.","All good."]],
-  "和":[["我和你。","wǒ hé nǐ.","You and I."],["茶和咖啡。","chá hé kāfēi.","Tea and coffee."],["他和她是朋友。","tā hé tā shì péngyou.","He and she are friends."]],
+  "和":[["我和你。","wǒ hé nǐ.","You and I."],["茶和水。","chá hé shuǐ.","Tea and water."],["他和她是朋友。","tā hé tā shì péngyou.","He and she are friends."]],
   "也":[["我也去。","wǒ yě qù.","I'm going too."],["他也是学生。","tā yě shì xuésheng.","He is also a student."],["也好。","yě hǎo.","That works too."]],
   "人":[["这个人是谁？","zhège rén shì shéi?","Who is this person?"],["很多人来了。","hěn duō rén lái le.","Many people came."],["中国人。","zhōngguórén.","Chinese person."]],
   "什么":[["这是什么？","zhè shì shénme?","What is this?"],["你要什么？","nǐ yào shénme?","What do you want?"],["他说什么？","tā shuō shénme?","What did he say?"]],
-  "会":[["我会说中文。","wǒ huì shuō zhōngwén.","I can speak Chinese."],["他不会来。","tā bù huì lái.","He won't come."],["你会吗？","nǐ huì ma?","Can you?"]],
-  "去":[["我去北京。","wǒ qù běijīng.","I'm going to Beijing."],["他去学校了。","tā qù xuéxiào le.","He went to school."],["你去哪里？","nǐ qù nǎlǐ?","Where are you going?"]],
+  "会":[["我会说。","wǒ huì shuō.","I can speak."],["他不会来。","tā bù huì lái.","He won't come."],["你会吗？","nǐ huì ma?","Can you?"]],
+  "去":[["我去了。","wǒ qù le.","I went."],["他去看书了。","tā qù kàn shū le.","He went to read."],["你去哪里？","nǐ qù nǎlǐ?","Where are you going?"]],
   "可以":[["我可以来。","wǒ kěyǐ lái.","I can come."],["可以吗？","kěyǐ ma?","Is it okay?"],["不可以。","bù kěyǐ.","Not allowed."]],
-  "很":[["他很好。","tā hěn hǎo.","He is very good."],["很多人。","hěn duō rén.","Many people."],["很难。","hěn nán.","Very difficult."]],
+  "很":[["他很好。","tā hěn hǎo.","He is very good."],["很多人。","hěn duō rén.","Many people."],["很多书。","hěn duō shū.","Many books."]],
   "知道":[["我知道。","wǒ zhīdào.","I know."],["你知道吗？","nǐ zhīdào ma?","Do you know?"],["我不知道。","wǒ bù zhīdào.","I don't know."]],
   "吗":[["你好吗？","nǐ hǎo ma?","How are you?"],["他来吗？","tā lái ma?","Is he coming?"],["是吗？","shì ma?","Really?"]],
-  "上":[["桌上有书。","zhuō shang yǒu shū.","There is a book on the table."],["他在楼上。","tā zài lóu shàng.","He is upstairs."]],
+  "上":[["他走上来了。","tā zǒu shàng lái le.","He came up."],["他上来了。","tā shàng lái le.","He came up."]],
   "时候":[["什么时候？","shénme shíhou?","When?"],["那时候。","nà shíhou.","At that time."]],
-  "能":[["我能来。","wǒ néng lái.","I can come."],["你能帮我吗？","nǐ néng bāng wǒ ma?","Can you help me?"],["他不能来。","tā bù néng lái.","He cannot come."]],
+  "能":[["我能来。","wǒ néng lái.","I can come."],["你能来吗？","nǐ néng lái ma?","Can you come?"],["他不能来。","tā bù néng lái.","He cannot come."]],
   "就":[["我就来。","wǒ jiù lái.","I'll be right there."],["就是这个。","jiù shì zhège.","It is exactly this."]],
-  "对":[["对。","duì.","Correct."],["你说得对。","nǐ shuō de duì.","You're right."],["对不起。","duìbuqǐ.","Sorry."]],
+  "对":[["对。","duì.","Correct."],["你说对了。","nǐ shuō duì le.","You said it right."],["对了。","duì le.","That's right."]],
   "自己":[["我自己来。","wǒ zìjǐ lái.","I'll come myself."],["他自己知道。","tā zìjǐ zhīdào.","He knows himself."]],
-  "里":[["家里。","jiā lǐ.","Inside the home."],["这里有什么？","zhèlǐ yǒu shénme?","What is here?"],["他在里面。","tā zài lǐmiàn.","He is inside."]],
+  "里":[["家里。","jiā lǐ.","Inside the home."],["这里有什么？","zhèlǐ yǒu shénme?","What is here?"],["他在这里。","tā zài zhèlǐ.","He is here."]],
   "就":[["他就是老师。","tā jiù shì lǎoshī.","He is indeed a teacher."]],
   "后":[["以后。","yǐhòu.","Afterwards / in the future."],["他后来来了。","tā hòulái lái le.","He came later."]],
   "还":[["还好。","hái hǎo.","Still okay."],["他还在。","tā hái zài.","He is still here."],["还有。","hái yǒu.","There is more."]],
@@ -147,6 +159,26 @@ function clozeUnlocked(i){
   return getAxisStage(i,'meaning')>=2 && (EXAMPLE_SENTENCES[D[i][0]]||[]).length>0;
 }
 
+function speakWithBlank(zh,ch,langCode){
+  const idx=zh.indexOf(ch);
+  if(idx<0){ speak(zh,langCode); return; }
+  const before=zh.slice(0,idx);
+  const after=zh.slice(idx+ch.length);
+  if(!before&&!after){ speak(zh,langCode); return; }
+  if(!after){ speak(before,langCode,function(){ beepBlank(); }); return; }
+  const doAfter=function(){ speak(after,langCode); };
+  if(!before){ beepBlank(doAfter); return; }
+  // rAF polling detects speech end within one frame (~16ms) vs onend which lags 200ms+.
+  // onend/onerror passed to speak() serve as a guaranteed fallback.
+  // onend is the primary trigger. Timer fires well after speech would end so it
+  // only activates if onend never fires — never causes overlap.
+  const cjk=(before.match(/[一-鿿㐀-䶿]/g)||[]).length;
+  let beeped=false;
+  const doBeep=function(){ if(beeped)return; beeped=true; beepBlank(doAfter); };
+  setTimeout(doBeep, 400+cjk*500);
+  speak(before,langCode,doBeep);
+}
+
 function showStudyCloze(i){
   const [ch,syls,def,,pos]=D[i];
   const sents=EXAMPLE_SENTENCES[ch]||[];
@@ -157,9 +189,18 @@ function showStudyCloze(i){
   const fg=getComputedStyle(document.body).color;
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 
-  // Pick a sentence
-  const sent=sents[Math.floor(Math.random()*sents.length)];
+  // Pick a sentence — only use sentences where every multi-char D[] word is already introduced
+  const validSents=sents.filter(function(s){ return sentenceAllIntroduced(s[0]); });
+  if(!validSents.length){ nextStudyCard(); return; }
+  const sent=validSents[Math.floor(Math.random()*validSents.length)];
   const [zh,py,en]=sent;
+
+  // Fire TTS before DOM build so audio arrives with the visual
+  if(S.sound!=='mute'){
+    const stg=getAxisStage(i,'meaning');
+    if(stg<3){ speak(zh,activeCourse().langCode); }
+    else { speakWithBlank(zh,ch,activeCourse().langCode); }
+  }
 
   // Create cloze: replace target word with blank
   const blank='___';
@@ -168,21 +209,15 @@ function showStudyCloze(i){
   $('studyMode').textContent='CLOZE · FILL THE BLANK';
   cardShownAtMC=Date.now();
 
-  // Build distractors — words from same POS category that user has seen
-  const introduced=D.map(function(d,idx){
-    return (S.cards[idx]&&S.cards[idx].exp>0)?d:null;
-  }).filter(Boolean);
-  const sameCat=introduced.filter(function(d){
-    return d[0]!==ch&&d[4]&&POS_LOGICAL[d[4]]&&POS_LOGICAL[pos]&&POS_LOGICAL[d[4]].cat===POS_LOGICAL[pos].cat;
-  });
-  const distractors=shuffle(sameCat).slice(0,3).map(function(d){return d[0];});
-  // Pad with random introduced words if needed
-  while(distractors.length<3){
-    const rand=introduced[Math.floor(Math.random()*introduced.length)];
-    if(rand&&rand[0]!==ch&&distractors.indexOf(rand[0])<0) distractors.push(rand[0]);
-    else break;
-  }
-  const choices=shuffle([ch,...distractors.slice(0,3)]);
+  // Stage-based target: 2 choices at stage 2, 4 at stage 3+
+  const clozeStg=getAxisStage(i,'meaning');
+  const targetChoices=clozeStg>=3?4:2;
+  // Pick distractors ranked by utility (POS match, frequency proximity, shared radical)
+  let distractors=pickCharDistractors(i,targetChoices-1);
+  // Enforce even total: distractors count must be odd (1→total 2, 3→total 4)
+  if(distractors.length%2===0) distractors=distractors.slice(0,distractors.length-1);
+  if(!distractors.length){ nextStudyCard(); return; }
+  const choices=shuffle([ch,...distractors]);
 
   // Render into study panel — reuse MC panel
   show('study');
@@ -196,22 +231,80 @@ function showStudyCloze(i){
   $('studyMCRank').textContent=cardRankStr(i);
   $('studyMCModality').textContent='CLOZE \u00b7 FILL THE BLANK';
 
-  // Sentence with blank
+  // Sentence with blank — phi-units (char above, pinyin below) per character
   const promptEl=$('studyMCPromptText');
-  promptEl.innerHTML='<div style="'+CJKf+';font-size:28px;line-height:1.4;text-align:center;margin-bottom:8px;">'+
-    clozeZH.replace(blank,'<span style="border-bottom:3px solid '+fg+';min-width:2em;display:inline-block;text-align:center;padding:0 4px;">&nbsp;&nbsp;&nbsp;</span>')+'</div>'+
-    '<div style="font-size:10px;opacity:.6;text-align:center;font-style:italic;">'+en+'</div>';
+  promptEl.innerHTML='';
 
-  // Pinyin line (with blank)
-  const pyBlanked=py.replace(new RegExp(syls.map(function(s){return s[0];}).join(''),'i'),blank);
-  $('studyMCPinyin').style.cssText='font-size:11px;opacity:.7;text-align:center;margin-top:4px;'+CJKf;
-  $('studyMCPinyin').textContent=pyBlanked;
+  const sentRow=document.createElement('div');
+  sentRow.style.cssText='display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;gap:4px;margin-bottom:8px;';
+
+  const blankStart=zh.indexOf(ch);
+  const isCJKChar=function(c){return /[一-鿿㐀-䶿]/.test(c);};
+  let ci=0;
+  while(ci<zh.length){
+    const c=zh[ci];
+    if(blankStart>=0&&ci===blankStart){
+      const bUnit=document.createElement('div');
+      bUnit.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;';
+      const bChar=document.createElement('span');
+      bChar.innerHTML='&nbsp;';
+      bChar.style.cssText='font-size:28px;line-height:1;display:inline-block;min-width:'+(ch.length*1.1)+'em;border-bottom:3px solid '+fg+';text-align:center;';
+      bUnit.appendChild(bChar);
+      const bPy=document.createElement('span');
+      bPy.style.cssText='font-size:9px;height:12px;display:block;';
+      bUnit.appendChild(bPy);
+      sentRow.appendChild(bUnit);
+      ci+=ch.length;
+      continue;
+    }
+    if(isCJKChar(c)){
+      const syl=charSyl(c);
+      const unit=document.createElement('div');
+      unit.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;';
+      const cSpan=document.createElement('span');
+      cSpan.textContent=c;
+      cSpan.style.cssText='font-size:28px;line-height:1;'+CJKf;
+      unit.appendChild(cSpan);
+      if(syl){
+        const pSpan=document.createElement('span');
+        pSpan.textContent=syl[0];
+        pSpan.style.cssText='font-size:9px;font-family:\'Noto Sans\',Arial,sans-serif;';
+        pSpan.style.color=toneColor(syl[1],fg);
+        unit.appendChild(pSpan);
+      }
+      sentRow.appendChild(unit);
+    } else {
+      const plain=document.createElement('span');
+      plain.textContent=c;
+      plain.style.cssText='font-size:28px;line-height:1;align-self:flex-start;opacity:.5;';
+      sentRow.appendChild(plain);
+    }
+    ci++;
+  }
+  promptEl.appendChild(sentRow);
+  const glossDiv=document.createElement('div');
+  glossDiv.style.cssText='font-size:10px;opacity:.6;text-align:center;font-style:italic;';
+  glossDiv.textContent=en;
+  promptEl.appendChild(glossDiv);
+
+  $('studyMCPinyin').innerHTML='';
 
   // Choices — CJK characters
   const box=$('studyMCChoices');
   box.innerHTML='';
   box.style.gridTemplateColumns='1fr 1fr';
   let locked=false;
+
+  // Tap prompt area to repeat TTS before answering
+  $('studyMCPrompt').style.cursor='pointer';
+  $('studyMCPrompt').onclick=function(e){
+    if(locked||S.sound==='mute') return;
+    const stg=getAxisStage(i,'meaning');
+    if(stg<3){ speak(zh,activeCourse().langCode); }
+    else { speakWithBlank(zh,ch,activeCourse().langCode); }
+    e.stopPropagation();
+  };
+
   choices.forEach(function(opt){
     const b=document.createElement('button');
     b.className='choice';
@@ -265,30 +358,6 @@ function showStudyCloze(i){
     box.appendChild(b);
   });
 
-  // Stage-aware TTS: early stages (0-2) speak full sentence; later stages (3+) speak
-  // before-blank and after-blank with a silent gap so the learner must recall the word.
-  if(S.sound!=='mute') setTimeout(function(){
-    const stg=getAxisStage(i,'meaning');
-    if(stg<3){
-      speak(zh,activeCourse().langCode);
-    } else {
-      const idx=zh.indexOf(ch);
-      if(idx<0){ speak(zh,activeCourse().langCode); return; }
-      const before=zh.slice(0,idx);
-      const after=zh.slice(idx+ch.length);
-      if(!before&&!after){ speak(zh,activeCourse().langCode); return; }
-      if(!before){
-        setTimeout(function(){ if(after) speak(after,activeCourse().langCode); },750);
-      } else if(!after){
-        speak(before,activeCourse().langCode);
-      } else {
-        speak(before,activeCourse().langCode,function(){
-          setTimeout(function(){ speak(after,activeCourse().langCode); },700);
-        });
-      }
-    }
-  },0);
-
   renderChallengeRings(i,'cloze',$('studyMCPrompt'));
   studyDontKnowAction=function(){
     if(locked) return; locked=true;
@@ -317,7 +386,10 @@ function showWordOrderDrill(i){
   // Find a sentence containing this word
   const sents=EXAMPLE_SENTENCES[ch]||[];
   if(!sents.length){ nextStudyCard(); return; }
-  const sent=sents[Math.floor(Math.random()*sents.length)];
+  // Only use sentences where every multi-char D[] word is already introduced
+  const validSentsWO=sents.filter(function(s){ return sentenceAllIntroduced(s[0]); });
+  if(!validSentsWO.length){ nextStudyCard(); return; }
+  const sent=validSentsWO[Math.floor(Math.random()*validSentsWO.length)];
   const [zh,py,en]=sent;
 
   // Extract words — split on common boundaries
@@ -459,6 +531,14 @@ function showWordOrderDrill(i){
   });
 
   if(S.sound!=='mute') setTimeout(function(){ speak(en,'en-US'); },0);
+
+  // Tap prompt area to repeat English TTS before answering
+  $('studyMCPrompt').style.cursor='pointer';
+  $('studyMCPrompt').onclick=function(e){
+    if(locked||S.sound==='mute') return;
+    speak(en,'en-US');
+    e.stopPropagation();
+  };
 
   renderChallengeRings(i,'word-order',$('studyMCPrompt'));
   studyDontKnowAction=function(){

@@ -126,7 +126,7 @@ function renderCard(){
   } else {
     const CJKh="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
     $('hanzi').innerHTML=chars.map((hc,hi)=>
-      `<span style="cursor:pointer;text-decoration-line:underline;text-decoration-style:dotted;${CJKh}" data-chi="${hi}">${hc}</span>`
+      `<span style="cursor:pointer;${CJKh}" data-chi="${hi}">${hc}</span>`
     ).join('');
     $('hanzi').onclick=(e)=>{
       const span=e.target.closest('[data-chi]');
@@ -166,7 +166,7 @@ function renderCard(){
       const dispDef=axStg<=2&&posDefText?posDefText:
                     axStg>=3&&POS_LOGICAL[pos]?POS_LOGICAL[pos].def:'';
       posEl.innerHTML=
-        '<span style="cursor:pointer;text-decoration:underline dotted;" class="posLabelSpan">'+dispLabel.toUpperCase()+'</span>'+
+        '<span style="cursor:pointer;" class="posLabelSpan">'+dispLabel.toUpperCase()+'</span>'+
         (dispDef?'<br><span style="font-size:10px;opacity:.8;letter-spacing:.5px;">'+dispDef+'</span>':'');
       posEl.style.cursor='default';
       posEl.style.textDecoration='none';

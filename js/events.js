@@ -73,7 +73,7 @@ function classifyDistractorError(targetIdx, chosenDef){
 }
 
 /* ============ EVENTS ============ */
-$('start').onclick=()=>{ startStudy(true); };
+$('start').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startStudy(true); };
 $('quit').onclick=endSession;
 
 $('finish').onclick=()=>{ showSummary('session'); };
@@ -111,8 +111,8 @@ $('charDetail-back').onclick=()=>{
     show('session'); renderCard();
   }
 };
-$('startTone').onclick=()=>{ startTone(); };
-$('startStudy').onclick=()=>{ startStudy(); };
+$('startTone').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startTone(); };
+$('startStudy').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startStudy(); };
 $('study-quit').onclick=()=>{ studyActive=false; goHome(); };
 $('startWS').onclick=()=>{ startWordSearch(); };
 if($('startGrammar')) $('startGrammar').onclick=()=>{ startGrammarOnlySession(); };

@@ -36,6 +36,7 @@ const D=[
 ["他",[["tā",1]],"he, him",[["亻",2],["也",3]],"pronoun"],
 ["她",[["tā",1]],"she, her",[["女",3],["也",3]],"pronoun"],
 ["们",[["men",0]],"plural marker",[["亻",2],["门",3]],"suffix"],
+["吗",[["ma",0]],"question particle",[["口",3],["马",10]],"particle"],
 ["在",[["zài",4]],"at, in, exist",[["土",3],["才",3]],"verb/prep"],
 ["有",[["yǒu",3]],"to have",[["又", 2], ["月", 4]],"verb"],
 ["这",[["zhè",4]],"this",[["辶",3],["文",4]],"pronoun"],
@@ -249,6 +250,29 @@ function isUnlocked(i){
   if(S.activeDeck && S.activeDeck!=='core' && S.decks[S.activeDeck]
      && S.decks[S.activeDeck].indices.includes(i)) return true;
   return (S.cards[i]&&S.cards[i].exp>0)||false;
+}
+
+// Returns true only if every D[] entry (single or multi-char) that appears
+// in the sentence has already been introduced as a flashcard.
+function sentenceAllIntroduced(zh){
+  for(let j=0;j<D.length;j++){
+    if(S.cards[j]&&S.cards[j].exp) continue;
+    if(zh.includes(D[j][0])) return false;
+  }
+  return true;
+}
+
+// Returns [syllable, tone] for a single CJK character by scanning D[].
+// First tries an exact single-char entry; falls back to character's position
+// inside any multi-char entry (e.g. "吃" inside "吃饭"). Returns null if unknown.
+function charSyl(char){
+  const exact=D.findIndex(function(d){return d[0]===char;});
+  if(exact>=0&&D[exact][1].length) return D[exact][1][0];
+  for(let j=0;j<D.length;j++){
+    const pos=D[j][0].indexOf(char);
+    if(pos>=0&&D[j][1].length>pos) return D[j][1][pos];
+  }
+  return null;
 }
 
 // Next word to introduce: next on frequency spine not yet introduced
@@ -523,11 +547,37 @@ let _voices=[];
   speechSynthesis.addEventListener('voiceschanged',load);
 })();
 
+// Singleton AudioContext — avoids per-call creation latency and browser instance limits.
+let _audioCtx=null;
+function getAudioCtx(){
+  try{
+    if(!_audioCtx||_audioCtx.state==='closed')
+      _audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    if(_audioCtx.state==='suspended') _audioCtx.resume();
+    return _audioCtx;
+  }catch(e){ return null; }
+}
+
+// Called on study-button click (user gesture). Warms AudioContext and TTS voice.
+// Uses a real character at near-zero volume so the engine actually loads the voice —
+// a zero-width space may be optimised away without triggering voice initialisation.
+function primeSpeechEngine(lang){
+  if(!lang) return;
+  try{ getAudioCtx(); }catch(e){}
+  try{
+    const pool=_voices.length?_voices:speechSynthesis.getVoices();
+    const v=pool.find(x=>x.lang.startsWith(lang.split('-')[0]));
+    if(!v) return;
+    const u=new SpeechSynthesisUtterance('​');
+    u.lang=lang; u.volume=0; u.rate=1; u.voice=v;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+
 function speak(text,lang,onDone){
   if(!lang) lang=activeCourse?activeCourse().langCode:'zh-CN';
   if(S.sound==='mute'){ if(onDone) onDone(); return; }
   try{
-    // Only cancel if something is already playing — avoids a pipeline stall when idle
     if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(text);
     u.lang=lang; u.rate=.85;
@@ -541,5 +591,27 @@ function speak(text,lang,onDone){
       setTimeout(finish,4000);
     }
     speechSynthesis.speak(u);
+  }catch(e){ if(onDone) onDone(); }
+}
+
+// Pleasant two-tone bleep — perfect fifth A4+E5, sine waves, soft exponential decay.
+// onDone fires at 300 ms (beep faded to near-silence) for tight before/after sequencing.
+function beepBlank(onDone){
+  if(S.sound==='mute'){ if(onDone) onDone(); return; }
+  try{
+    const ctx=getAudioCtx();
+    if(!ctx){ if(onDone) setTimeout(onDone,300); return; }
+    const t=ctx.currentTime;
+    const g=ctx.createGain();
+    g.connect(ctx.destination);
+    g.gain.setValueAtTime(0,t);
+    g.gain.linearRampToValueAtTime(0.18,t+0.012);
+    g.gain.exponentialRampToValueAtTime(0.001,t+0.38);
+    [440,659].forEach(function(f){
+      const o=ctx.createOscillator();
+      o.type='sine'; o.frequency.value=f;
+      o.connect(g); o.start(t); o.stop(t+0.38);
+    });
+    if(onDone) setTimeout(onDone,300);
   }catch(e){ if(onDone) onDone(); }
 }

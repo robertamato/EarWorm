@@ -507,6 +507,15 @@ function showStudyPOSStaged(i, axisStage){
   renderWagerControl('studyPOSWager',i);
 
   let posLocked=false;
+
+  // Tap prompt area to repeat TTS before answering (stage 2+: character is the prompt)
+  $('studyPOSPrompt').style.cursor=axisStage>=2?'pointer':'default';
+  $('studyPOSPrompt').onclick=function(e){
+    if(posLocked||S.sound==='mute'||axisStage<2) return;
+    speak(ch,activeCourse().langCode);
+    e.stopPropagation();
+  };
+
   const box=$('studyPOSChoices'); box.innerHTML='';
   // Adapt grid to actual number of distinct choices
   box.style.gridTemplateColumns=nChoices<=4?'1fr 1fr':'1fr 1fr 1fr';
@@ -716,7 +725,7 @@ function renderSentence(sentenceChars, translation, containerEl, fg){
     span.textContent=introduced?ch:CHAR_MASK;
     span.style.color=fg;
     if(introduced&&idx>=0){
-      span.style.cssText+='cursor:pointer;text-decoration:underline dotted;';
+      span.style.cssText+='cursor:pointer;';
       span.onclick=(e)=>{ e.stopPropagation(); openCharDetail(ch,0,idx); };
     }
     sentEl.appendChild(span);

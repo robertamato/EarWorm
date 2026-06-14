@@ -614,6 +614,7 @@ function showStudyFlash(i){
   activeCardIdx=i;
   try{
   const [ch,syls,def,,pos]=D[i];
+  if(S.sound!=='mute') speak(ch,activeCourse().langCode);
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
   const fg=getComputedStyle(document.body).color;
   let flipped=false;
@@ -672,7 +673,7 @@ function showStudyFlash(i){
         const posEntry=POS_LOGICAL[pos]||{};
         const dispDef2=axStg2<=2&&posDef2?posDef2:axStg2>=3&&posEntry.def?posEntry.def:'';
         const mandNote=axStg2>=3&&posEntry.mandarin_note?posEntry.mandarin_note:'';
-        spEl.innerHTML='<span style="cursor:pointer;text-decoration:underline dotted;" class="posLabelSpan">'+dispLbl2+'</span>'+
+        spEl.innerHTML='<span style="cursor:pointer;" class="posLabelSpan">'+dispLbl2+'</span>'+
           (dispDef2?'<br><span style="font-size:10px;opacity:.8;letter-spacing:.5px;">'+dispDef2+'</span>':'')+
           (mandNote?'<br><span style="font-size:9px;opacity:.6;font-style:normal;">'+mandNote+'</span>':'');
         spEl.style.cursor='default';
@@ -704,8 +705,6 @@ function showStudyFlash(i){
   $('studyTone').style.display='none';
   if($('studyPOS')) $('studyPOS').style.display='none';
   if($('studyColl')) $('studyColl').style.display='none';
-
-  if(S.sound==='auto') speak(ch,activeCourse().langCode);
   }catch(e){ document.title='FLASH:'+e.message.slice(0,50); console.error('showStudyFlash',e); }
 }
 
@@ -716,6 +715,11 @@ function showStudyMC(i, reverse, showPosHint){
 
   // Render into studyMC panel
   const [ch,syls,def,,pos]=D[i];
+  // Fire TTS immediately — before DOM manipulation — so audio arrives with the visual
+  if(S.sound!=='mute'){
+    if(!reverse) speak(ch,activeCourse().langCode);
+    else speak(def,'en-US');
+  }
   const fg=getComputedStyle(document.body).color;
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
   const ink=fg;
@@ -735,11 +739,9 @@ function showStudyMC(i, reverse, showPosHint){
   } else {
     // Reverse mode: English prompt → progressively localized as meaning axis stage rises
     // Stage 0-1: English def + TTS speaks Mandarin answer (full scaffold)
-    // Stage 2:   English def + silence (semantic challenge only)
-    // Stage 3:   Grammatical/semantic terms substituted with Mandarin equivalents + TTS speaks them
-    // Stage 4+:  POS label shown in Mandarin only
+    // Stage 2+:  English definition always shown; Chinese POS label added below
     const meaningStg=getAxisStage(i,'meaning');
-    const displayDef=meaningStg>=3?substituteDefTerms(def):def.toUpperCase();
+    const displayDef=def.toUpperCase();
     const posLabel=pos||'';
     let posDisplay='';
     if(posLabel){
@@ -752,16 +754,6 @@ function showStudyMC(i, reverse, showPosHint){
       '<span style="font-size:18px">'+displayDef+'</span>'+
       (posDisplay?'<br><span style="font-size:9px;opacity:.65;letter-spacing:1px;">'+posDisplay+'</span>':'');
     $('studyMCPinyin').innerHTML='';
-    // Stage-gated TTS
-    if(S.sound!=='mute'){
-      if(meaningStg<=1){
-        speak(ch,activeCourse().langCode);
-      } else if(meaningStg>=3){
-        const zhContent=(displayDef.match(/[一-鿿]+/g)||[]).join('');
-        if(zhContent) speak(zhContent,activeCourse().langCode);
-      }
-      // Stage 2: silence — no audio hint
-    }
   }
 
   // Choices — adaptive count based on mastery
@@ -841,6 +833,18 @@ function showStudyMC(i, reverse, showPosHint){
   };
   renderWagerControl('studyMCActions',i);
 
+  // Tap prompt area to repeat TTS before answering
+  $('studyMCPrompt').style.cursor='pointer';
+  $('studyMCPrompt').onclick=function(e){
+    if(mcLocked||S.sound==='mute') return;
+    if(!reverse){
+      speak(ch,activeCourse().langCode);
+    } else {
+      speak(def,'en-US');
+    }
+    e.stopPropagation();
+  };
+
   show('study');
   $('studySession').style.display='none';
   $('studyMC').style.display='flex';
@@ -848,8 +852,6 @@ function showStudyMC(i, reverse, showPosHint){
   if($('studyPOS')) $('studyPOS').style.display='none';
   if($('studyColl')) $('studyColl').style.display='none';
 
-  // Only speak on show when character is the prompt (forward mode)
-  if(!reverse && S.sound!=='mute') speak(D[i][0],activeCourse().langCode);
 }
 
 function pickStudyMC(btn,chosen,correct,i){
@@ -939,7 +941,6 @@ function pickStudyMC(btn,chosen,correct,i){
   const ptEl=$('studyMCPromptText');
   if(ptEl&&!mcReverse){
     ptEl.style.cursor='pointer';
-    ptEl.style.textDecoration='underline dotted';
     ptEl.onclick=(e)=>{ e.stopPropagation(); openCharDetail(D[i][0],0,i); };
   }
 }
@@ -967,8 +968,9 @@ function showStudyTone(i){
   $('studyMode').textContent=stageLabels[stage];
   // Tap tone prompt to replay audio (before answer)
   $('studyTonePrompt').onclick=(e)=>{
-    e.stopPropagation();
+    if(toneLocked) return;
     if(S.sound!=='mute') speak(D[i][0],activeCourse().langCode);
+    e.stopPropagation();
   };
   // Rings and wager
   renderChallengeRings(i,'tone',$('studyTonePrompt'));
@@ -1854,7 +1856,7 @@ function renderCollBreakdown(components, fg){
           openRadDetail(chars);
         }
       };
-      left.style.textDecoration='underline dotted';
+      left.style.cursor='pointer';
     } else {
       // Show "not yet introduced" hint
       left.title='Study this word to unlock';
