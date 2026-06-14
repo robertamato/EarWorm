@@ -677,35 +677,79 @@ function substituteDefTerms(def){
 // Pre-cache voices at startup so speak() never stalls waiting for getVoices()
 let _voices=[];
 (function warmVoices(){
-  const load=()=>{ const v=speechSynthesis.getVoices(); if(v.length){ _voices=v; renderTTSStatus(); } };
+  if(typeof speechSynthesis==='undefined') return;
+  const load=()=>{ const v=speechSynthesis.getVoices(); if(v&&v.length){ _voices=v; renderTTSStatus(); } };
   load();
   speechSynthesis.addEventListener('voiceschanged',load);
 })();
 
+// Strongly prefers localService===true voices. Falls back to any non-"Online" name heuristic.
+// Returns null (lang-only) when only cloud voices exist — lets browser use installed pack default
+// instead of forcing a cloud voice that causes synthesis-failed on file:// or GitHub Pages.
+function getBestVoice(lang){
+  if(typeof speechSynthesis==='undefined') return null;
+  const pool=_voices.length?_voices:speechSynthesis.getVoices();
+  const prefix=(lang||'zh-CN').split('-')[0];
+  const candidates=pool.filter(v=>v&&v.lang&&v.lang.startsWith(prefix));
+  if(!candidates.length) return null;
+  const locals=candidates.filter(v=>v.localService===true);
+  if(locals.length) return locals.find(v=>v.default)||locals[0];
+  const nonOnline=candidates.find(v=>v.name&&!v.name.includes('Online'));
+  if(nonOnline) return nonOnline;
+  return null; // all voices are cloud-flagged; speak() will do lang-only
+}
+
 function renderTTSStatus(){
   const el=document.getElementById('ttsStatus');
   if(!el) return;
+  if(typeof speechSynthesis==='undefined'){
+    el.textContent='TTS: UNSUPPORTED';
+    el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;opacity:.4;';
+    return;
+  }
   const lang=(typeof activeCourse==='function'&&activeCourse())?activeCourse().langCode:'zh-CN';
-  const prefix=lang.split('-')[0];
   const pool=_voices.length?_voices:speechSynthesis.getVoices();
-  const matching=pool.filter(v=>v.lang.startsWith(prefix));
+  const matching=pool.filter(v=>v&&v.lang&&v.lang.startsWith((lang||'zh-CN').split('-')[0]));
   if(!matching.length){
     el.textContent='⚠ TTS: NO VOICE INSTALLED';
     el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;color:hsl(0,70%,55%);cursor:pointer;opacity:1;';
-    el.onclick=()=>alert('No Mandarin TTS voice found.\n\nFix: Windows Settings → Time & Language → Speech → Add voices → Chinese (Simplified, China)\n\nCheck "Text-to-speech" during installation.');
+    el.onclick=()=>showTTSVoiceDetails(lang);
     return;
   }
-  const offline=matching.find(v=>!v.name.includes('Online'));
-  if(offline){
-    const short=offline.name.replace(/Microsoft\s*/i,'').split(/\s/)[0].toUpperCase();
-    el.textContent='TTS · LOCAL · '+short;
+  const best=getBestVoice(lang);
+  const hasLocal=matching.some(v=>v.localService===true);
+  const displayVoice=best||matching[0];
+  const shortName=displayVoice&&displayVoice.name?displayVoice.name.replace(/Microsoft\s*/i,'').split(/\s/)[0].toUpperCase():'VOICE';
+  if(hasLocal){
+    el.textContent='TTS · LOCAL · '+shortName;
     el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;opacity:.4;cursor:default;';
     el.onclick=null;
   } else {
-    el.textContent='⚠ TTS: ONLINE ONLY';
+    el.textContent='⚠ TTS: ONLINE ONLY ('+shortName+')';
     el.style.cssText='font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;color:hsl(40,90%,55%);cursor:pointer;opacity:1;';
-    el.onclick=()=>alert('Only cloud-based voices found — TTS will fail when opening the app as a local file.\n\nFix: Windows Settings → Time & Language → Speech → Add voices → Chinese (Simplified, China)\n\nInstall an offline voice pack for reliable local use.');
+    el.onclick=()=>showTTSVoiceDetails(lang);
   }
+}
+
+// Diagnostic alert — lists voices for the current language and fires a single test speak.
+// Only reachable from the ONLINE ONLY / NO VOICE branches (LOCAL badge stays inert).
+function showTTSVoiceDetails(lang){
+  const freshLang=lang||(typeof activeCourse==='function'&&activeCourse()?activeCourse().langCode:'zh-CN');
+  const pool=_voices.length?_voices:speechSynthesis.getVoices();
+  const freshMatching=pool.filter(v=>v&&v.lang&&v.lang.startsWith(freshLang.split('-')[0]));
+  try{ speak(freshLang.startsWith('ja')?'こんにちは':'你好', freshLang); }catch(e){}
+  let msg='Available voices for '+freshLang+':\n\n';
+  if(!freshMatching.length){
+    msg+='(none installed)\n\n';
+  } else {
+    freshMatching.forEach((v,idx)=>{
+      msg+=(idx+1)+'. "'+v.name+'"\n   lang:'+v.lang+'  local:'+v.localService+'  default:'+v.default+'\n\n';
+    });
+  }
+  const hasLocal=freshMatching.some(v=>v.localService===true);
+  msg+=(hasLocal?'Local voice detected — TTS uses it directly.\n':'No local voice — speak() uses lang-only (browser picks your installed pack default).\n');
+  msg+='If TTS is silent: Windows Settings → Time & Language → Speech → Add voices.';
+  alert(msg);
 }
 
 // Singleton AudioContext — avoids per-call creation latency and browser instance limits.
@@ -724,14 +768,16 @@ function getAudioCtx(){
 // a zero-width space may be optimised away without triggering voice initialisation.
 function primeSpeechEngine(lang){
   if(!lang) return;
+  if(typeof speechSynthesis==='undefined') return;
   try{ getAudioCtx(); }catch(e){}
   try{
-    const pool=_voices.length?_voices:speechSynthesis.getVoices();
-    const v=pool.find(x=>x.lang.startsWith(lang.split('-')[0]));
-    if(!v) return;
-    const u=new SpeechSynthesisUtterance('​');
-    u.lang=lang; u.volume=0; u.rate=1; u.voice=v;
+    const v=getBestVoice(lang);
+    const sample=lang.startsWith('ja')?'の':'的';
+    const u=new SpeechSynthesisUtterance(sample);
+    u.lang=lang; u.volume=0; u.rate=1;
+    if(v) u.voice=v; // null = lang-only; still queues so engine loads the voice pack
     speechSynthesis.speak(u);
+    if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
   }catch(e){}
 }
 
@@ -745,17 +791,18 @@ function speak(text,lang,onDone){
   if(S.sound==='mute'){ if(onDone) onDone(); return; }
   try{
     const gen=++_ttsGen;
-    // Only cancel when something is actually queued — unconditional cancel
-    // corrupts the Windows SAPI engine state even when the queue is empty.
+    // Refresh voice list under gesture if not yet loaded (voiceschanged can be racy on first gesture)
+    if(!_voices.length){ try{ const v=speechSynthesis.getVoices(); if(v&&v.length) _voices=v; }catch(e){} }
+    // Resume before cancel — cancel on a paused engine can deepen the pause on some SAPI versions
+    if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
+    // Only cancel when something is actually queued — unconditional cancel corrupts SAPI state
     if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel();
-    // If the engine was left paused by a previous cancel(), un-pause it before
-    // queueing the new utterance, otherwise the utterance plays in silence.
+    // Re-resume after cancel — many reports of "plays in silence" without this on Windows
     if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
     const u=new SpeechSynthesisUtterance(text);
     u.lang=lang; u.rate=.85;
-    const pool=_voices.length?_voices:speechSynthesis.getVoices();
-    const v=pool.find(w=>w.lang.startsWith(lang.split('-')[0]));
-    if(v) u.voice=v;
+    const v=getBestVoice(lang);
+    if(v) u.voice=v; // null = lang-only; lets browser pick installed pack default
     let fired=false;
     const finish=(cancelled)=>{
       if(fired||gen!==_ttsGen) return;
@@ -763,7 +810,26 @@ function speak(text,lang,onDone){
       if(!cancelled&&onDone) onDone();
     };
     u.onend=()=>finish(false);
-    u.onerror=()=>finish(true); // cancel/interrupt: do NOT advance chain
+    u.onerror=(ev)=>{
+      finish(true); // suppress original onDone; recovery below re-triggers it on success
+      if(window.console&&console.error) console.error('TTS error:',ev&&ev.error,'text:',text,'lang:',lang);
+      if(ev&&ev.error==='synthesis-failed'){
+        const recoveryGen=gen; // snapshot — checked before touching the engine or queue
+        setTimeout(()=>{
+          if(recoveryGen!==_ttsGen) return; // user navigated to a new card; abort
+          try{
+            if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel();
+            if(speechSynthesis.paused) speechSynthesis.resume();
+            const recoveryU=new SpeechSynthesisUtterance(text);
+            recoveryU.lang=lang; recoveryU.rate=1.0;
+            // On recovery success, invoke onDone so auto-advance still fires
+            recoveryU.onend=()=>{ if(recoveryGen===_ttsGen&&onDone) onDone(); };
+            speechSynthesis.speak(recoveryU);
+            if(window.console&&console.log) console.log('TTS recovery attempt after synthesis-failed');
+          }catch(e){}
+        },180);
+      }
+    };
     if(onDone) setTimeout(()=>finish(false),5000); // safety net if onend never fires on Windows
     speechSynthesis.speak(u);
   }catch(e){ if(onDone) onDone(); }
@@ -2485,7 +2551,6 @@ function showStudyFlash(i){
   activeCardIdx=i;
   try{
   const [ch,syls,def,,pos]=D[i];
-  if(S.sound!=='mute') speak(ch,activeCourse().langCode);
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
   const fg=getComputedStyle(document.body).color;
   let flipped=false;
@@ -2522,6 +2587,9 @@ function showStudyFlash(i){
   // Pinyin
   const py=$('studyPinyin'); py.innerHTML='';
   syls.forEach(([s,t])=>{ const sp=document.createElement('span'); sp.textContent=s; sp.style.color=toneColor(t,fg); py.appendChild(sp); });
+
+  // Fire TTS after hanzi+pinyin are in the DOM. 30ms lets SAPI settle after prime/cancel.
+  if(S.sound!=='mute') setTimeout(()=>speak(ch,activeCourse().langCode),30);
 
   $('studyBackZone').style.display='none';
   $('studyFlipHint').style.display='block';
@@ -2586,9 +2654,10 @@ function showStudyMC(i, reverse, showPosHint){
 
   // Render into studyMC panel
   const [ch,syls,def,,pos]=D[i];
-  // Fire TTS immediately — before DOM manipulation — so audio arrives with the visual
+  // Target-lang TTS deferred 30ms to let SAPI settle after prime/cancel.
+  // English is immediate (en-US voice doesn't need settle time).
   if(S.sound!=='mute'){
-    if(!reverse) speak(ch,activeCourse().langCode);
+    if(!reverse) setTimeout(()=>speak(ch,activeCourse().langCode),30);
     else speak(def,'en-US');
   }
   const fg=getComputedStyle(document.body).color;
@@ -5839,11 +5908,11 @@ function showStudyCloze(i){
   const sent=validSents[Math.floor(Math.random()*validSents.length)];
   const [zh,py,en]=sent;
 
-  // Fire TTS before DOM build so audio arrives with the visual
+  // 30ms delay lets SAPI settle after prime/cancel before first target-lang utterance.
   if(S.sound!=='mute'){
     const stg=getAxisStage(i,'meaning');
-    if(stg<3){ speak(zh,activeCourse().langCode); }
-    else { speakWithBlank(zh,ch,activeCourse().langCode); }
+    if(stg<3){ setTimeout(()=>speak(zh,activeCourse().langCode),30); }
+    else { setTimeout(()=>speakWithBlank(zh,ch,activeCourse().langCode),30); }
   }
 
   // Create cloze: replace target word with blank
@@ -6528,8 +6597,21 @@ $('charDetail-back').onclick=()=>{
     show('session'); renderCard();
   }
 };
-$('startTone').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startTone(); };
-$('startStudy').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startStudy(); };
+// 180ms after prime gives the warm-up utterance time to load the voice pack before
+// the first real card fires. Debounce flags prevent double-tap from starting two sessions.
+let _startStudyPending=false;
+$('startTone').onclick=()=>{
+  if(_startStudyPending) return;
+  _startStudyPending=true;
+  primeSpeechEngine(activeCourse().langCode);
+  setTimeout(()=>{ _startStudyPending=false; startTone(); },180);
+};
+$('startStudy').onclick=()=>{
+  if(_startStudyPending) return;
+  _startStudyPending=true;
+  primeSpeechEngine(activeCourse().langCode);
+  setTimeout(()=>{ _startStudyPending=false; startStudy(); },180);
+};
 $('study-quit').onclick=()=>{ studyActive=false; goHome(); };
 $('startWS').onclick=()=>{ startWordSearch(); };
 if($('startGrammar')) $('startGrammar').onclick=()=>{ startGrammarOnlySession(); };
@@ -6599,7 +6681,7 @@ if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   load();
   loadSessionRings(); // restore ring state if page was minimized mid-session
   initGrammarState(); // ensure grammar sub-axis structure exists
-  speechSynthesis.getVoices();
+  if(typeof speechSynthesis!=='undefined') speechSynthesis.getVoices();
   resetSessionFatigue(); rollBg(); renderHome(); show('home');
   renderTTSStatus();
 })();

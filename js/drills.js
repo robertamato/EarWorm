@@ -225,11 +225,11 @@ function showStudyCloze(i){
   const sent=validSents[Math.floor(Math.random()*validSents.length)];
   const [zh,py,en]=sent;
 
-  // Fire TTS before DOM build so audio arrives with the visual
+  // 30ms delay lets SAPI settle after prime/cancel before first target-lang utterance.
   if(S.sound!=='mute'){
     const stg=getAxisStage(i,'meaning');
-    if(stg<3){ speak(zh,activeCourse().langCode); }
-    else { speakWithBlank(zh,ch,activeCourse().langCode); }
+    if(stg<3){ setTimeout(()=>speak(zh,activeCourse().langCode),30); }
+    else { setTimeout(()=>speakWithBlank(zh,ch,activeCourse().langCode),30); }
   }
 
   // Create cloze: replace target word with blank

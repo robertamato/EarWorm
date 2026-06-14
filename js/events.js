@@ -119,8 +119,21 @@ $('charDetail-back').onclick=()=>{
     show('session'); renderCard();
   }
 };
-$('startTone').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startTone(); };
-$('startStudy').onclick=()=>{ primeSpeechEngine(activeCourse().langCode); startStudy(); };
+// 180ms after prime gives the warm-up utterance time to load the voice pack before
+// the first real card fires. Debounce flags prevent double-tap from starting two sessions.
+let _startStudyPending=false;
+$('startTone').onclick=()=>{
+  if(_startStudyPending) return;
+  _startStudyPending=true;
+  primeSpeechEngine(activeCourse().langCode);
+  setTimeout(()=>{ _startStudyPending=false; startTone(); },180);
+};
+$('startStudy').onclick=()=>{
+  if(_startStudyPending) return;
+  _startStudyPending=true;
+  primeSpeechEngine(activeCourse().langCode);
+  setTimeout(()=>{ _startStudyPending=false; startStudy(); },180);
+};
 $('study-quit').onclick=()=>{ studyActive=false; goHome(); };
 $('startWS').onclick=()=>{ startWordSearch(); };
 if($('startGrammar')) $('startGrammar').onclick=()=>{ startGrammarOnlySession(); };
@@ -190,7 +203,7 @@ if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   load();
   loadSessionRings(); // restore ring state if page was minimized mid-session
   initGrammarState(); // ensure grammar sub-axis structure exists
-  speechSynthesis.getVoices();
+  if(typeof speechSynthesis!=='undefined') speechSynthesis.getVoices();
   resetSessionFatigue(); rollBg(); renderHome(); show('home');
   renderTTSStatus();
 })();

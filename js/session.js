@@ -669,7 +669,6 @@ function showStudyFlash(i){
   activeCardIdx=i;
   try{
   const [ch,syls,def,,pos]=D[i];
-  if(S.sound!=='mute') speak(ch,activeCourse().langCode);
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
   const fg=getComputedStyle(document.body).color;
   let flipped=false;
@@ -706,6 +705,9 @@ function showStudyFlash(i){
   // Pinyin
   const py=$('studyPinyin'); py.innerHTML='';
   syls.forEach(([s,t])=>{ const sp=document.createElement('span'); sp.textContent=s; sp.style.color=toneColor(t,fg); py.appendChild(sp); });
+
+  // Fire TTS after hanzi+pinyin are in the DOM. 30ms lets SAPI settle after prime/cancel.
+  if(S.sound!=='mute') setTimeout(()=>speak(ch,activeCourse().langCode),30);
 
   $('studyBackZone').style.display='none';
   $('studyFlipHint').style.display='block';
@@ -770,9 +772,10 @@ function showStudyMC(i, reverse, showPosHint){
 
   // Render into studyMC panel
   const [ch,syls,def,,pos]=D[i];
-  // Fire TTS immediately — before DOM manipulation — so audio arrives with the visual
+  // Target-lang TTS deferred 30ms to let SAPI settle after prime/cancel.
+  // English is immediate (en-US voice doesn't need settle time).
   if(S.sound!=='mute'){
-    if(!reverse) speak(ch,activeCourse().langCode);
+    if(!reverse) setTimeout(()=>speak(ch,activeCourse().langCode),30);
     else speak(def,'en-US');
   }
   const fg=getComputedStyle(document.body).color;
