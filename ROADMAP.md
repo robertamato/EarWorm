@@ -97,6 +97,7 @@ Keep every logEvent wrapped so the observer itself never throws.
 - [x] Study loop / answer / thin+bridge/hygiene slices (1-3+): Scheduler.next delegation with buildSessionState; grammar through central funnel + dispatch; thinned policy branches in helpers; strengthened bridge sync; added LEGACY v1 markers and comment hygiene throughout study paths.
 - [ ] (Future) persist a bounded proctor snapshot to localStorage for "across sessions" views
 - [ ] (Future) optional "TTS required" strict mode that falls back or warns if a target speak didn't fire
+- [ ] **Grid struggle channel.** The grid color currently encodes mastery *position* (tier 0–3), so a dim cell can't distinguish "brand new" from "I keep lapsing this." Add a second visual channel — thin border / desaturation / flicker — driven by struggle signal (lapse rate + axis gap, both already computed for the PROFILE view). Then "see where you're weak, tap, hear it" closes literally on the grid. Transfers unchanged to the constellation (a star can carry both brightness=mastery and a struggle halo). Data is in hand; this is a render change, not a model change.
 
 ## Grammar Track Re-integration
 
@@ -109,6 +110,22 @@ Grammar drills are **disabled in the main study flow** (`dueDrills=[]` in `build
 2. Gate each grammar drill axis on `seen:true` for the relevant metalanguage card — same invariant enforced for sentence components.
 3. Re-enable grammar in `buildStudyQueue` once the gate is wired.
 4. Open design question: `POS_LOGICAL` maps English POS names to Chinese. The gate needs a join between the POS axis and the `D[]` metalanguage entry for that category.
+
+## Language-Agnostic Engine — Program Arc (North Star)
+
+The long game. Mandarin is the first instrument, not the product. The product is a **language-agnostic acquisition engine**: a universal scheduler/structure with thin per-language modules (atomic unit, acquisition axes, prerequisite graph). The sequence below is how we earn that generalization rather than assuming it.
+
+1. **Arabic as teacher / forcing function.** Build the Arabic course with the project owner acting as teacher and oracle. Arabic's triconsonantal root system *forces* the prerequisite graph to be explicit — you cannot atomize ك-ت-ب → كتب/كاتب/مكتوب without declaring derivation relationships. Designing Arabic surfaces the structure Mandarin lets us fake (where character ≈ atom hides the dependency edges). Deliverable: a typed `D[]` with root / derived-form / bound-morpheme entries and explicit prerequisite links, plus a morphological axis definition.
+
+2. **Extract the gnosis.** Distill what Arabic forced into existence into language-neutral primitives: what *is* an atomic unit, what are the acquisition axes (meaning / form / phonology / morphology / ...), what shape does the prerequisite graph take, how does `priority(i)` fold frequency against prerequisite necessity. This is where the agnostic scheduler contract gets written down.
+
+3. **Validate bidirectionally on English ↔ Spanish.** Use a closely-related contrast pair (shared script, dense cognates, Romance vs Germanic) to test that the engine is actually agnostic and *symmetric* — teaching English to Spanish speakers and Spanish to English speakers should both fall out of the same machine with only module swaps. Asymmetries that appear here are bugs in the "agnostic" claim, and they're the signal we mine.
+
+4. **Converge on the agnostic structure/algorithm.** With three families exercised (Sino-Tibetan, Semitic, the Romance/Germanic pair), the invariant core vs the per-language module boundary becomes empirical rather than assumed. The SRS, the axis system, and `priority(i)` settle into their language-independent form; everything else is a pluggable module.
+
+**Merge target:** every step folds into the **constellation** when pertinent/optimal — it is the unifying surface where any language's territory, frontier, and struggle render identically. The `priority(i)` seam (see Constellation section) is the single joint that lets a finished agnostic scheduler drive the map without touching layout. Keep that seam clean across all four steps.
+
+**Sequencing note:** this arc is upstream of effective-priority radius and the prerequisite-graph-aware constellation. Do Arabic *before* committing the constellation to any semantic/prerequisite layout — the graph it forces is what gives position meaning beyond raw frequency.
 
 ## Constellation Home Screen (North Star — design only)
 
