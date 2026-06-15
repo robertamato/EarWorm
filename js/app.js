@@ -4541,7 +4541,7 @@ function renderCollBreakdown(components, fg){
         });
         if(_homos.length){
           const _nd=document.createElement('div');
-          _nd.style.cssText='font-size:8px;opacity:.55;letter-spacing:1px;font-family:'Noto Sans',Arial,sans-serif;margin-top:1px;';
+          _nd.style.cssText="font-size:8px;opacity:.55;letter-spacing:1px;font-family:'Noto Sans',Arial,sans-serif;margin-top:1px;";
           _nd.textContent='≠ '+_homos.slice(0,2).join(', ');
           right.appendChild(_nd);
         }
