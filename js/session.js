@@ -60,6 +60,7 @@ const TONE_LABEL=['-','1ST','2ND','3RD','4TH','NEUT'];
 let toneQueue=[],toneIdx=0,toneCur=-1,toneCombo=0,toneLocked=false,toneAudioMode=false;
 
 function startTone(){
+  if(!(activeCourse&&activeCourse()&&activeCourse().hasTone)){ goHome(); return; }
   const now=Date.now();
   const due=[],fresh=[];
   D.forEach((_,i)=>{ const ci=S.cards[i]; if(ci&&ci.seen){ if(ci.due<=now) due.push(i); } else fresh.push(i); });
@@ -691,7 +692,7 @@ function resolveStudyModality(i){
     if(mstg>=3&&clozeUnlocked(i)) return Math.random()<0.5?'cloze':'mc-rev';
     return (card(i).exp||0)>0?'mc-fwd':'flash';
   }
-  if(studyModalityFilter==='tone') return (card(i).exp||0)>0?'tone':'flash';
+  if(studyModalityFilter==='tone') return (activeCourse().hasTone&&(card(i).exp||0)>0)?'tone':'flash';
   if(studyModalityFilter==='pos'){
     const ps=Math.max(1,getAxisStage(i,'pos'));
     return 'pos-s'+Math.min(ps,3);
@@ -1705,7 +1706,7 @@ const FATIGUE_MESSAGES=[
   "still here? bold choice.",
   "the neurons are tired. they're not mad, just disappointed.",
   "you've been staring at flashcards for a while now...",
-  "fun fact: more studying right now does approximately nothing.",
+  "fun fact: more exploring right now does approximately nothing.",
   "the optimal move is to touch grass.",
   "your brain has left the building.",
   "at this point you're just collecting XP dust.",
@@ -2122,7 +2123,7 @@ function renderCollBreakdown(components, fg){
       left.style.cursor='pointer';
     } else {
       // Show "not yet introduced" hint
-      left.title='Study this word to unlock';
+      left.title='Explore earlier words to unlock this one';
     }
 
     box.appendChild(row);

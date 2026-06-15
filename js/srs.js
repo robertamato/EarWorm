@@ -32,6 +32,8 @@
   $('milestoneProgTrack').style.borderColor=fg;
   $('milestoneProgWrap').style.borderColor=fg; $('milestoneProgWrap').style.color=fg;
   $('muteBtn').textContent='SOUND: '+S.sound.toUpperCase();
+  const toneDBtn=$('startTone');
+  if(toneDBtn) toneDBtn.style.display=(course&&course.hasTone)?'':'none';
 }
 
 function show(view){

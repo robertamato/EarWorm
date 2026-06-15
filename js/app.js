@@ -1508,6 +1508,8 @@ function renderHome(){
   $('milestoneProgTrack').style.borderColor=fg;
   $('milestoneProgWrap').style.borderColor=fg; $('milestoneProgWrap').style.color=fg;
   $('muteBtn').textContent='SOUND: '+S.sound.toUpperCase();
+  const toneDBtn=$('startTone');
+  if(toneDBtn) toneDBtn.style.display=(course&&course.hasTone)?'':'none';
 }
 
 function show(view){
@@ -2480,6 +2482,7 @@ const TONE_LABEL=['-','1ST','2ND','3RD','4TH','NEUT'];
 let toneQueue=[],toneIdx=0,toneCur=-1,toneCombo=0,toneLocked=false,toneAudioMode=false;
 
 function startTone(){
+  if(!(activeCourse&&activeCourse()&&activeCourse().hasTone)){ goHome(); return; }
   const now=Date.now();
   const due=[],fresh=[];
   D.forEach((_,i)=>{ const ci=S.cards[i]; if(ci&&ci.seen){ if(ci.due<=now) due.push(i); } else fresh.push(i); });
@@ -3111,7 +3114,7 @@ function resolveStudyModality(i){
     if(mstg>=3&&clozeUnlocked(i)) return Math.random()<0.5?'cloze':'mc-rev';
     return (card(i).exp||0)>0?'mc-fwd':'flash';
   }
-  if(studyModalityFilter==='tone') return (card(i).exp||0)>0?'tone':'flash';
+  if(studyModalityFilter==='tone') return (activeCourse().hasTone&&(card(i).exp||0)>0)?'tone':'flash';
   if(studyModalityFilter==='pos'){
     const ps=Math.max(1,getAxisStage(i,'pos'));
     return 'pos-s'+Math.min(ps,3);
