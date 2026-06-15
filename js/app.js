@@ -192,7 +192,7 @@ let D_JA=[
 // KEY is the ACTIVE course's localStorage key — reassigned by switchCourse().
 let KEY='earworm-mandarin-v1';
 function defaultState(){
-  return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',ordered:false,decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},
+  return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},
     // Independent grammar track — multi-dimensional, per-category
     // Each category has 5 independent sub-axes with their own SRS schedules
     grammar:{},
@@ -209,7 +209,6 @@ function load(){
     if(raw){
       const saved=JSON.parse(raw);
       S=Object.assign({},S,saved);
-      S.ordered=false;
       // Ensure all fields have correct types
       if(!Array.isArray(S.uniqueSeen)) S.uniqueSeen=[];
       if(!Array.isArray(S.seenColls)) S.seenColls=[];
@@ -250,6 +249,7 @@ function applyAnswer(i, isCorrect, modality, latencyMs){
     st.totalAnswers++; if(isCorrect) st.totalCorrect++;
     const m=st.byModality[modality]||{answers:0,correct:0};
     m.answers++; if(isCorrect) m.correct++;
+    if(typeof latencyMs==='number' && latencyMs>0 && latencyMs<120000){ m.sumLatency=(m.sumLatency||0)+latencyMs; m.latencyN=(m.latencyN||0)+1; }
     st.byModality[modality]=m;
     const pol = newSchedulerPolicy();
     if(window.EW&&EW.obs) EW.obs.logEvent('answer',{
@@ -1264,7 +1264,6 @@ function buildQueue(){
     if(c&&c.seen){ if(c.due<=now) due.push(i); }
     else fresh.push(i);
   });
-  if(S.ordered) return due.concat(fresh); // frequency order, no shuffle
   return shuffle(due).concat(shuffle(fresh));
 }
 
@@ -1410,6 +1409,13 @@ function renderHome(){
     c.style.borderColor=locked?'transparent':fg;
     c.style.backgroundColor=locked?'rgba(0,0,0,0.15)':stCol[state(i)];
     c.style.opacity=locked?'0.3':'1';
+    // Tap a cell to hear it — but only words already introduced as flashcards.
+    // Glyphless by design; seen territory is audible, the fog is silent.
+    const _idx=i;
+    if(S.cards[i]&&S.cards[i].seen){
+      c.style.cursor='pointer';
+      c.onclick=()=>{ if(S.sound!=='mute') speak(D[_idx][0],activeCourse().langCode); };
+    }
     g.appendChild(c);
   }
   ['sw0','sw1','sw2','sw3'].forEach((id,k)=>{$(id).style.backgroundColor=stCol[k];});
@@ -1444,7 +1450,7 @@ function renderHome(){
   $('due').textContent=`DUE ${dueN}  NEW ${newN}`;
   $('frontierDisplay').textContent=frVal;
   const course=activeCourse&&activeCourse();
-  $('frontierSub').textContent=(course?course.langName.toUpperCase():'MANDARIN CHINESE')+' · '+frVal+' / '+D.length+' WORDS';
+  $('frontierSub').textContent=activeDeckName().toUpperCase()+' · '+frVal+' / '+D.length+' WORDS ▸';
   const ll=$('langLabel');
   if(ll&&course){ ll.textContent=course.langName.toUpperCase()+'  ⇄'; ll.style.cursor='pointer'; }
 
@@ -1472,8 +1478,6 @@ function renderHome(){
   $('milestoneProgTrack').style.borderColor=fg;
   $('milestoneProgWrap').style.borderColor=fg; $('milestoneProgWrap').style.color=fg;
   $('muteBtn').textContent='SOUND: '+S.sound.toUpperCase();
-  $('orderBtn').textContent='ORDER: '+(S.ordered?'FREQUENCY':'SHUFFLE');
-  updateDeckSelector();
 }
 
 function show(view){
@@ -1491,49 +1495,160 @@ function show(view){
   if($('stats')) $('stats').style.display=view==='stats'?'flex':'none';
 }
 
-// "Your learning" view — durable per-course stats from S.stats + live mastery
-// bands from S.cards. Read-only; pure render into #statsBody.
 function renderStats(){
   const body=document.getElementById('statsBody');
   if(!body) return;
   const st=(S.stats&&typeof S.stats==='object')?S.stats:{days:{},totalAnswers:0,totalCorrect:0,byModality:{}};
   const totA=st.totalAnswers||0, totC=st.totalCorrect||0;
   const acc=totA?Math.round(totC/totA*100):0;
-  let familiar=0,mastered=0;
-  for(let i=0;i<D.length;i++){ const s=state(i); if(s===2)familiar++; else if(s===3)mastered++; }
-  const known=familiar+mastered;
-  const fr=frontier();
+
+  // Daily aggregates
   const dayKeys=Object.keys(st.days||{}).sort(function(a,b){return new Date(a)-new Date(b);});
   const daysActive=dayKeys.length;
-  let sumL=0,nL=0; dayKeys.forEach(function(k){var d=st.days[k]; sumL+=d.sumLatency||0; nL+=d.latencyN||0;});
-  const avgL=nL?(sumL/nL/1000).toFixed(1)+'s':'—';
+  let sumL=0,nL=0;
+  dayKeys.forEach(function(k){var d=st.days[k]; sumL+=d.sumLatency||0; nL+=d.latencyN||0;});
+  const avgLatMs=nL?sumL/nL:0;
+  const avgL=nL?(avgLatMs/1000).toFixed(1)+'s':'—';
+
+  // Frontier + velocity
+  const fr=frontier();
   let running=0; const newByDay={};
   dayKeys.forEach(function(k){var f=st.days[k].frontier||running; newByDay[k]=Math.max(0,f-running); running=Math.max(running,f);});
   const weekAgo=Date.now()-7*86400000;
-  let wkNew=0; dayKeys.forEach(function(k){ if(new Date(k).getTime()>=weekAgo) wkNew+=newByDay[k]; });
-  const last=dayKeys.slice(-7);
-  const fmt=function(k){var d=new Date(k); return (d.getMonth()+1)+'/'+d.getDate();};
-  const tile=function(label,val){ return '<div style="flex:1;border:2px solid currentColor;padding:10px 6px;text-align:center;"><div style="font-size:22px;line-height:1;">'+val+'</div><div style="font-size:7px;opacity:.7;margin-top:6px;letter-spacing:1px;">'+label+'</div></div>'; };
-  const row=function(l,v){ return '<div style="display:flex;justify-content:space-between;font-size:9px;margin-top:5px;"><span>'+l+'</span><span>'+v+'</span></div>'; };
-  let html='';
-  html+='<div style="display:flex;gap:8px;">'+tile('ACCURACY',acc+'%')+tile('WORDS KNOWN',known)+tile('DAY STREAK',(S.streak||0))+'</div>';
-  html+='<div style="border:2px solid currentColor;padding:10px;margin-top:10px;"><div style="font-size:8px;opacity:.7;letter-spacing:1px;margin-bottom:8px;">ACQUISITION</div>';
-  html+=row('FRONTIER',fr+' / '+D.length)+row('NEW THIS WEEK',wkNew)+row('DAYS ACTIVE',daysActive)+row('TOTAL ANSWERS',totA)+row('AVG RESPONSE',avgL)+'</div>';
-  html+='<div style="border:2px solid currentColor;padding:10px;margin-top:10px;"><div style="font-size:8px;opacity:.7;letter-spacing:1px;margin-bottom:8px;">ACCURACY · LAST '+last.length+' ACTIVE DAYS</div>';
-  if(!last.length) html+='<div style="font-size:8px;opacity:.6;">No sessions yet — study to start your curve.</div>';
-  last.forEach(function(k){ var d=st.days[k]; var a=d.answers?Math.round(d.correct/d.answers*100):0;
-    html+='<div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:8px;"><span style="width:34px;opacity:.7;">'+fmt(k)+'</span><div style="flex:1;height:10px;border:1px solid currentColor;"><div style="height:100%;width:'+a+'%;background:currentColor;"></div></div><span style="width:58px;text-align:right;opacity:.8;">'+a+'% · '+d.answers+'</span></div>';
-  });
-  html+='</div>';
-  const mods=Object.keys(st.byModality||{});
-  if(mods.length){
-    html+='<div style="border:2px solid currentColor;padding:10px;margin-top:10px;"><div style="font-size:8px;opacity:.7;letter-spacing:1px;margin-bottom:8px;">BY MODE</div>';
-    mods.sort(function(a,b){return st.byModality[b].answers-st.byModality[a].answers;}).forEach(function(m){
-      var mm=st.byModality[m]; var a=mm.answers?Math.round(mm.correct/mm.answers*100):0;
-      html+='<div style="display:flex;justify-content:space-between;font-size:8px;margin-top:4px;"><span>'+m.toUpperCase()+'</span><span style="opacity:.8;">'+a+'% · '+mm.answers+'</span></div>';
-    });
-    html+='</div>';
+  let wkNew=0; dayKeys.forEach(function(k){if(new Date(k).getTime()>=weekAgo) wkNew+=newByDay[k];});
+  const avgPerSession=daysActive?(fr/daysActive).toFixed(1):'—';
+  const xpVel=daysActive?Math.round((S.xp||0)/daysActive):0;
+
+  // Card sweep — mastery bands, lapse rate, flip time, axis stages, working batch
+  var mBands=[0,0,0,0], totalLapses=0, totalReps=0, totalFlipMs=0, flipN=0;
+  var axisStageSum={meaning:0,pos:0}, axisCardN=0;
+  var axisDiff=0, axisDiffN=0;
+  var workingBatch=0;
+  var totalAxisStages=0, totalAxisReps=0;
+  for(var i=0;i<D.length;i++){
+    var ci=S.cards[i]; if(!ci) continue;
+    var s=state(i);
+    mBands[s]=(mBands[s]||0)+1;
+    totalLapses+=(ci.lapses||0);
+    totalReps+=(ci.reps||0)+(ci.lapses||0);
+    if(ci.flipMs>0){totalFlipMs+=ci.flipMs; flipN++;}
+    if(ci.seen&&s<3) workingBatch++;
+    if(ci.axisStage){
+      var ms=ci.axisStage.meaning||0, ps=ci.axisStage.pos||0;
+      axisStageSum.meaning+=ms; axisStageSum.pos+=ps; axisCardN++;
+      totalAxisStages+=ms+ps;
+      if(ci.seen){axisDiff+=Math.abs(ms-ps); axisDiffN++;}
+    }
+    if(ci.axisReps){totalAxisReps+=(ci.axisReps.meaning||0)+(ci.axisReps.pos||0);}
   }
+  const lapseRate=totalReps?Math.round(totalLapses/totalReps*100):0;
+  const avgFlip=flipN?(totalFlipMs/flipN/1000).toFixed(1)+'s':'—';
+  const avgMeaning=axisCardN?(axisStageSum.meaning/axisCardN).toFixed(1):'—';
+  const avgPos=axisCardN?(axisStageSum.pos/axisCardN).toFixed(1):'—';
+  const avgAxisGap=axisDiffN?(axisDiff/axisDiffN).toFixed(2):null;
+  const adaptRatio=totalAxisReps?(totalAxisStages/totalAxisReps):null;
+
+  // Per-mode breakdown (sorted by answer count)
+  const modOrder=['flash','mc','tone','cloze','word-order','pos','sentence','unknown'];
+  const modRows=modOrder.map(function(mod){
+    var mm=st.byModality&&st.byModality[mod]; if(!mm||!mm.answers) return null;
+    var a=Math.round(mm.correct/mm.answers*100);
+    var lat=(mm.latencyN&&mm.sumLatency)?(mm.sumLatency/mm.latencyN/1000).toFixed(1)+'s':'—';
+    return {mod:mod,a:a,n:mm.answers,lat:lat};
+  }).filter(Boolean);
+
+  // LQ component scores
+  const speedScore=avgLatMs>0?Math.min(100,Math.max(0,Math.round(150-avgLatMs/1000*25))):null;
+  const accScore=totA>=10?acc:null;
+  const adaptScore=adaptRatio!==null&&totalAxisReps>10?Math.min(100,Math.round(adaptRatio*250)):null;
+  var lqParts=[], lqWeights=[];
+  if(speedScore!==null){lqParts.push(speedScore*0.25); lqWeights.push(0.25);}
+  if(accScore!==null){lqParts.push(accScore*0.50); lqWeights.push(0.50);}
+  if(adaptScore!==null){lqParts.push(adaptScore*0.25); lqWeights.push(0.25);}
+  var totalW=lqWeights.reduce(function(a,b){return a+b;},0);
+  var lq=totalW>0?Math.round(lqParts.reduce(function(a,b){return a+b;},0)/totalW):null;
+
+  // Callout copy
+  var accComment=!totA?'no data yet':acc>=90?'suspicious. lower your wager.':acc>=75?'adequate.':acc>=60?'at least you\'re trying.':'consistent failure is still data.';
+  var reactionComment=!nL?'—':avgLatMs<2000?'twitchy. let it marinate.':avgLatMs<4000?'decent.':avgLatMs<7000?'taking your time.':'are you asleep between cards?';
+  var streakComment=(S.streak||0)>=14?'actually impressive.':(S.streak||0)>=7?'tolerable.':(S.streak||0)>=2?'don\'t stop now.':'open the app tomorrow.';
+  var lqComment=lq===null?'study more first.':lq>=85?'above average. keep going.':lq>=65?'developing.':lq>=40?'early signal — come back.':'raw. that\'s fine.';
+  var axisComment=!avgAxisGap?'—':parseFloat(avgAxisGap)>0.8?'you know what words mean. you\'re shaky on what they do. fix it.':parseFloat(avgAxisGap)>0.3?'minor structural gap. expected at this stage.':'axes tracking together.';
+
+  // Render helpers
+  var bar10=function(pct){var f=Math.round(Math.min(100,Math.max(0,pct))/10); return '█'.repeat(f)+'░'.repeat(10-f);};
+  var tile=function(label,val,note){return '<div style="flex:1;border:2px solid currentColor;padding:10px 6px;text-align:center;"><div style="font-size:22px;line-height:1;font-weight:bold;">'+val+'</div><div style="font-size:7px;opacity:.6;margin-top:4px;letter-spacing:1px;">'+label+'</div>'+(note?'<div style="font-size:6px;opacity:.45;margin-top:3px;font-style:italic;">'+note+'</div>':'')+'</div>';};
+  var row=function(l,v){return '<div style="display:flex;justify-content:space-between;font-size:9px;margin-top:5px;"><span style="opacity:.8;">'+l+'</span><span>'+v+'</span></div>';};
+  var sect=function(title,content){return '<div style="border:2px solid currentColor;padding:10px;margin-top:10px;"><div style="font-size:7px;opacity:.55;letter-spacing:2px;margin-bottom:8px;">'+title+'</div>'+content+'</div>';};
+  var brow=function(label,score){var s=score!==null?score:'—'; var b=score!==null?'<span style="letter-spacing:-2px;font-size:9px;">'+bar10(score)+'</span>':'<span style="opacity:.4;">no data</span>'; return '<div style="display:flex;align-items:center;gap:6px;margin-top:5px;font-size:9px;"><span style="width:90px;opacity:.8;">'+label+'</span>'+b+'<span style="width:24px;text-align:right;opacity:.9;">'+s+'</span></div>';};
+  var fmt=function(k){var d=new Date(k); return (d.getMonth()+1)+'/'+d.getDate();};
+
+  var html='';
+
+  // Header
+  html+='<div style="font-size:7px;opacity:.45;letter-spacing:3px;margin-bottom:8px;">'+((activeCourse()&&activeCourse().langName)||'MANDARIN').toUpperCase()+' · APTITUDE READOUT · n='+totA+'</div>';
+
+  // Hero tiles
+  html+='<div style="display:flex;gap:8px;">'+tile('ACCURACY',totA?acc+'%':'—',accComment)+tile('REACTION',avgL,reactionComment)+tile('STREAK',S.streak||0,streakComment)+'</div>';
+
+  // Acquisition velocity
+  html+=sect('ACQUISITION VELOCITY',
+    row('FRONTIER', fr+' / '+D.length+' WORDS')+
+    row('NEW THIS WEEK', wkNew)+
+    row('AVG NEW / ACTIVE DAY', avgPerSession)+
+    row('DAYS ACTIVE', daysActive)+
+    row('TOTAL ANSWERS', totA)+
+    row('XP VELOCITY', xpVel?xpVel+' XP / DAY':'—')
+  );
+
+  // Accuracy curve
+  var last7=dayKeys.slice(-7);
+  var curve='';
+  if(!last7.length){
+    curve='<div style="font-size:8px;opacity:.5;">no sessions yet.</div>';
+  } else {
+    last7.forEach(function(k){
+      var d=st.days[k]; var a=d.answers?Math.round(d.correct/d.answers*100):0;
+      curve+='<div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:8px;"><span style="width:30px;opacity:.6;">'+fmt(k)+'</span><div style="flex:1;height:8px;border:1px solid currentColor;"><div style="height:100%;width:'+a+'%;background:currentColor;"></div></div><span style="width:52px;text-align:right;opacity:.8;">'+a+'%·'+d.answers+'</span></div>';
+    });
+  }
+  html+=sect('ACCURACY — LAST '+last7.length+' ACTIVE DAYS', curve);
+
+  // Response profile by mode
+  if(modRows.length){
+    var modeHtml='';
+    modRows.forEach(function(r){
+      modeHtml+='<div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:8px;"><span style="width:66px;opacity:.8;">'+r.mod.toUpperCase()+'</span><span style="letter-spacing:-2px;font-size:9px;">'+bar10(r.a)+'</span><span style="opacity:.9;width:38px;text-align:right;">'+r.a+'%</span><span style="opacity:.5;width:32px;text-align:right;">'+r.lat+'</span></div>';
+    });
+    html+=sect('RESPONSE PROFILE — ACCURACY &amp; REACTION BY MODE', modeHtml);
+  }
+
+  // Axis profile
+  html+=sect('AXIS PROFILE — STRUCTURAL PERCEPTION',
+    row('MEANING AVG STAGE', avgMeaning+' / 3')+
+    row('POS AVG STAGE', avgPos+' / 3')+
+    row('AXIS GAP (meaning−pos)', avgAxisGap!==null?avgAxisGap:'—')+
+    '<div style="font-size:7px;opacity:.5;margin-top:8px;font-style:italic;">'+axisComment+'</div>'
+  );
+
+  // Card health
+  html+=sect('CARD HEALTH',
+    row('UNSEEN', mBands[0])+
+    row('LEARNING', mBands[1])+
+    row('FAMILIAR', mBands[2])+
+    row('MASTERED', mBands[3])+
+    row('WORKING BATCH', workingBatch+' active')+
+    row('LAPSE RATE', lapseRate+'%')+
+    row('AVG FLASH TIME', avgFlip)
+  );
+
+  // Aptitude signals
+  var aptiHtml=brow('SPEED',speedScore)+brow('ACCURACY',accScore)+brow('ADAPTATION',adaptScore);
+  aptiHtml+='<div style="margin-top:10px;display:flex;justify-content:space-between;font-size:10px;font-weight:bold;"><span>COMPOSITE LQ</span><span>'+(lq!==null?lq:'—')+'</span></div>';
+  aptiHtml+='<div style="font-size:7px;opacity:.45;margin-top:3px;font-style:italic;">'+lqComment+'</div>';
+  aptiHtml+='<div style="font-size:6px;opacity:.3;margin-top:10px;">speed (25%) · accuracy (50%) · adaptation rate (25%) · minimum n=10 to score · this is not a clinical instrument</div>';
+  html+=sect('APTITUDE SIGNALS — LINGUISTICS QUOTIENT', aptiHtml);
+
   body.innerHTML=html;
 }
 
@@ -2335,7 +2450,6 @@ const TONE_LABEL=['-','1ST','2ND','3RD','4TH','NEUT'];
 let toneQueue=[],toneIdx=0,toneCur=-1,toneCombo=0,toneLocked=false,toneAudioMode=false;
 
 function startTone(){
-  // Always shuffle for tone drill regardless of S.ordered
   const now=Date.now();
   const due=[],fresh=[];
   D.forEach((_,i)=>{ const ci=S.cards[i]; if(ci&&ci.seen){ if(ci.due<=now) due.push(i); } else fresh.push(i); });
@@ -2564,12 +2678,10 @@ function renderDeckMgr(){
       if(b.classList.contains('select-btn')){
         setActiveDeck(b.dataset.id);
         renderDeckMgr();
-        updateDeckSelector();
       } else {
         if(confirm('Delete deck "'+(allDecks()[b.dataset.id]&&allDecks()[b.dataset.id].name||'')+'"?')){
           deleteDeck(b.dataset.id);
           renderDeckMgr();
-          updateDeckSelector();
         }
       }
     };
@@ -2581,13 +2693,6 @@ function renderDeckMgr(){
   inp.style.borderColor=fg; inp.style.color=fg;
   btn.style.borderColor=fg; btn.style.color=fg;
   $('deckMgr-back').style.borderColor=fg; $('deckMgr-back').style.color=fg;
-}
-
-function updateDeckSelector(){
-  $('deckSelector').textContent='DECK: '+activeDeckName()+' ▸';
-  const fg=getComputedStyle(document.body).color;
-  $('deckSelector').style.borderColor=fg;
-  $('deckSelector').style.color=fg;
 }
 
 
@@ -6909,7 +7014,7 @@ function debugResetProgress(){
     [
       {label:'RESET', danger:true, action:()=>{
         localStorage.removeItem(KEY);
-        S={cards:{},xp:0,lastDay:null,streak:0,sound:S.sound||'auto',ordered:false,
+        S={cards:{},xp:0,lastDay:null,streak:0,sound:S.sound||'auto',
            decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],
            mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},grammar:{}};
         initGrammarState();
@@ -7296,11 +7401,7 @@ $('muteBtn').onclick=()=>{
   S.sound=S.sound==='auto'?'tap':S.sound==='tap'?'mute':'auto';
   save(); renderHome();
 };
-$('orderBtn').onclick=()=>{
-  S.ordered=!S.ordered;
-  save(); renderHome();
-};
-$('deckSelector').onclick=()=>{ rollBg(); renderDeckMgr(); show('deckMgr'); };
+$('frontierSub').onclick=()=>{ rollBg(); renderDeckMgr(); show('deckMgr'); };
 $('deckMgr-back').onclick=()=>{ goHome(); };
 if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   const inp=$('deckMgr-input');
@@ -7309,7 +7410,6 @@ if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   createDeck(name);
   inp.value='';
   renderDeckMgr();
-  updateDeckSelector();
 };
 
 
@@ -7817,7 +7917,6 @@ const State = {
       if (raw) {
         const saved = JSON.parse(raw);
         this._s = Object.assign(DEFAULT_STATE(), saved);
-        this._s.ordered = false;
         // Type guards
         if (!Array.isArray(this._s.uniqueSeen)) this._s.uniqueSeen = [];
         if (!Array.isArray(this._s.seenColls)) this._s.seenColls = [];

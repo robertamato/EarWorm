@@ -110,6 +110,28 @@ Grammar drills are **disabled in the main study flow** (`dueDrills=[]` in `build
 3. Re-enable grammar in `buildStudyQueue` once the gate is wired.
 4. Open design question: `POS_LOGICAL` maps English POS names to Chinese. The gate needs a join between the POS axis and the `D[]` metalanguage entry for that category.
 
+## Constellation Home Screen (North Star — design only)
+
+The flat 10×N mastery grid is a *flat inventory*: cells in frequency order, opacity = mastery. The target is a *territory map* — a scrollable/zoomable/pannable 2D star field where the user's whole journey is a single legible shape. This is aspirational and gated on decisions below; **do not build yet**.
+
+**Core layout — Vogel sunflower spiral.** Each word is a dot. Seed index = frequency rank: `r = k·√n`, `θ = n·137.507°` (golden angle). This is Zipf rendered as uniform-density 2D — center is the irreducible core (的 是 我…), the long tail spirals outward indefinitely. Radius means "how core to the language," the one axis we already trust. No glyphs printed — the constellation is the *macro* view (territory, progress, shape); the existing study flow is the *micro* view. Tap a star → reveal the word.
+
+**Retained signal:** opacity = mastery (same as today). Bands: mastered (bright) → learning (mid) → frontier (gold leading-edge arc) → downloaded-but-locked (faint outline) → undownloaded (fog).
+
+**The radius decision (gates everything):** does radius encode *raw frequency rank* or *effective priority*?
+- Raw rank ships today, honest, zero new data.
+- Effective priority (frequency adjusted by prerequisite necessity / conceptual debt) is better — a foundational-but-rare morpheme sits closer to center than its rank, making the scheduler's deliberate Zipf-deviations *visible* as inward-bent cells.
+- **Build seam:** compute radius from a `priority(i)` function that currently just `return`s rank. The upgrade is then a one-function change, not a re-architecture. `priority(i)` is downstream of the prerequisite graph (the thing designing Arabic is meant to force into existence).
+
+**Chunk-as-annulus delivery model.** A downloadable course chunk = a contiguous frequency band = a ring. "Download the next 300" lights the next annulus of fog. The **linear phase** is filling outward, ring by ring, frontier arc advancing. Past a proficiency threshold, the **divergence phase** begins: the spiral stops being radially uniform and sprouts *arms* — angle starts meaning something (formal register / domain / second language). The circle deforms into a star; two users' maps look different, which is the aptitude signal rendered as silhouette.
+
+**Tensions to respect:**
+1. **One-glance read must survive.** The flat grid's superpower is zero-interaction legibility. The default fully-zoomed-out constellation must still answer "how am I doing" in one look (lit core, fog edge, frontier arc). Pan/zoom is for exploration, never required for the basic signal.
+2. **iOS perf.** Hundreds→thousands of dots with pan/zoom wants canvas (likely static pre-render at default zoom), not DOM divs — on the exact platform that's been fragile.
+3. **The fog is aspirational.** `D[]` is one baked array; there is no chunked content backend yet. "Undownloaded territory" currently means "ranks past the deck size." The *visual* of chunked delivery can precede the actual CDN — but don't draw fog that can't later be filled.
+
+**Dependencies / sequencing:** prerequisite-graph design (Arabic forcing function) → `priority(i)` scalar → effective-priority radius. Chunked-content delivery model should be decided before the fog/locked bands carry real meaning. Until both exist, a raw-rank spiral is a valid visual scaffold that upgrades in place.
+
 ## Out of Scope (for now)
 - Real build system (unless the manual concat pain becomes real)
 - Server-side anything

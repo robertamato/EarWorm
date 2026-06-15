@@ -319,7 +319,6 @@
     <div class="panel" style="text-align:center;padding:14px 10px;">
       <div style="font-size:9px;opacity:.7;letter-spacing:2px;margin-bottom:4px;">FRONTIER</div>
       <div id="frontierDisplay" style="font-size:48px;line-height:1;letter-spacing:-1px;">0</div>
-      <div style="font-size:8px;opacity:.6;margin-top:4px;" id="frontierSub">MANDARIN · FREQUENCY RANK</div>
     </div>
 
     <!-- PRIMARY ACTION -->
@@ -348,6 +347,7 @@
     </div>
 
     <!-- MASTERY GRID -->
+    <div id="frontierSub" style="font-size:8px;opacity:.6;letter-spacing:2px;margin-bottom:-2px;cursor:pointer;">MANDARIN · FREQUENCY RANK</div>
     <div id="grid" class="panel"></div>
     <div id="legend" class="panel">
       <span class="lg"><span class="sw" id="sw0"></span>UNSEEN</span>
@@ -374,10 +374,8 @@
     <!-- SETTINGS -->
     <div style="display:flex;gap:8px;">
       <button class="btn" id="muteBtn" style="font-size:9px;flex:1">SOUND: AUTO</button>
-      <button class="btn" id="orderBtn" style="font-size:9px;flex:1">ORDER: SHUFFLE</button>
     </div>
     <div id="ttsStatus" style="font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;opacity:.4;"></div>
-    <div id="deckSelector" class="panel">DECK: CORE 100 ▸</div>
     <button class="btn" id="statsBtn" style="font-size:9px;">◷ YOUR LEARNING</button>
 
     <!-- DEBUG MODES (hidden by default) -->
@@ -629,7 +627,7 @@
   <div id="stats" style="display:none;flex-direction:column;flex:1;padding:calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom)) 14px;gap:10px;overflow-y:auto;">
     <div style="display:flex;align-items:center;gap:10px;">
       <button class="btn" id="stats-back" style="font-size:9px;">◄ HOME</button>
-      <div style="font-size:11px;letter-spacing:2px;">YOUR LEARNING</div>
+      <div style="font-size:11px;letter-spacing:2px;">PROFILE</div>
     </div>
     <div id="statsBody"></div>
   </div>

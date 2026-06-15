@@ -60,7 +60,6 @@ const TONE_LABEL=['-','1ST','2ND','3RD','4TH','NEUT'];
 let toneQueue=[],toneIdx=0,toneCur=-1,toneCombo=0,toneLocked=false,toneAudioMode=false;
 
 function startTone(){
-  // Always shuffle for tone drill regardless of S.ordered
   const now=Date.now();
   const due=[],fresh=[];
   D.forEach((_,i)=>{ const ci=S.cards[i]; if(ci&&ci.seen){ if(ci.due<=now) due.push(i); } else fresh.push(i); });
@@ -289,12 +288,10 @@ function renderDeckMgr(){
       if(b.classList.contains('select-btn')){
         setActiveDeck(b.dataset.id);
         renderDeckMgr();
-        updateDeckSelector();
       } else {
         if(confirm('Delete deck "'+(allDecks()[b.dataset.id]&&allDecks()[b.dataset.id].name||'')+'"?')){
           deleteDeck(b.dataset.id);
           renderDeckMgr();
-          updateDeckSelector();
         }
       }
     };
@@ -306,13 +303,6 @@ function renderDeckMgr(){
   inp.style.borderColor=fg; inp.style.color=fg;
   btn.style.borderColor=fg; btn.style.color=fg;
   $('deckMgr-back').style.borderColor=fg; $('deckMgr-back').style.color=fg;
-}
-
-function updateDeckSelector(){
-  $('deckSelector').textContent='DECK: '+activeDeckName()+' ▸';
-  const fg=getComputedStyle(document.body).color;
-  $('deckSelector').style.borderColor=fg;
-  $('deckSelector').style.color=fg;
 }
 
 

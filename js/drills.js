@@ -636,7 +636,7 @@ function debugResetProgress(){
     [
       {label:'RESET', danger:true, action:()=>{
         localStorage.removeItem(KEY);
-        S={cards:{},xp:0,lastDay:null,streak:0,sound:S.sound||'auto',ordered:false,
+        S={cards:{},xp:0,lastDay:null,streak:0,sound:S.sound||'auto',
            decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],
            mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},grammar:{}};
         initGrammarState();

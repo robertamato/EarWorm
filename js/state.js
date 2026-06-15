@@ -13,7 +13,6 @@ function buildQueue(){
     if(c&&c.seen){ if(c.due<=now) due.push(i); }
     else fresh.push(i);
   });
-  if(S.ordered) return due.concat(fresh); // frequency order, no shuffle
   return shuffle(due).concat(shuffle(fresh));
 }
 
@@ -159,6 +158,13 @@ function renderHome(){
     c.style.borderColor=locked?'transparent':fg;
     c.style.backgroundColor=locked?'rgba(0,0,0,0.15)':stCol[state(i)];
     c.style.opacity=locked?'0.3':'1';
+    // Tap a cell to hear it — but only words already introduced as flashcards.
+    // Glyphless by design; seen territory is audible, the fog is silent.
+    const _idx=i;
+    if(S.cards[i]&&S.cards[i].seen){
+      c.style.cursor='pointer';
+      c.onclick=()=>{ if(S.sound!=='mute') speak(D[_idx][0],activeCourse().langCode); };
+    }
     g.appendChild(c);
   }
   ['sw0','sw1','sw2','sw3'].forEach((id,k)=>{$(id).style.backgroundColor=stCol[k];});

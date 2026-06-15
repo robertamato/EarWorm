@@ -182,11 +182,7 @@ $('muteBtn').onclick=()=>{
   S.sound=S.sound==='auto'?'tap':S.sound==='tap'?'mute':'auto';
   save(); renderHome();
 };
-$('orderBtn').onclick=()=>{
-  S.ordered=!S.ordered;
-  save(); renderHome();
-};
-$('deckSelector').onclick=()=>{ rollBg(); renderDeckMgr(); show('deckMgr'); };
+$('frontierSub').onclick=()=>{ rollBg(); renderDeckMgr(); show('deckMgr'); };
 $('deckMgr-back').onclick=()=>{ goHome(); };
 if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   const inp=$('deckMgr-input');
@@ -195,7 +191,6 @@ if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   createDeck(name);
   inp.value='';
   renderDeckMgr();
-  updateDeckSelector();
 };
 
 
@@ -703,7 +698,6 @@ const State = {
       if (raw) {
         const saved = JSON.parse(raw);
         this._s = Object.assign(DEFAULT_STATE(), saved);
-        this._s.ordered = false;
         // Type guards
         if (!Array.isArray(this._s.uniqueSeen)) this._s.uniqueSeen = [];
         if (!Array.isArray(this._s.seenColls)) this._s.seenColls = [];

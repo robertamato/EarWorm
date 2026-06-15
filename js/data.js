@@ -192,7 +192,7 @@ let D_JA=[
 // KEY is the ACTIVE course's localStorage key — reassigned by switchCourse().
 let KEY='earworm-mandarin-v1';
 function defaultState(){
-  return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',ordered:false,decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},
+  return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},
     // Independent grammar track — multi-dimensional, per-category
     // Each category has 5 independent sub-axes with their own SRS schedules
     grammar:{},
@@ -209,7 +209,6 @@ function load(){
     if(raw){
       const saved=JSON.parse(raw);
       S=Object.assign({},S,saved);
-      S.ordered=false;
       // Ensure all fields have correct types
       if(!Array.isArray(S.uniqueSeen)) S.uniqueSeen=[];
       if(!Array.isArray(S.seenColls)) S.seenColls=[];
@@ -250,6 +249,7 @@ function applyAnswer(i, isCorrect, modality, latencyMs){
     st.totalAnswers++; if(isCorrect) st.totalCorrect++;
     const m=st.byModality[modality]||{answers:0,correct:0};
     m.answers++; if(isCorrect) m.correct++;
+    if(typeof latencyMs==='number' && latencyMs>0 && latencyMs<120000){ m.sumLatency=(m.sumLatency||0)+latencyMs; m.latencyN=(m.latencyN||0)+1; }
     st.byModality[modality]=m;
     const pol = newSchedulerPolicy();
     if(window.EW&&EW.obs) EW.obs.logEvent('answer',{
