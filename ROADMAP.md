@@ -102,6 +102,34 @@ Keep every logEvent wrapped so the observer itself never throws.
 - [x] **Coll gate: mastery ≥ 1 for component chars.** Was gating on `exp > 0` (seen once). Now requires `masteryScore(dIdx) >= 1` — at least one successful recall — before a colloquialism surfaces. Prevents homophones from appearing as compositional building blocks before the learner has consolidated them. **Layer 2 shipped:** inline disambiguation note (≠ 吗 question particle) in `renderCollBreakdown` when another seen D[] entry shares the same bare syllable root.
 - [ ] **Homophone disambiguation system (Layer 3 — deep fix).** The Layer 2 note and Layer 1 gate treat the symptom. The disease is that the scheduler has no **homophone-pair model**: no mechanism to detect that two vocabulary items share a syllable root, enforce explicit disambiguation before either is used as a building block, or schedule a deliberate side-by-side disambiguation flash. Design: (a) build a `HOMOPHONE_PAIRS` index keyed on bare-syllable root → [dIdx, ...] at deck-load time; (b) when both members of a pair have `seen:true` but disambiguation hasn't been explicitly surfaced, inject a disambiguation flash modality (side-by-side character + pinyin + meaning, contrast highlighted); (c) gate the pair on `disambiguated:true` before either member can appear in coll/compound breakdown without the ≠ note. This generalizes across all languages — Arabic letters with similar shapes, Japanese homophones (端/橋/箸), etc. Belongs with the prerequisite-graph design (same structure: `requires` edges, but at the phonological-disambiguation layer). Do not build until the Arabic prerequisite graph design clarifies the edge model.
 
+## Tiered Audio Architecture
+
+The long-term audio stack has three tiers, each unlocking at a higher mastery level. The principle: controlled synthesis early (learner needs reliability), authentic speech late (learner needs naturalness and input exposure).
+
+```
+Tier 1 — Static pre-recorded (cloud TTS)    mastery 0+   what we have now for 6 Arabic words
+Tier 2 — Browser synthesis fallback         mastery 0+   zh/ja already; ar-LB as best effort
+Tier 3 — Natural speech samples             mastery 2+   authentic clips from real content
+```
+
+**Tier 1 — Static pre-recorded audio.**
+`speak()` checks `course.audioMap[text]` before falling through to synthesis. Map lives in the COURSES registry per language. Populated from the reference Anki deck (Amazon Polly/Azure MP3s) for covered words; gaps fall to Tier 2. For Arabic, the reference .apkg has ~12K entries — expand `audioMap` as course vocabulary is curated and frequency-ranked. Keep the .apkg local; commit only the extracted MP3s that correspond to active D[] entries.
+
+**Tier 2 — Browser synthesis.**
+Works well for zh/ja (local SAPI voices). For Arabic: `ar-LB` locale (Lebanese) gives the engine a dialect signal. Still MSA-approximated on most systems; acceptable for cross-dialectal vocabulary (في، من، هو، هي…), poor for distinctly Levantine forms. Short of pre-recorded audio, there is no good browser fix for Levantine-specific words.
+
+**Tier 3 — Natural speech samples (design only — do not build yet).**
+At mastery ≥ 2 (familiar tier), word audio could come from authentic speech clips rather than synthesis — a 1–3 second excerpt from a podcast, news segment, or native conversation where the word appears in natural context. This is the comprehensible input progression made tangible: controlled synthesis during acquisition, authentic speech as reinforcement. Design questions that must be resolved first:
+- Source and rights: Creative Commons audio or self-recorded content. Sampled content cannot be redistributed without license.
+- Clip extraction: forced alignment or keyword search to find word boundary in continuous speech. Tools: Montreal Forced Aligner, WhisperX, or manual curation.
+- Storage: clips are small (~2–5 sec MP3), can be committed alongside `audioMap` entries. Schema: `audioMap[word] = {synth: 'audio/ar/xxx.mp3', natural: 'audio/ar/natural/xxx.mp3'}`.
+- Harvesting from user-generated content: a later-stage idea where authentic clips are sourced from real material *the learner brings* (a YouTube video, a podcast they're working through). The word-search tier is the scaffolding for this.
+
+**Arabic audio immediate backlog:**
+- [ ] Source or record audio for the 16 missing seed words (من، على، مع، ب، أنا، أنت، هو، هي، إحنا، مين، وين، كيف، كتير، هلق، لا، يلا). Options: Azure `ar-LB` TTS batch generation, user recording, or restructure seed vocabulary toward words covered by the .apkg.
+- [ ] Gender voice toggle: `getBestVoice(lang, genderHint)` extension. Target language defaults to one gender, native language to the opposing gender — perceptual channel that distinguishes "this is the thing you're learning" from "this is the translation." Gender inferred from voice name (Naayf/Zayd = male; Heba/Hala/Layla = female).
+- [ ] TTS debug panel: add Arabic voice list alongside zh/ja panels.
+
 ## Grammar Track Re-integration
 
 Grammar drills are **disabled in the main study flow** (`dueDrills=[]` in `buildStudyQueue`). Still reachable via the GRAMMAR DRILL debug button. The `toneAdvancedUnlocked()` gate (40+ grammar attempts, 3+ categories) is currently unreachable.

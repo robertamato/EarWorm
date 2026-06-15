@@ -10,6 +10,9 @@ analysis.txt
 *.tmp
 *.log
 
+# Anki packages (large binary, local resource only)
+*.apkg
+
 # OS
 .DS_Store
 Thumbs.db

@@ -1132,9 +1132,30 @@ if(typeof document!=='undefined'){
   });
 }
 
+// Play a pre-recorded static audio file. Returns true if playback was started.
+// Falls back to TTS (returns false) on any error.
+function _playStaticAudio(src, onDone){
+  try{
+    const a=new Audio(src);
+    a.onended=()=>{ if(onDone) onDone(); };
+    a.onerror=()=>{ if(onDone) onDone(); }; // caller decides whether to fall back
+    a.play().catch(()=>{ if(onDone) onDone(); });
+    if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:src.split('/').pop(),lang:'static',modality:'static-audio'});
+    return true;
+  }catch(e){ return false; }
+}
+
 function speak(text,lang,onDone){
   if(!lang) lang=activeCourse?activeCourse().langCode:'zh-CN';
   if(S.sound==='mute'){ if(onDone) onDone(); return; }
+  // Static pre-recorded audio takes priority over synthesis (better quality, dialect-accurate)
+  try{
+    const course=activeCourse?activeCourse():null;
+    if(course&&course.audioMap&&course.audioMap[text]){
+      _playStaticAudio(course.audioMap[text],onDone);
+      return;
+    }
+  }catch(e){}
   try{
     const gen=++_ttsGen;
     _lastSpokenText=text; _lastSpokenLang=lang;
@@ -5624,7 +5645,7 @@ const COURSES={
     hasGrammar:true,
   },
   'arabic-levantine':{
-    langCode:'ar',
+    langCode:'ar-LB',
     langName:'Levantine Arabic',
     langNameNative:'عربي شامي',
     script:'rtl',
@@ -5632,6 +5653,17 @@ const COURSES={
     lexicon:D_AR,
     storageKey:'earworm-arabic-levantine-v1',
     hasGrammar:false,
+    // Pre-recorded audio (Amazon Polly, extracted from reference Anki deck).
+    // speak() checks this map first; falls through to TTS for words not covered.
+    // Expand as course vocabulary grows.
+    audioMap:{
+      'في':   'audio/ar/amazon-fe9c5823-bc898e46-70cba867-19d309e7-55b0c09e.mp3',
+      'شو':   'audio/ar/amazon-93dc6942-2bc1546e-472c9c06-c778dd81-12815639.mp3',
+      'شوي':  'audio/ar/amazon-68d4bcc4-f9c2f544-df903ba5-e57b13d7-e91e5b5b.mp3',
+      'هيك':  'audio/ar/amazon-8a0cb071-e8f92c73-ba20c2d2-bece254f-6e371178.mp3',
+      'بس':   'audio/ar/amazon-27c4c2ec-67435f4f-3199e1f8-a1efafe6-8c578f67.mp3',
+      'يعني': 'audio/ar/amazon-28dc4e14-119d075e-7d05b038-46e5e10b-1ca62d7e.mp3',
+    },
   },
   'japanese':{
     langCode:'ja-JP',

@@ -1132,9 +1132,30 @@ if(typeof document!=='undefined'){
   });
 }
 
+// Play a pre-recorded static audio file. Returns true if playback was started.
+// Falls back to TTS (returns false) on any error.
+function _playStaticAudio(src, onDone){
+  try{
+    const a=new Audio(src);
+    a.onended=()=>{ if(onDone) onDone(); };
+    a.onerror=()=>{ if(onDone) onDone(); }; // caller decides whether to fall back
+    a.play().catch(()=>{ if(onDone) onDone(); });
+    if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:src.split('/').pop(),lang:'static',modality:'static-audio'});
+    return true;
+  }catch(e){ return false; }
+}
+
 function speak(text,lang,onDone){
   if(!lang) lang=activeCourse?activeCourse().langCode:'zh-CN';
   if(S.sound==='mute'){ if(onDone) onDone(); return; }
+  // Static pre-recorded audio takes priority over synthesis (better quality, dialect-accurate)
+  try{
+    const course=activeCourse?activeCourse():null;
+    if(course&&course.audioMap&&course.audioMap[text]){
+      _playStaticAudio(course.audioMap[text],onDone);
+      return;
+    }
+  }catch(e){}
   try{
     const gen=++_ttsGen;
     _lastSpokenText=text; _lastSpokenLang=lang;
