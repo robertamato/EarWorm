@@ -195,7 +195,7 @@ let D_JA=[
 let D_AR=[
   ["في",[["fi",0]],"in, at",[],"preposition"],
   ["من",[["min",0]],"from, of",[],"preposition"],
-  ["على",[["a",0],["la",0]],"on, upon",[],"preposition"],
+  ["على",[["3la",0]],"on, upon",[],"preposition"],
   ["مع",[["ma3",0]],"with, together",[],"preposition"],
   ["ب",[["bi",0]],"in, with, by",[],"preposition"],
   ["أنا",[["a",0],["na",0]],"I, me",[],"pronoun"],
@@ -215,6 +215,25 @@ let D_AR=[
   ["بس",[["bas",0]],"only, but, enough",[],"particle"],
   ["يلا",[["ya",0],["la",0]],"let's go, come on",[],"interjection"],
   ["يعني",[["ya3",0],["ni",0]],"means, like, you know",[],"particle"],
+  // Batch 2 — negation · modals · demonstratives · pronouns · verbs · nouns
+  ["مش",[["mish",0]],"not, isn't",[],"particle"],
+  ["ما",[["ma",0]],"not, didn't (negation)",[],"particle"],
+  ["بدّي",[["bid",0],["di",0]],"I want",[],"modal"],
+  ["رح",[["ra7",0]],"going to (future)",[],"particle"],
+  ["لازم",[["laa",0],["zim",0]],"must, have to",[],"modal"],
+  ["هاد",[["haad",0]],"this (m.)",[],"pronoun"],
+  ["هاي",[["haay",0]],"this (f.)",[],"pronoun"],
+  ["شي",[["shi",0]],"thing, something",[],"noun"],
+  ["ناس",[["naas",0]],"people",[],"noun"],
+  ["يوم",[["yoom",0]],"day",[],"noun"],
+  ["وقت",[["wa2t",0]],"time",[],"noun"],
+  ["أنتو",[["in",0],["to",0]],"you (pl.)",[],"pronoun"],
+  ["هنّي",[["hun",0],["ni",0]],"they",[],"pronoun"],
+  ["حكى",[["7a",0],["ka",0]],"spoke, talked",[],"verb"],
+  ["شاف",[["shaaf",0]],"saw",[],"verb"],
+  ["أجا",[["2a",0],["ja",0]],"came",[],"verb"],
+  ["راح",[["raa7",0]],"went",[],"verb"],
+  ["بيت",[["bayt",0]],"house, home",[],"noun"],
 ];
 
 
@@ -514,12 +533,14 @@ function nextWordToIntroduce(){
   // Next unlocked compound (all components introduced, compound itself not yet shown)
   let nextColl=-1;
   let nextCollRank=Infinity;
-  COLL.forEach((entry,ci)=>{
-    if(S.seenColls&&S.seenColls.includes(ci)) return; // already introduced
-    if(!collUnlocked(ci)) return;
-    const rank=entry[5]||999;
-    if(rank<nextCollRank){ nextCollRank=rank; nextColl=ci; }
-  });
+  if(activeCourse&&activeCourse().hasColls){
+    COLL.forEach((entry,ci)=>{
+      if(S.seenColls&&S.seenColls.includes(ci)) return; // already introduced
+      if(!collUnlocked(ci)) return;
+      const rank=entry[5]||999;
+      if(rank<nextCollRank){ nextCollRank=rank; nextColl=ci; }
+    });
+  }
 
   // Rule: individual spine words ALWAYS take priority over compounds.
   // A compound is never introduced before all its components AND before
@@ -871,7 +892,8 @@ function showTTSVoiceDetails(lang){
   const freshLang=lang||(typeof activeCourse==='function'&&activeCourse()?activeCourse().langCode:'zh-CN');
   const pool=_voices.length?_voices:speechSynthesis.getVoices();
   const freshMatching=pool.filter(v=>v&&v.lang&&v.lang.startsWith(freshLang.split('-')[0]));
-  try{ speak(freshLang.startsWith('ja')?'こんにちは':'你好', freshLang); }catch(e){}
+  const _testPhrase=freshLang.startsWith('ja')?'こんにちは':freshLang.startsWith('zh')?'你好':freshLang.startsWith('ar')?(activeCourse&&activeCourse().audioMap&&Object.keys(activeCourse().audioMap)[0])||'مرحبا':'hello';
+  try{ speak(_testPhrase, freshLang); }catch(e){}
   let msg='Available voices for '+freshLang+':\n\n';
   if(!freshMatching.length){
     msg+='(none installed)\n\n';
@@ -1143,6 +1165,12 @@ function _playStaticAudio(src, onDone){
     if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:src.split('/').pop(),lang:'static',modality:'static-audio'});
     return true;
   }catch(e){ return false; }
+}
+
+function charFont(){
+  const c=activeCourse?activeCourse():null;
+  if(c&&c.script==='rtl') return "font-family:'Noto Naskh Arabic','Arabic Typesetting','Arial Unicode MS',sans-serif";
+  return "font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 }
 
 function speak(text,lang,onDone){
@@ -3156,7 +3184,7 @@ function showStudyCard(i){
 
   // Colloquialism interjection: only show if unlocked, frequency-ranked
   // Fire every ~11 cards but only show the highest-priority unlocked coll
-  if(studyCardCount%11===0){
+  if(studyCardCount%11===0&&activeCourse&&activeCourse().hasColls){
     const unlockedColls=getUnlockedColls();
     if(unlockedColls.length>0){
       const collI=unlockedColls[Math.floor(studyCardCount/11)%unlockedColls.length];
@@ -3170,7 +3198,7 @@ function showStudyCard(i){
   }
   // Tone interjection every 5th card, gated on having seen card back
   const hasSeenBack=(card(i).exp||0)>0;
-  if(studyCardCount%5===0 && hasSeenBack && getAxisStage(i,'meaning')>=2){
+  if(studyCardCount%5===0 && hasSeenBack && getAxisStage(i,'meaning')>=2 && activeCourse&&activeCourse().hasTone){
     showStudyTone(i);
     return;
   }
@@ -3226,7 +3254,7 @@ function showStudyFlash(i){
   activeCardIdx=i;
   try{
   const [ch,syls,def,,pos]=D[i];
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=charFont();
   const fg=getComputedStyle(document.body).color;
   let flipped=false;
 
@@ -3348,7 +3376,7 @@ function showStudyMC(i, reverse, showPosHint){
     }
   }
   const fg=getComputedStyle(document.body).color;
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=charFont();
   const ink=fg;
 
   $('studyMode').textContent=reverse?'EN → CHAR':'CHAR → EN';
@@ -3372,7 +3400,7 @@ function showStudyMC(i, reverse, showPosHint){
     const posLabel=pos||'';
     let posDisplay='';
     if(posLabel){
-      const zhPos=POS_ZH[posLabel]||'';
+      const zhPos=(activeCourse&&activeCourse().langCode==='zh-CN')?(POS_ZH[posLabel]||''):'';
       if(meaningStg<2) posDisplay=posLabel.toUpperCase();
       else if(meaningStg<4) posDisplay=posLabel.toUpperCase()+(zhPos?' · '+zhPos:'');
       else posDisplay=zhPos||posLabel.toUpperCase();
@@ -3493,7 +3521,8 @@ function pickStudyMC(btn,chosen,correct,i){
     b.style.pointerEvents='none';
   });
 
-  logAnswer(i,isCorrect, mcReverse?'mc-rev':'mc-fwd', Date.now()-cardShownAtMC);
+  const responseMs=Date.now()-cardShownAtMC;
+  logAnswer(i,isCorrect, mcReverse?'mc-rev':'mc-fwd', responseMs);
   if(!isCorrect){
     if(typeof beepError==='function') beepError();
     // Classify distractor error for targeted re-scheduling
@@ -3509,7 +3538,6 @@ function pickStudyMC(btn,chosen,correct,i){
   const betRatio2=currentMultIdx/Math.max(1,defaultMultIdx);
   const sConfident=betRatio2>=1.5;  // wagered above default = confident
   const sUnsure=betRatio2<0.7;      // wagered below default = uncertain
-  const responseMs=Date.now()-cardShownAtMC;
   recordWagerDecision(i, isCorrect, currentMultIdx, defaultMultIdx, responseMs);
   recordAxisResultNew(i,'meaning',isCorrect,responseMs);
   recordAxisResult(i,'meaning',isCorrect); // legacy stage gate
@@ -3614,7 +3642,7 @@ function showStudyTone(i){
   activeCardIdx=i;
   rollBg();
   const [ch,syls]=D[i];
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=charFont();
   const fg=getComputedStyle(document.body).color;
   const stage=toneStage(masteryScore(i));
   const _toneMatch=syls.find(([,t])=>t!==0); const primaryTone=_toneMatch?_toneMatch[1]:syls[0][1];
@@ -4050,7 +4078,7 @@ function showStudyPOS(i){
   if(!pos){ nextStudyCard(); return; } // no POS data, skip
 
   const fg=getComputedStyle(document.body).color;
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=charFont();
 
   $('studyMode').textContent='PART OF SPEECH';
   $('studyPOSRank').textContent='';
@@ -4485,7 +4513,7 @@ let collIdx=0; // cycles through COLL array
 
 
 function renderCollBreakdown(components, fg){
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=charFont();
   const box=$('studyCollBreakdown');
   if(!box) return;
   box.innerHTML='';
@@ -4601,7 +4629,7 @@ function showStudyColl(cardI){
 
   rollBg();
   const fg=getComputedStyle(document.body).color;
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=charFont();
   let flipped=false;
 
   $('studyMode').textContent='COLLOQUIALISM';
@@ -5640,6 +5668,7 @@ const COURSES={
     langNameNative:'普通话',
     script:'ltr',
     hasTone:true,
+    hasColls:true,
     lexicon:D_MANDARIN,
     storageKey:'earworm-mandarin-v1',
     hasGrammar:true,
@@ -5682,6 +5711,25 @@ const COURSES={
       'هلق':  'audio/ar/gtts-ar-halla2.mp3',
       'لا':   'audio/ar/gtts-ar-la.mp3',
       'يلا':  'audio/ar/gtts-ar-yalla.mp3',
+      // Batch 2
+      'مش':   'audio/ar/gtts-ar-mish.mp3',
+      'ما':   'audio/ar/gtts-ar-ma-neg.mp3',
+      'بدّي': 'audio/ar/gtts-ar-biddi.mp3',
+      'رح':   'audio/ar/gtts-ar-ra7.mp3',
+      'لازم': 'audio/ar/gtts-ar-laazim.mp3',
+      'هاد':  'audio/ar/gtts-ar-haad.mp3',
+      'هاي':  'audio/ar/gtts-ar-haay.mp3',
+      'شي':   'audio/ar/gtts-ar-shi.mp3',
+      'ناس':  'audio/ar/gtts-ar-naas.mp3',
+      'يوم':  'audio/ar/gtts-ar-yoom.mp3',
+      'وقت':  'audio/ar/gtts-ar-wa2t.mp3',
+      'أنتو': 'audio/ar/gtts-ar-into.mp3',
+      'هنّي': 'audio/ar/gtts-ar-hun-ni.mp3',
+      'حكى':  'audio/ar/gtts-ar-7aka.mp3',
+      'شاف':  'audio/ar/gtts-ar-shaaf.mp3',
+      'أجا':  'audio/ar/gtts-ar-2aja.mp3',
+      'راح':  'audio/ar/gtts-ar-raa7.mp3',
+      'بيت':  'audio/ar/gtts-ar-bayt.mp3',
     },
   },
   'japanese':{

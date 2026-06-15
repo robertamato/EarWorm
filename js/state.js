@@ -147,7 +147,7 @@ function renderHome(){
   // Always destroy fatigue overlay on home screen
   const overlay=document.getElementById('fatigueOverlay');
   if(overlay) overlay.remove();
-  const g=$('grid'); g.innerHTML='';
+  const g=$('map'); g.innerHTML='';
   const fg=hsl(bgHue+GA,80,24);
   const stCol=[ 'transparent', hsl(bgHue,60,30), hsl(bgHue,60,20), hsl(bgHue,60,12) ];
   const fr=frontier();

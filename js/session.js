@@ -713,7 +713,7 @@ function showStudyCard(i){
 
   // Colloquialism interjection: only show if unlocked, frequency-ranked
   // Fire every ~11 cards but only show the highest-priority unlocked coll
-  if(studyCardCount%11===0){
+  if(studyCardCount%11===0&&activeCourse&&activeCourse().hasColls){
     const unlockedColls=getUnlockedColls();
     if(unlockedColls.length>0){
       const collI=unlockedColls[Math.floor(studyCardCount/11)%unlockedColls.length];
@@ -727,7 +727,7 @@ function showStudyCard(i){
   }
   // Tone interjection every 5th card, gated on having seen card back
   const hasSeenBack=(card(i).exp||0)>0;
-  if(studyCardCount%5===0 && hasSeenBack && getAxisStage(i,'meaning')>=2){
+  if(studyCardCount%5===0 && hasSeenBack && getAxisStage(i,'meaning')>=2 && activeCourse&&activeCourse().hasTone){
     showStudyTone(i);
     return;
   }
@@ -783,7 +783,7 @@ function showStudyFlash(i){
   activeCardIdx=i;
   try{
   const [ch,syls,def,,pos]=D[i];
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=charFont();
   const fg=getComputedStyle(document.body).color;
   let flipped=false;
 
@@ -905,7 +905,7 @@ function showStudyMC(i, reverse, showPosHint){
     }
   }
   const fg=getComputedStyle(document.body).color;
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=charFont();
   const ink=fg;
 
   $('studyMode').textContent=reverse?'EN → CHAR':'CHAR → EN';
@@ -929,7 +929,7 @@ function showStudyMC(i, reverse, showPosHint){
     const posLabel=pos||'';
     let posDisplay='';
     if(posLabel){
-      const zhPos=POS_ZH[posLabel]||'';
+      const zhPos=(activeCourse&&activeCourse().langCode==='zh-CN')?(POS_ZH[posLabel]||''):'';
       if(meaningStg<2) posDisplay=posLabel.toUpperCase();
       else if(meaningStg<4) posDisplay=posLabel.toUpperCase()+(zhPos?' · '+zhPos:'');
       else posDisplay=zhPos||posLabel.toUpperCase();
@@ -1050,7 +1050,8 @@ function pickStudyMC(btn,chosen,correct,i){
     b.style.pointerEvents='none';
   });
 
-  logAnswer(i,isCorrect, mcReverse?'mc-rev':'mc-fwd', Date.now()-cardShownAtMC);
+  const responseMs=Date.now()-cardShownAtMC;
+  logAnswer(i,isCorrect, mcReverse?'mc-rev':'mc-fwd', responseMs);
   if(!isCorrect){
     if(typeof beepError==='function') beepError();
     // Classify distractor error for targeted re-scheduling
@@ -1066,7 +1067,6 @@ function pickStudyMC(btn,chosen,correct,i){
   const betRatio2=currentMultIdx/Math.max(1,defaultMultIdx);
   const sConfident=betRatio2>=1.5;  // wagered above default = confident
   const sUnsure=betRatio2<0.7;      // wagered below default = uncertain
-  const responseMs=Date.now()-cardShownAtMC;
   recordWagerDecision(i, isCorrect, currentMultIdx, defaultMultIdx, responseMs);
   recordAxisResultNew(i,'meaning',isCorrect,responseMs);
   recordAxisResult(i,'meaning',isCorrect); // legacy stage gate
@@ -1171,7 +1171,7 @@ function showStudyTone(i){
   activeCardIdx=i;
   rollBg();
   const [ch,syls]=D[i];
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=charFont();
   const fg=getComputedStyle(document.body).color;
   const stage=toneStage(masteryScore(i));
   const _toneMatch=syls.find(([,t])=>t!==0); const primaryTone=_toneMatch?_toneMatch[1]:syls[0][1];
@@ -1607,7 +1607,7 @@ function showStudyPOS(i){
   if(!pos){ nextStudyCard(); return; } // no POS data, skip
 
   const fg=getComputedStyle(document.body).color;
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=charFont();
 
   $('studyMode').textContent='PART OF SPEECH';
   $('studyPOSRank').textContent='';
@@ -2042,7 +2042,7 @@ let collIdx=0; // cycles through COLL array
 
 
 function renderCollBreakdown(components, fg){
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=charFont();
   const box=$('studyCollBreakdown');
   if(!box) return;
   box.innerHTML='';
@@ -2158,7 +2158,7 @@ function showStudyColl(cardI){
 
   rollBg();
   const fg=getComputedStyle(document.body).color;
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=charFont();
   let flipped=false;
 
   $('studyMode').textContent='COLLOQUIALISM';

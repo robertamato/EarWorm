@@ -74,8 +74,8 @@ function classifyDistractorError(targetIdx, chosenDef){
 
 /* ============ EVENTS ============ */
 // Tap the language label under the title to cycle courses.
-if($('langLabel')) $('langLabel').onclick=cycleCourse;
-if($('statsBtn')) $('statsBtn').onclick=()=>{ renderStats(); show('stats'); };
+if($('courseId')) $('courseId').onclick=cycleCourse;
+if($('profileBtn')) $('profileBtn').onclick=()=>{ renderStats(); show('stats'); };
 if($('stats-back')) $('stats-back').onclick=()=>{ rollBg(); renderHome(); show('home'); };
 if($('debugPolicy')){
   $('debugPolicy').textContent='⚙ POLICY: '+(newSchedulerPolicy()?'V2 (context)':'V1');
@@ -182,7 +182,7 @@ $('muteBtn').onclick=()=>{
   S.sound=S.sound==='auto'?'tap':S.sound==='tap'?'mute':'auto';
   save(); renderHome();
 };
-$('frontierSub').onclick=()=>{ rollBg(); renderDeckMgr(); show('deckMgr'); };
+$('mapLabel').onclick=()=>{ rollBg(); renderDeckMgr(); show('deckMgr'); };
 $('deckMgr-back').onclick=()=>{ goHome(); };
 if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   const inp=$('deckMgr-input');

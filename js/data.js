@@ -195,7 +195,7 @@ let D_JA=[
 let D_AR=[
   ["في",[["fi",0]],"in, at",[],"preposition"],
   ["من",[["min",0]],"from, of",[],"preposition"],
-  ["على",[["a",0],["la",0]],"on, upon",[],"preposition"],
+  ["على",[["3la",0]],"on, upon",[],"preposition"],
   ["مع",[["ma3",0]],"with, together",[],"preposition"],
   ["ب",[["bi",0]],"in, with, by",[],"preposition"],
   ["أنا",[["a",0],["na",0]],"I, me",[],"pronoun"],
@@ -215,6 +215,25 @@ let D_AR=[
   ["بس",[["bas",0]],"only, but, enough",[],"particle"],
   ["يلا",[["ya",0],["la",0]],"let's go, come on",[],"interjection"],
   ["يعني",[["ya3",0],["ni",0]],"means, like, you know",[],"particle"],
+  // Batch 2 — negation · modals · demonstratives · pronouns · verbs · nouns
+  ["مش",[["mish",0]],"not, isn't",[],"particle"],
+  ["ما",[["ma",0]],"not, didn't (negation)",[],"particle"],
+  ["بدّي",[["bid",0],["di",0]],"I want",[],"modal"],
+  ["رح",[["ra7",0]],"going to (future)",[],"particle"],
+  ["لازم",[["laa",0],["zim",0]],"must, have to",[],"modal"],
+  ["هاد",[["haad",0]],"this (m.)",[],"pronoun"],
+  ["هاي",[["haay",0]],"this (f.)",[],"pronoun"],
+  ["شي",[["shi",0]],"thing, something",[],"noun"],
+  ["ناس",[["naas",0]],"people",[],"noun"],
+  ["يوم",[["yoom",0]],"day",[],"noun"],
+  ["وقت",[["wa2t",0]],"time",[],"noun"],
+  ["أنتو",[["in",0],["to",0]],"you (pl.)",[],"pronoun"],
+  ["هنّي",[["hun",0],["ni",0]],"they",[],"pronoun"],
+  ["حكى",[["7a",0],["ka",0]],"spoke, talked",[],"verb"],
+  ["شاف",[["shaaf",0]],"saw",[],"verb"],
+  ["أجا",[["2a",0],["ja",0]],"came",[],"verb"],
+  ["راح",[["raa7",0]],"went",[],"verb"],
+  ["بيت",[["bayt",0]],"house, home",[],"noun"],
 ];
 
 
@@ -514,12 +533,14 @@ function nextWordToIntroduce(){
   // Next unlocked compound (all components introduced, compound itself not yet shown)
   let nextColl=-1;
   let nextCollRank=Infinity;
-  COLL.forEach((entry,ci)=>{
-    if(S.seenColls&&S.seenColls.includes(ci)) return; // already introduced
-    if(!collUnlocked(ci)) return;
-    const rank=entry[5]||999;
-    if(rank<nextCollRank){ nextCollRank=rank; nextColl=ci; }
-  });
+  if(activeCourse&&activeCourse().hasColls){
+    COLL.forEach((entry,ci)=>{
+      if(S.seenColls&&S.seenColls.includes(ci)) return; // already introduced
+      if(!collUnlocked(ci)) return;
+      const rank=entry[5]||999;
+      if(rank<nextCollRank){ nextCollRank=rank; nextColl=ci; }
+    });
+  }
 
   // Rule: individual spine words ALWAYS take priority over compounds.
   // A compound is never introduced before all its components AND before
@@ -871,7 +892,8 @@ function showTTSVoiceDetails(lang){
   const freshLang=lang||(typeof activeCourse==='function'&&activeCourse()?activeCourse().langCode:'zh-CN');
   const pool=_voices.length?_voices:speechSynthesis.getVoices();
   const freshMatching=pool.filter(v=>v&&v.lang&&v.lang.startsWith(freshLang.split('-')[0]));
-  try{ speak(freshLang.startsWith('ja')?'こんにちは':'你好', freshLang); }catch(e){}
+  const _testPhrase=freshLang.startsWith('ja')?'こんにちは':freshLang.startsWith('zh')?'你好':freshLang.startsWith('ar')?(activeCourse&&activeCourse().audioMap&&Object.keys(activeCourse().audioMap)[0])||'مرحبا':'hello';
+  try{ speak(_testPhrase, freshLang); }catch(e){}
   let msg='Available voices for '+freshLang+':\n\n';
   if(!freshMatching.length){
     msg+='(none installed)\n\n';
@@ -1143,6 +1165,12 @@ function _playStaticAudio(src, onDone){
     if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:src.split('/').pop(),lang:'static',modality:'static-audio'});
     return true;
   }catch(e){ return false; }
+}
+
+function charFont(){
+  const c=activeCourse?activeCourse():null;
+  if(c&&c.script==='rtl') return "font-family:'Noto Naskh Arabic','Arabic Typesetting','Arial Unicode MS',sans-serif";
+  return "font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 }
 
 function speak(text,lang,onDone){

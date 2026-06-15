@@ -141,6 +141,30 @@ At mastery ≥ 2 (familiar tier), word audio could come from authentic speech cl
 - [ ] Gender voice toggle: `getBestVoice(lang, genderHint)` extension. Target language defaults to one gender, native language to the opposing gender — perceptual channel that distinguishes "this is the thing you're learning" from "this is the translation." Gender inferred from voice name (Naayf/Zayd = male; Heba/Hala/Layla = female).
 - [ ] TTS debug panel: add Arabic voice list alongside zh/ja panels.
 
+## Phonological Tracking (design only — do not build yet)
+
+**Premise:** phonological categories are not introduced proactively. The learner first builds conceptual/semantic grounding. Phonological awareness is triggered diagnostically — when the data shows the learner needs it, not on a fixed schedule. This mirrors the Mandarin tone drill design: gated behind `exp > 0` and meaning stage ≥ 2. For Arabic the delta is larger (pharyngeals, emphatics are not approximatable from English phonology), so the trigger matters more, but the principle is the same.
+
+**Trigger conditions (any one suffices):**
+- Learner has ≥ 3 seen words containing phoneme P, and error rate on those words exceeds threshold (e.g. > 40% over last 10 attempts)
+- A near-homophone confusion is detected: learner errors on word A with a response that matches word B where A and B differ only in phoneme P
+- Learner explicitly requests phonological review (future UI)
+
+**What fires:** a dedicated phonological anchor card for phoneme P — audio-primary, minimal text. Shows the phoneme in isolation, then in a known word. Not MC-testable in isolation; mastery signal is indirect (downstream error rate on words containing P).
+
+**Data schema prerequisite:** D[] entries need a `phonemes` field — array of phoneme codes present in the word (e.g. `['3yn', 'aa']`). This is the seam that lets the diagnostic fire. Add to D_AR entries when expanding the lexicon; do not retrofit retroactively until the trigger logic is built.
+
+**Long-term:** phonological tracking as an independent axis (parallel to grammar), with per-phoneme SRS schedules and per-learner acquisition curves. The aptitude signal here is rich — speed of pharyngeal/emphatic acquisition varies enormously across adult learners and is likely the most linguistically-interesting measurement axis the app can generate.
+
+**Open questions not yet resolved:**
+- Are emphatics acquirable through passive exposure alone (vowel-colouring effect is perceptible)? Probably yes for most learners.
+- Are pharyngeals (ع ح) acquirable without explicit intervention? Probably not — an English speaker may permanently process ع as a vowel onset without a deliberate anchor.
+- What is the minimum number of exposures before the diagnostic should be considered "given a chance to work"? Threshold is a tunable parameter; start conservative (N=5, err>50%) and instrument.
+
+**Do not build until:** D_AR has enough vocabulary that near-homophone and error-rate signals are meaningful (target: ≥ 30 words in the deck).
+
+---
+
 ## Grammar Track Re-integration
 
 Grammar drills are **disabled in the main study flow** (`dueDrills=[]` in `buildStudyQueue`). Still reachable via the GRAMMAR DRILL debug button. The `toneAdvancedUnlocked()` gate (40+ grammar attempts, 3+ categories) is currently unreachable.
@@ -152,6 +176,23 @@ Grammar drills are **disabled in the main study flow** (`dueDrills=[]` in `build
 2. Gate each grammar drill axis on `seen:true` for the relevant metalanguage card — same invariant enforced for sentence components.
 3. Re-enable grammar in `buildStudyQueue` once the gate is wired.
 4. Open design question: `POS_LOGICAL` maps English POS names to Chinese. The gate needs a join between the POS axis and the `D[]` metalanguage entry for that category.
+
+## Arabic Dialect Architecture
+
+**Current state:** MSA and Levantine Arabic are fully separate courses. This is correct for now.
+
+**Divergence point:** D_AR as a shared base is sufficient through approximately the first 25–35 words — the cement layer (prepositions, pronouns, interrogatives, particles) has substantial overlap across registers, with differences that are largely phonological (ق→2 in Levantine, ث→t, etc.) rather than lexical. The divergence becomes structural at the verb system. Levantine present tense uses a b- prefix conjugation (بحكي، بتحكي، بيحكي) that has no MSA equivalent. From that point, the two registers require genuinely different lexical entries, not just different audio or romanization.
+
+**Long-term target: shared Arabic trunk.** The function-word and cement-atom layer is a genuine shared base that a learner of either register benefits from. The architecture that serves this:
+- An `'arabic-core'` course holding the shared trunk (prepositions, pronouns, interrogatives, particles, phonological anchors)
+- `'arabic-levantine'` and `'arabic-msa'` as child courses that inherit the trunk and add register-specific verb systems, vocabulary, and conjugation patterns
+- Engine support for course inheritance (not yet designed; do not build until Arabic content forces the shape)
+
+**`rootSystem: 'semitic'`** field in COURSES (planned, not yet implemented) will group Arabic dialects and MSA under a common family for scheduling and prerequisite-graph purposes. The triconsonantal root system is a first-class concept in the prerequisite graph: a root (ك-ت-ب) is a node; derived forms (كتب، كاتب، مكتوب) are children. This is the structure Arabic *forces* into the engine that Mandarin lets us fake.
+
+**Immediate action:** none. Continue building D_AR as Levantine-specific. Flag entries that are register-neutral (shared trunk candidates) with a comment as the deck grows — this will make the eventual trunk extraction straightforward.
+
+---
 
 ## Language-Agnostic Engine — Program Arc (North Star)
 
