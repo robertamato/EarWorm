@@ -979,11 +979,65 @@ function primeSpeechEngine(lang, onReady){
 // so stale callbacks from superseded cards/sequences are silent no-ops.
 let _ttsGen=0;
 
+// --- TTS pause/resume recovery -----------------------------------------------
+// Tracks the last text/lang passed to speak() so we can replay on tab-return.
+// iOS/Android kills synthesis when the page is backgrounded; resume() silently
+// fails, so we cancel the dead utterance and re-speak from scratch.
+let _lastSpokenText=null, _lastSpokenLang=null;
+
+// --- Silent pre-warm queue ---------------------------------------------------
+// After real TTS ends, speak upcoming cards at volume=0 to warm the SAPI
+// engine so the next real card fires immediately without the first-request lag.
+// Only works for local (SAPI) voices; online/neural voices ignore volume=0.
+let _prewarmQueue=[], _prewarmActive=false;
+
+function scheduleTTSPrewarm(items){
+  _prewarmQueue=items?[...items].filter(Boolean):[];
+}
+
+function _doPrewarm(){
+  if(_prewarmActive||!_prewarmQueue.length) return;
+  if(typeof speechSynthesis==='undefined'||speechSynthesis.speaking||speechSynthesis.pending) return;
+  const item=_prewarmQueue.shift();
+  if(!item||!item.text) return;
+  _prewarmActive=true;
+  try{
+    const u=new SpeechSynthesisUtterance(item.text);
+    u.lang=item.lang||'zh-CN'; u.volume=0; u.rate=1;
+    const v=getBestVoice(item.lang||'zh-CN');
+    if(v) u.voice=v;
+    const done=()=>{ _prewarmActive=false; if(_prewarmQueue.length) setTimeout(_doPrewarm,80); };
+    u.onend=done; u.onerror=done;
+    speechSynthesis.speak(u);
+  }catch(e){ _prewarmActive=false; }
+}
+
+if(typeof document!=='undefined'){
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden) return;
+    if(typeof speechSynthesis==='undefined') return;
+    if(speechSynthesis.paused||(speechSynthesis.speaking&&_lastSpokenText)){
+      try{ speechSynthesis.cancel(); }catch(e){}
+      _prewarmActive=false;
+      if(_lastSpokenText){
+        const t=_lastSpokenText, l=_lastSpokenLang;
+        setTimeout(function(){
+          try{ if(typeof S!=='undefined'&&S.sound==='mute') return; }catch(e){}
+          speak(t,l);
+        },350);
+      }
+    }
+  });
+}
+
 function speak(text,lang,onDone){
   if(!lang) lang=activeCourse?activeCourse().langCode:'zh-CN';
   if(S.sound==='mute'){ if(onDone) onDone(); return; }
   try{
     const gen=++_ttsGen;
+    _lastSpokenText=text; _lastSpokenLang=lang;
+    // Real speech starting — any pending prewarm is now stale; cancel before SAPI sees it
+    _prewarmQueue=[]; _prewarmActive=false;
     // Refresh voice list under gesture if not yet loaded (voiceschanged can be racy on first gesture)
     if(!_voices.length){ try{ const v=speechSynthesis.getVoices(); if(v&&v.length) _voices=v; }catch(e){} }
     // Resume before cancel — cancel on a paused engine can deepen the pause on some SAPI versions
@@ -1006,6 +1060,8 @@ function speak(text,lang,onDone){
       fired=true;
       if(!cancelled&&onDone) onDone();
       if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{card:cardCtx,gen:gen});
+      // Kick off silent pre-warm for upcoming cards (noop if nothing queued)
+      if(!cancelled) setTimeout(_doPrewarm,150);
     };
     u.onend=()=>finish(false);
     u.onerror=(ev)=>{
@@ -1049,6 +1105,54 @@ function speak(text,lang,onDone){
     }else{
       speechSynthesis.speak(u);
     }
+  }catch(e){ if(onDone) onDone(); }
+}
+
+// "doo do" error tone — descending tritone (≈E4 → B♭3) played as two sequential
+// triangle-wave notes. Each note carries a paired oscillator detuned by +3 Hz,
+// creating a ~3 Hz beat that adds a gentle "wah" tremolo. A small downward pitch
+// glide on each note (≈13 Hz) approximates a muted-trombone formant shift.
+// Contrast with beepBlank: lower register, sequential not simultaneous, descending,
+// dissonant (tritone vs. fifth) — clearly "not correct" without being punishing.
+// onDone fires at 520 ms.
+function beepError(onDone){
+  if(S.sound==='mute'){ if(onDone) onDone(); return; }
+  try{
+    const ctx=getAudioCtx();
+    if(!ctx){ if(onDone) setTimeout(onDone,520); return; }
+    const t=ctx.currentTime;
+    // "doo" — near E4, glides 336→323 Hz over 270 ms
+    const g1=ctx.createGain(); g1.connect(ctx.destination);
+    g1.gain.setValueAtTime(0,t);
+    g1.gain.linearRampToValueAtTime(0.13,t+0.018);
+    g1.gain.exponentialRampToValueAtTime(0.001,t+0.27);
+    const o1a=ctx.createOscillator(); o1a.type='triangle';
+    o1a.frequency.setValueAtTime(336,t); o1a.frequency.linearRampToValueAtTime(323,t+0.27);
+    o1a.connect(g1); o1a.start(t); o1a.stop(t+0.27);
+    const g1b=ctx.createGain(); g1b.connect(ctx.destination);
+    g1b.gain.setValueAtTime(0,t);
+    g1b.gain.linearRampToValueAtTime(0.038,t+0.018);
+    g1b.gain.exponentialRampToValueAtTime(0.001,t+0.27);
+    const o1b=ctx.createOscillator(); o1b.type='triangle';
+    o1b.frequency.setValueAtTime(339,t); o1b.frequency.linearRampToValueAtTime(326,t+0.27);
+    o1b.connect(g1b); o1b.start(t); o1b.stop(t+0.27);
+    // "do" — near B♭3, glides 239→228 Hz over 210 ms, starts after 55 ms gap
+    const t2=t+0.325;
+    const g2=ctx.createGain(); g2.connect(ctx.destination);
+    g2.gain.setValueAtTime(0,t2);
+    g2.gain.linearRampToValueAtTime(0.10,t2+0.012);
+    g2.gain.exponentialRampToValueAtTime(0.001,t2+0.21);
+    const o2a=ctx.createOscillator(); o2a.type='triangle';
+    o2a.frequency.setValueAtTime(239,t2); o2a.frequency.linearRampToValueAtTime(228,t2+0.21);
+    o2a.connect(g2); o2a.start(t2); o2a.stop(t2+0.21);
+    const g2b=ctx.createGain(); g2b.connect(ctx.destination);
+    g2b.gain.setValueAtTime(0,t2);
+    g2b.gain.linearRampToValueAtTime(0.028,t2+0.012);
+    g2b.gain.exponentialRampToValueAtTime(0.001,t2+0.21);
+    const o2b=ctx.createOscillator(); o2b.type='triangle';
+    o2b.frequency.setValueAtTime(242,t2); o2b.frequency.linearRampToValueAtTime(231,t2+0.21);
+    o2b.connect(g2b); o2b.start(t2); o2b.stop(t2+0.21);
+    if(onDone) setTimeout(onDone,520);
   }catch(e){ if(onDone) onDone(); }
 }
 
@@ -2775,6 +2879,24 @@ function nextStudyCard(){
 // Single place for session-level modality overrides (studyFlashOnly and studyModalityFilter).
 // Returns a concrete mod string if an override applies, otherwise null
 // (caller then chooses v2 Scheduler.modality or v1 wordModalityFromAxes).
+// Populate the TTS pre-warm queue with the next 2-3 upcoming vocab cards.
+// scheduleTTSPrewarm() is defined in data.js; _doPrewarm() fires it after real TTS ends.
+// Only effective for local (SAPI) voices — best-effort, never blocks study flow.
+// Note: under v2 scheduler policy studyQueue may be stale; pre-warm degrades gracefully.
+function schedulePrewarmFromQueue(){
+  if(typeof scheduleTTSPrewarm!=='function') return;
+  try{
+    const lang=activeCourse().langCode;
+    const items=[];
+    for(let s=studyIdx; s<Math.min(studyIdx+3,studyQueue.length); s++){
+      const qi=studyQueue[s];
+      if(qi==null||isGrammarKey(qi)||qi<0||qi>=D.length) continue;
+      items.push({text:D[qi][0], lang});
+    }
+    scheduleTTSPrewarm(items);
+  }catch(e){}
+}
+
 function resolveStudyModality(i){
   if(studyFlashOnly) return 'flash';
   if(studyModalityFilter==='mc'){
@@ -2799,6 +2921,7 @@ function showStudyCard(i){
   if(studyCardCount===1&&window.EW&&EW.obs) EW.obs.logEvent('session:firstFlash',{idx:i});
   sessionRecentCards.push(i);
   if(sessionRecentCards.length>RECENCY_WINDOW) sessionRecentCards.shift();
+  schedulePrewarmFromQueue();
 
   // Colloquialism interjection: only show if unlocked, frequency-ranked
   // Fire every ~11 cards but only show the highest-priority unlocked coll
@@ -3138,6 +3261,7 @@ function pickStudyMC(btn,chosen,correct,i){
 
   logAnswer(i,isCorrect, mcReverse?'mc-rev':'mc-fwd', Date.now()-cardShownAtMC);
   if(!isCorrect){
+    if(typeof beepError==='function') beepError();
     // Classify distractor error for targeted re-scheduling
     const errType=classifyDistractorError(i,chosen);
     const ci2=card(i);
@@ -3216,11 +3340,39 @@ function pickStudyMC(btn,chosen,correct,i){
 }
 
 /* --- Study Tone Interjection --- */
+
+// Stage 4 (no character, pure listening) is an advanced modality that presupposes
+// both a critical vocabulary mass and grammar engagement sufficient to have
+// internalized how tone works as a linguistic concept.
+// Until both conditions are met, the learner benefits more from character-visible
+// stages (1–3) that pair the written form with its tone — i.e., familiarization.
+function toneAdvancedUnlocked(){
+  // Vocabulary gate: 150 introduced words means enough target-language exposure
+  // that explicit character/tone pairing is no longer the primary learning need.
+  const vocabCount=typeof introducedCount==='function'?introducedCount():0;
+  if(vocabCount<150) return false;
+  // Grammar engagement gate: meaningful practice across categories shows the learner
+  // has developed a working model of the language — the cognitive foundation for
+  // audio-only tone recognition without visual anchors.
+  const gm=S.grammarMastery;
+  if(!gm) return false;
+  let totalAttempts=0, engagedCats=0;
+  Object.keys(gm).forEach(cat=>{
+    const g=gm[cat];
+    if(!g) return;
+    totalAttempts+=(g.attempts||0);
+    if((g.attempts||0)>=10) engagedCats++;
+  });
+  return totalAttempts>=40&&engagedCats>=3;
+}
+
 function toneStage(mastery){
   if(mastery<1.0) return 1; // char+pinyin shown, audio plays — associate mark with sound
   if(mastery<2.0) return 2; // char only, audio plays — identify by ear
-  if(mastery<3.0) return 3; // char only, NO audio until after answer — read the tone
-  return 4;                  // no char in audio mode — pure listening
+  // Stage 4 (no character) only unlocks after sufficient vocabulary and grammar engagement.
+  // Until then, stay in stage 3 regardless of per-word mastery.
+  if(mastery<3.0||!toneAdvancedUnlocked()) return 3; // char visible, no audio until answer
+  return 4;                  // no char, pure listening — advanced; requires vocab+grammar maturity
 }
 
 function showStudyTone(i){
@@ -3237,16 +3389,27 @@ function showStudyTone(i){
   // Stage label tells user what kind of question this is
   const stageLabels={1:'TONE · LISTEN',2:'TONE · LISTEN',3:'TONE · READ',4:'TONE · LISTEN ONLY'};
   $('studyMode').textContent=stageLabels[stage];
+  // Single managed replay timer -- cancelled on correct tap, skip, don't-know, or manual replay.
+  // Prevents multiple wrong taps stacking competing speak() calls that cause SAPI errors.
+  let replayTimer=null;
+  function cancelReplay(){ if(replayTimer){ clearTimeout(replayTimer); replayTimer=null; } }
+  function scheduleReplay(){
+    cancelReplay();
+    if(S.sound==='mute') return;
+    replayTimer=setTimeout(()=>{ replayTimer=null; if(!toneLocked) speak(ch,activeCourse().langCode); },650);
+  }
+
   // Tap tone prompt to replay audio (before answer)
   $('studyTonePrompt').onclick=(e)=>{
     if(toneLocked) return;
+    cancelReplay(); // prevent timer from double-speaking after manual replay
     if(S.sound!=='mute') speak(D[i][0],activeCourse().langCode);
     e.stopPropagation();
   };
   // Rings and wager
   renderChallengeRings(i,'tone',$('studyTonePrompt'));
   cardShownAtMC=Date.now();
-  studyDontKnowAction=()=>{ if(toneLocked) return; toneLocked=true; studyPending.push(i); armTapAdvance($('studyTone'),()=>nextStudyCard(),0); };
+  studyDontKnowAction=()=>{ if(toneLocked) return; cancelReplay(); toneLocked=true; studyPending.push(i); armTapAdvance($('studyTone'),()=>nextStudyCard(),0); };
   renderWagerControl('studyToneWager',i);
 
   // Show/hide character based on stage
@@ -3285,8 +3448,11 @@ function showStudyTone(i){
   // Audio: stages 1,2,4 play immediately; stage 3 waits until after answer
   if(stage!==3 && S.sound!=='mute') speak(ch,activeCourse().langCode);
 
-  // Build tone buttons
+  // Build tone buttons -- force-correct paradigm:
+  // wrong tap -> error sound + dim button + audio replay; card stays live until correct tone found.
+  // Scored on first-try result: finding the right tone eventually doesn't erase the initial miss.
   const box=$('studyToneChoices'); box.innerHTML='';
+  let wrongTaps=0; // wrong attempts before correct tone found this card
   [1,2,3,4,0].forEach(t=>{
     const b=document.createElement('button');
     b.className='tone-btn';
@@ -3295,45 +3461,60 @@ function showStudyTone(i){
     b.innerHTML='<span style="font-size:22px">'+sym+'</span>';
     b.onclick=()=>{
       try{
-      if(toneLocked) return; toneLocked=true;
+      if(toneLocked) return;
       const ok=t===primaryTone;
+
+      if(!ok){
+        // Wrong tap: signal the error, dim this button, replay audio scaffold, stay on card
+        wrongTaps++;
+        b.style.opacity='0.2';
+        b.style.pointerEvents='none';
+        if(typeof beepError==='function') beepError();
+        scheduleReplay(); // single managed timer -- no stacking across multiple wrong taps
+        return; // do NOT lock -- remaining buttons stay active
+      }
+
+      // Correct tap -- cancel any pending replay, then close the loop
+      cancelReplay();
+      toneLocked=true;
+      const firstTry=wrongTaps===0;
 
       document.querySelectorAll('#studyToneChoices .tone-btn').forEach(tb=>{
         const bt=[1,2,3,4,0][Array.from(tb.parentNode.children).indexOf(tb)];
         if(bt===primaryTone) tb.classList.add('correct');
-        else if(tb===b&&!ok) tb.classList.add('wrong');
         tb.style.pointerEvents='none';
       });
 
-      // Always reveal pinyin with tone colors after answer
+      // Reveal pinyin with tone colors
       py.innerHTML=''; py.style.opacity='1';
       const ink=getComputedStyle(document.body).color;
-      syls.forEach(([s,t])=>{
+      syls.forEach(([s,st])=>{
         const sp=document.createElement('span');
-        sp.textContent=s+' '; sp.style.color=toneColor(t,ink);
+        sp.textContent=s+' '; sp.style.color=toneColor(st,ink);
         py.appendChild(sp);
       });
 
-      // Stage 3: audio plays only after answer (reward/reveal)
+      // Audio reveal on correct tap (covers stage 3 -- this IS the "after answer" moment)
       if(S.sound!=='mute') speak(ch,activeCourse().langCode);
 
-      // Stage 4: reveal character after answer
+      // Stage 4: reveal character
       if(stage===4){
         $('studyToneChar').textContent=ch;
         $('studyToneChar').style.fontFamily=CJKf.split(':')[1];
         $('studyToneChar').style.textDecoration='none';
       }
 
+      // Score on first-try correctness -- finding the right tone eventually doesn't erase the miss
       const toneMs=Date.now()-cardShownAtMC;
-      recordChallengeResult(i,'tone',ok,toneMs);
-      recordWagerDecision(i,ok,currentMultIdx,defaultMultIdx,toneMs);
-      logAnswer(i,ok,'tone',toneMs);
+      recordChallengeResult(i,'tone',firstTry,toneMs);
+      recordWagerDecision(i,firstTry,currentMultIdx,defaultMultIdx,toneMs);
+      logAnswer(i,firstTry,'tone',toneMs);
       const tSpeedM=toneMs<1500?1.3:toneMs<4000?1.0:0.8;
-      if(ok){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,toneMs)*fatigueXPMultiplier()); addMastery(i,0.25*tSpeedM); }
+      if(firstTry){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,toneMs)*fatigueXPMultiplier()); addMastery(i,0.25*tSpeedM); }
       else { resetMult(); addMastery(i,-0.1); studyPending.push(i); }
       save();
-      $('studyTonePrompt').onclick=null; // remove replay handler — tap now advances
-      armTapAdvance($('studyTone'),()=>nextStudyCard(),ok?0:1200);
+      $('studyTonePrompt').onclick=null;
+      armTapAdvance($('studyTone'),()=>nextStudyCard(),0); // no hold -- they did the work finding the tone
       }catch(e){ document.title='TONE:'+e.message.slice(0,40); throw e; }
     };
     box.appendChild(b);
@@ -3347,7 +3528,7 @@ function showStudyTone(i){
   const skipBtn=document.createElement('button');
   skipBtn.style.cssText='font-family:inherit;font-size:8px;padding:8px;border:2px solid '+fg+';background:transparent;color:'+fg+';cursor:pointer;width:100%;opacity:.45;';
   skipBtn.textContent='✕ SKIP  (loud environment)';
-  skipBtn.onclick=(e)=>{ e.stopPropagation(); if(toneLocked) return; toneLocked=true; setTimeout(()=>nextStudyCard(),150); };
+  skipBtn.onclick=(e)=>{ e.stopPropagation(); if(toneLocked) return; cancelReplay(); toneLocked=true; setTimeout(()=>nextStudyCard(),150); };
   skipRow.appendChild(skipBtn);
   $('studyTone').appendChild(skipRow);
 

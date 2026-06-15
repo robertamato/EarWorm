@@ -979,11 +979,65 @@ function primeSpeechEngine(lang, onReady){
 // so stale callbacks from superseded cards/sequences are silent no-ops.
 let _ttsGen=0;
 
+// --- TTS pause/resume recovery -----------------------------------------------
+// Tracks the last text/lang passed to speak() so we can replay on tab-return.
+// iOS/Android kills synthesis when the page is backgrounded; resume() silently
+// fails, so we cancel the dead utterance and re-speak from scratch.
+let _lastSpokenText=null, _lastSpokenLang=null;
+
+// --- Silent pre-warm queue ---------------------------------------------------
+// After real TTS ends, speak upcoming cards at volume=0 to warm the SAPI
+// engine so the next real card fires immediately without the first-request lag.
+// Only works for local (SAPI) voices; online/neural voices ignore volume=0.
+let _prewarmQueue=[], _prewarmActive=false;
+
+function scheduleTTSPrewarm(items){
+  _prewarmQueue=items?[...items].filter(Boolean):[];
+}
+
+function _doPrewarm(){
+  if(_prewarmActive||!_prewarmQueue.length) return;
+  if(typeof speechSynthesis==='undefined'||speechSynthesis.speaking||speechSynthesis.pending) return;
+  const item=_prewarmQueue.shift();
+  if(!item||!item.text) return;
+  _prewarmActive=true;
+  try{
+    const u=new SpeechSynthesisUtterance(item.text);
+    u.lang=item.lang||'zh-CN'; u.volume=0; u.rate=1;
+    const v=getBestVoice(item.lang||'zh-CN');
+    if(v) u.voice=v;
+    const done=()=>{ _prewarmActive=false; if(_prewarmQueue.length) setTimeout(_doPrewarm,80); };
+    u.onend=done; u.onerror=done;
+    speechSynthesis.speak(u);
+  }catch(e){ _prewarmActive=false; }
+}
+
+if(typeof document!=='undefined'){
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden) return;
+    if(typeof speechSynthesis==='undefined') return;
+    if(speechSynthesis.paused||(speechSynthesis.speaking&&_lastSpokenText)){
+      try{ speechSynthesis.cancel(); }catch(e){}
+      _prewarmActive=false;
+      if(_lastSpokenText){
+        const t=_lastSpokenText, l=_lastSpokenLang;
+        setTimeout(function(){
+          try{ if(typeof S!=='undefined'&&S.sound==='mute') return; }catch(e){}
+          speak(t,l);
+        },350);
+      }
+    }
+  });
+}
+
 function speak(text,lang,onDone){
   if(!lang) lang=activeCourse?activeCourse().langCode:'zh-CN';
   if(S.sound==='mute'){ if(onDone) onDone(); return; }
   try{
     const gen=++_ttsGen;
+    _lastSpokenText=text; _lastSpokenLang=lang;
+    // Real speech starting — any pending prewarm is now stale; cancel before SAPI sees it
+    _prewarmQueue=[]; _prewarmActive=false;
     // Refresh voice list under gesture if not yet loaded (voiceschanged can be racy on first gesture)
     if(!_voices.length){ try{ const v=speechSynthesis.getVoices(); if(v&&v.length) _voices=v; }catch(e){} }
     // Resume before cancel — cancel on a paused engine can deepen the pause on some SAPI versions
@@ -1006,6 +1060,8 @@ function speak(text,lang,onDone){
       fired=true;
       if(!cancelled&&onDone) onDone();
       if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{card:cardCtx,gen:gen});
+      // Kick off silent pre-warm for upcoming cards (noop if nothing queued)
+      if(!cancelled) setTimeout(_doPrewarm,150);
     };
     u.onend=()=>finish(false);
     u.onerror=(ev)=>{
@@ -1049,6 +1105,54 @@ function speak(text,lang,onDone){
     }else{
       speechSynthesis.speak(u);
     }
+  }catch(e){ if(onDone) onDone(); }
+}
+
+// "doo do" error tone — descending tritone (≈E4 → B♭3) played as two sequential
+// triangle-wave notes. Each note carries a paired oscillator detuned by +3 Hz,
+// creating a ~3 Hz beat that adds a gentle "wah" tremolo. A small downward pitch
+// glide on each note (≈13 Hz) approximates a muted-trombone formant shift.
+// Contrast with beepBlank: lower register, sequential not simultaneous, descending,
+// dissonant (tritone vs. fifth) — clearly "not correct" without being punishing.
+// onDone fires at 520 ms.
+function beepError(onDone){
+  if(S.sound==='mute'){ if(onDone) onDone(); return; }
+  try{
+    const ctx=getAudioCtx();
+    if(!ctx){ if(onDone) setTimeout(onDone,520); return; }
+    const t=ctx.currentTime;
+    // "doo" — near E4, glides 336→323 Hz over 270 ms
+    const g1=ctx.createGain(); g1.connect(ctx.destination);
+    g1.gain.setValueAtTime(0,t);
+    g1.gain.linearRampToValueAtTime(0.13,t+0.018);
+    g1.gain.exponentialRampToValueAtTime(0.001,t+0.27);
+    const o1a=ctx.createOscillator(); o1a.type='triangle';
+    o1a.frequency.setValueAtTime(336,t); o1a.frequency.linearRampToValueAtTime(323,t+0.27);
+    o1a.connect(g1); o1a.start(t); o1a.stop(t+0.27);
+    const g1b=ctx.createGain(); g1b.connect(ctx.destination);
+    g1b.gain.setValueAtTime(0,t);
+    g1b.gain.linearRampToValueAtTime(0.038,t+0.018);
+    g1b.gain.exponentialRampToValueAtTime(0.001,t+0.27);
+    const o1b=ctx.createOscillator(); o1b.type='triangle';
+    o1b.frequency.setValueAtTime(339,t); o1b.frequency.linearRampToValueAtTime(326,t+0.27);
+    o1b.connect(g1b); o1b.start(t); o1b.stop(t+0.27);
+    // "do" — near B♭3, glides 239→228 Hz over 210 ms, starts after 55 ms gap
+    const t2=t+0.325;
+    const g2=ctx.createGain(); g2.connect(ctx.destination);
+    g2.gain.setValueAtTime(0,t2);
+    g2.gain.linearRampToValueAtTime(0.10,t2+0.012);
+    g2.gain.exponentialRampToValueAtTime(0.001,t2+0.21);
+    const o2a=ctx.createOscillator(); o2a.type='triangle';
+    o2a.frequency.setValueAtTime(239,t2); o2a.frequency.linearRampToValueAtTime(228,t2+0.21);
+    o2a.connect(g2); o2a.start(t2); o2a.stop(t2+0.21);
+    const g2b=ctx.createGain(); g2b.connect(ctx.destination);
+    g2b.gain.setValueAtTime(0,t2);
+    g2b.gain.linearRampToValueAtTime(0.028,t2+0.012);
+    g2b.gain.exponentialRampToValueAtTime(0.001,t2+0.21);
+    const o2b=ctx.createOscillator(); o2b.type='triangle';
+    o2b.frequency.setValueAtTime(242,t2); o2b.frequency.linearRampToValueAtTime(231,t2+0.21);
+    o2b.connect(g2b); o2b.start(t2); o2b.stop(t2+0.21);
+    if(onDone) setTimeout(onDone,520);
   }catch(e){ if(onDone) onDone(); }
 }
 
