@@ -332,13 +332,13 @@ let studyActive=false;
 
 // Per-word encounter count across this study session
 const studyEncounters=new Map(); // idx -> count
-const sessionRecentCards=[]; // ring buffer — last N vocab card indices shown
-const sessionAnswerRing=[]; // ring buffer — last M answer booleans (true=correct)
+let sessionRecentCards=[]; // ring buffer — last N vocab card indices shown
+let sessionAnswerRing=[]; // ring buffer — last M answer booleans (true=correct)
 const RECENCY_WINDOW=10;
 const ANSWER_RING_SIZE=15;
 
 function wordModality(i){
-  // Not yet MC-eligible: always flashcard
+  // === DEPRECATED LEGACY (pre-FromAxes, pre-Scheduler) — no direct callers in primary paths
   if(!isMCEligible(i)) return 'flash';
 
   // MC-eligible: mastery drives flashcard probability
@@ -368,7 +368,26 @@ function grammarAxisFromKey(k){
   return GRAMMAR_AXES[enc%10]||'recognition';
 }
 
+// Single explicit session-state bag for Scheduler.next and Scheduler.modality.
+// Prefers State._s._session when populated by the bridge (v2 path).
+// Falls back to legacy globals for v1 / early migration.
+function buildSessionState(){
+  const sess=(typeof State!=='undefined'&&State._s&&State._s._session)?State._s._session:null;
+  return {
+    studyCardCount,
+    studyFlashOnly,
+    studyModalityFilter,
+    studyPending: sess&&Array.isArray(sess.studyPending)?[...sess.studyPending]:[...studyPending],
+    sessionGrammarAnswered: sess&&sess.grammarAnswered?new Set(sess.grammarAnswered):new Set(sessionGrammarAnswered),
+    studyEncounters: sess&&sess.studyEncounters?new Map(Object.entries(sess.studyEncounters).map(([k,v])=>[Number(k),v])):new Map(studyEncounters),
+    sessionRecentCards: sess&&Array.isArray(sess.sessionRecentCards)?[...sess.sessionRecentCards]:[...sessionRecentCards],
+    sessionAnswerRing: sess&&Array.isArray(sess.sessionAnswerRing)?[...sess.sessionAnswerRing]:[...sessionAnswerRing],
+    nextQueueRebuildAt
+  };
+}
+
 function buildStudyQueue(){
+  // === LEGACY v1 (only used in !policy paths or for compatibility in some v2 fallbacks) ===
   // THREE POOLS interleaved:
   // GRAMMAR: due category drills (language-agnostic) — negative keys
   // VOCABULARY: due word cards (language-specific) — D array indices
@@ -450,6 +469,7 @@ let studyModalityFilter=null; // null=all, 'flash','grammar','mc','tone','pos'
 const sessionGrammarAnswered=new Set(); // cats answered correctly this session
 function startStudy(flashOnly){
   studyFlashOnly=!!flashOnly;
+  if(window.EW&&EW.obs) EW.obs.logEvent('session:start',{flashOnly:!!flashOnly,policy:newSchedulerPolicy()});
   // Don't call load() here — state was loaded at page init
   // Calling load() again would overwrite in-memory state with stale localStorage
   nextQueueRebuildAt=0;
@@ -500,6 +520,7 @@ function startStudy(flashOnly){
 }
 
 function getIntroEvery(){
+  // === LEGACY v1 (adaptive intro cadence) — under policy, Scheduler.next handles introduces
   const n=sessionAnswerRing.length;
   if(n<5) return 4; // not enough data yet
   const correct=sessionAnswerRing.filter(Boolean).length;
@@ -520,6 +541,58 @@ function nextStudyCard(){
     studyIdx=0;
     scheduleNextQueueRebuild();
   }
+
+  // CLEAN MIGRATION: when policy is on, delegate to pure Scheduler.next (L3).
+  // Returns early after showing the card; v1 path below is preserved for rollback.
+  if(newSchedulerPolicy()){
+    try{
+      const schedState=(typeof State!=='undefined'&&State._s)?State._s:S;
+      const sessionState=buildSessionState();
+      const decision=Scheduler.next(schedState,D,sessionState);
+      if(window.EW&&EW.obs) EW.obs.logEvent('study:next',{type:decision&&decision.type,reason:decision&&decision.reason,idx:decision&&decision.idx,source:'v2-scheduler'});
+      if(decision){
+        if((decision.type==='pending'||decision.pending)&&decision.pending){
+          const pending=decision.pending;
+          const reIdx=typeof pending==='object'?pending.idx:pending;
+          const reMod=typeof pending==='object'?pending.mod:null;
+          if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
+            const reCat=grammarCatFromKey(reIdx);
+            if(reCat){ showGrammarDrill(reCat); return; }
+          }
+          if(reMod&&reMod!=='flash'){
+            lastModality.set(reIdx,reMod);
+            if(reMod==='convergence'){ showConvergenceQuestion(reIdx); return; }
+            if(reMod==='cloze'){ showStudyCloze(reIdx); return; }
+            if(reMod==='word-order'){ showWordOrderDrill(reIdx); return; }
+            if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
+              const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
+              showStudyPOSStaged(reIdx,ps); return;
+            }
+            showStudyMC(reIdx,reMod==='mc-rev'); return;
+          }
+          showStudyCard(reIdx); return;
+        }
+        if(decision.type==='introduce'&&decision.idx>=0){
+          showStudyCard(decision.idx); return;
+        }
+        if(decision.idx>=0){
+          if(isGrammarKey(decision.idx)){
+            const cat=grammarCatFromKey(decision.idx);
+            const axis=grammarAxisFromKey(decision.idx);
+            if(cat&&!sessionGrammarAnswered.has(cat+':'+axis)){
+              showGrammarDrill(cat,axis); return;
+            }
+          }
+          showStudyCard(decision.idx); return;
+        }
+      }
+    }catch(e){
+      console.error('Scheduler.next v2 delegation failed, falling back to legacy loop',e);
+      if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'study-loop-v2'});
+    }
+  }
+
+  // === LEGACY v1 STUDY LOOP (only executed when policy is off or on v2 delegation fallback) ===
   const forceIntro=studyCardCount===1;
   if(!studyModalityFilter&&(forceIntro||studyCardCount%getIntroEvery()===0) && shouldIntroduceNewWord()){
     const newIdx=introduceNextWord();
@@ -600,12 +673,31 @@ function nextStudyCard(){
   showStudyCard(i);
 }
 
+// Single place for session-level modality overrides (studyFlashOnly and studyModalityFilter).
+// Returns a concrete mod string if an override applies, otherwise null
+// (caller then chooses v2 Scheduler.modality or v1 wordModalityFromAxes).
+function resolveStudyModality(i){
+  if(studyFlashOnly) return 'flash';
+  if(studyModalityFilter==='mc'){
+    const mstg=getAxisStage(i,'meaning');
+    if(mstg>=3&&clozeUnlocked(i)) return Math.random()<0.5?'cloze':'mc-rev';
+    return (card(i).exp||0)>0?'mc-fwd':'flash';
+  }
+  if(studyModalityFilter==='tone') return (card(i).exp||0)>0?'tone':'flash';
+  if(studyModalityFilter==='pos'){
+    const ps=Math.max(1,getAxisStage(i,'pos'));
+    return 'pos-s'+Math.min(ps,3);
+  }
+  return null;
+}
+
 function showStudyCard(i){
   if(i===undefined||i===null||isGrammarKey(i)||i<0||i>=D.length){ nextStudyCard(); return; }
   clearCardState();
   studyCardCount++;
   tickSessionCard();
   studyEncounters.set(i,(studyEncounters.get(i)||0)+1);
+  if(studyCardCount===1&&window.EW&&EW.obs) EW.obs.logEvent('session:firstFlash',{idx:i});
   sessionRecentCards.push(i);
   if(sessionRecentCards.length>RECENCY_WINDOW) sessionRecentCards.shift();
 
@@ -630,10 +722,22 @@ function showStudyCard(i){
     return;
   }
 
-  // Mastery-based modality — no session state, uses persistent mastery score
-  // Axis-stage driven modality — each word progresses through defined stages
-  let mod;
-  try{ mod=wordModalityFromAxes(i); }catch(e){ document.title='MOD:'+e.message+' stk:'+e.stack.slice(0,80); console.error('wordModality error',e); mod='mc-fwd'; }
+  // Modality: session overrides first, then v2 Scheduler or v1 wordModalityFromAxes
+  let mod=resolveStudyModality(i);
+  if(mod===null){
+    if(newSchedulerPolicy()){
+      try{
+        const schedState=(typeof State!=='undefined'&&State._s)?State._s:S;
+        mod=Scheduler.modality(schedState,D,i);
+        if(window.EW&&EW.obs) EW.obs.logEvent('study:modality',{item:i,mod:mod,source:'v2-scheduler'});
+      }catch(e){
+        console.error('Scheduler.modality fallback',e);
+        try{ mod=wordModalityFromAxes(i); }catch(_){ mod='mc-fwd'; }
+      }
+    } else {
+      try{ mod=wordModalityFromAxes(i); }catch(e){ document.title='MOD:'+e.message+' stk:'+e.stack.slice(0,80); console.error('wordModality error',e); mod='mc-fwd'; }
+    }
+  }
   // HARD INVARIANT: a word is NEVER presented in a test modality before it has
   // been shown as a flashcard. First contact is always recognition. If anything
   // resolves a non-flash modality for an unseen word (exp===0), force the
@@ -707,7 +811,11 @@ function showStudyFlash(i){
   syls.forEach(([s,t])=>{ const sp=document.createElement('span'); sp.textContent=s; sp.style.color=toneColor(t,fg); py.appendChild(sp); });
 
   // Fire TTS after hanzi+pinyin are in the DOM. 30ms lets SAPI settle after prime/cancel.
-  if(S.sound!=='mute') setTimeout(()=>speak(ch,activeCourse().langCode),30);
+  if(S.sound!=='mute'){
+    const isFirst=((studyEncounters.get(i)||0)===1);
+    if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{card:i,lang:activeCourse().langCode,firstInSession:isFirst});
+    setTimeout(()=>speak(ch,activeCourse().langCode),30);
+  }
 
   $('studyBackZone').style.display='none';
   $('studyFlipHint').style.display='block';
@@ -775,8 +883,13 @@ function showStudyMC(i, reverse, showPosHint){
   // Target-lang TTS deferred 30ms to let SAPI settle after prime/cancel.
   // English is immediate (en-US voice doesn't need settle time).
   if(S.sound!=='mute'){
-    if(!reverse) setTimeout(()=>speak(ch,activeCourse().langCode),30);
-    else speak(def,'en-US');
+    if(!reverse){
+      const isFirst=((studyEncounters.get(i)||0)===1);
+      if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{card:i,lang:activeCourse().langCode,firstInSession:isFirst});
+      setTimeout(()=>speak(ch,activeCourse().langCode),30);
+    } else {
+      speak(def,'en-US');
+    }
   }
   const fg=getComputedStyle(document.body).color;
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
@@ -1013,6 +1126,7 @@ function toneStage(mastery){
 
 function showStudyTone(i){
   toneCur=i; toneLocked=false;
+  activeCardIdx=i;
   rollBg();
   const [ch,syls]=D[i];
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
@@ -1161,6 +1275,24 @@ function logAnswer(i, isCorrect, modality, latencyMs){
   sessionAnswerRing.push(!!isCorrect);
   if(sessionAnswerRing.length>ANSWER_RING_SIZE) sessionAnswerRing.shift();
   applyAnswer(i, isCorrect, modality, latencyMs); // funnel: durable stats + telemetry
+}
+
+function logGrammarAnswer(cat, axis, isCorrect, latencyMs){
+  try{
+    const mod='grammar:'+(cat||'unknown')+(axis?':'+axis:'');
+    applyAnswer(-1, isCorrect, mod, latencyMs);
+    const pol=newSchedulerPolicy();
+    if(pol&&window.dispatchStudyAction){
+      try{
+        window.dispatchStudyAction('ANSWER_GRAMMAR',{
+          cat:cat,
+          axis:axis||'recognition',
+          isCorrect:!!isCorrect,
+          responseMs:(typeof latencyMs==='number'?latencyMs:null)
+        });
+      }catch(e){}
+    }
+  }catch(e){ try{ if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'logGrammarAnswer'}); }catch(_){} }
 }
 
 function showSummary(returnView){

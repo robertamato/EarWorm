@@ -135,22 +135,37 @@
   function ensureButton(){
     try{
       var panel = document.getElementById("debugModes");
-      if(!panel || document.getElementById("ew-obs-btn")) return;
-      var btn = document.createElement("button");
-      btn.id = "ew-obs-btn";
-      btn.className = "btn";
-      btn.style.cssText = "font-size:8px;opacity:.6";
-      btn.onclick = function(){
-        var recs = getErrors();
-        var lines = recs.slice(0,15).map(function(r){
-          return "[" + r.type + (r.count>1?(" x"+r.count):"") + "] " + r.message
-               + (r.info && r.info.lineno ? (" @"+r.info.lineno) : "");
-        });
-        dump(15);
-        try{ window.alert(recs.length ? lines.join("\n") : "No errors captured."); }catch(e){}
-      };
-      panel.appendChild(btn);
-      updateButton();
+      if(!panel) return;
+      if(!document.getElementById("ew-obs-btn")){
+        var btn = document.createElement("button");
+        btn.id = "ew-obs-btn";
+        btn.className = "btn";
+        btn.style.cssText = "font-size:8px;opacity:.6";
+        btn.onclick = function(){
+          var recs = getErrors();
+          var lines = recs.slice(0,15).map(function(r){
+            return "[" + r.type + (r.count>1?(" x"+r.count):"") + "] " + r.message
+                 + (r.info && r.info.lineno ? (" @"+r.info.lineno) : "");
+          });
+          dump(15);
+          try{ window.alert(recs.length ? lines.join("\n") : "No errors captured."); }catch(e){}
+        };
+        panel.appendChild(btn);
+        updateButton();
+      }
+      if(!document.getElementById("ew-proctor-btn")){
+        var pbtn = document.createElement("button");
+        pbtn.id = "ew-proctor-btn";
+        pbtn.className = "btn";
+        pbtn.style.cssText = "font-size:8px;opacity:.6";
+        pbtn.textContent = "PROCTOR";
+        pbtn.onclick = function(){
+          var sum = (EW && EW.obs && EW.obs.proctorSummary) ? EW.obs.proctorSummary() : null;
+          try{ console.log('[Earworm proctor]', sum); }catch(e){}
+          try{ window.alert(sum ? JSON.stringify(sum,null,2) : 'proctor unavailable'); }catch(e){}
+        };
+        panel.appendChild(pbtn);
+      }
     }catch(e){}
   }
 
@@ -183,7 +198,48 @@
     clear: function(){ errors.length=0; events.length=0; totalErrors=0; updateTitle(); updateButton(); },
     isDebug: isDebug,
     enable: function(){ try{ window.localStorage.setItem("earworm_debug","1"); }catch(e){} },
-    disable: function(){ try{ window.localStorage.removeItem("earworm_debug"); }catch(e){} }
+    disable: function(){ try{ window.localStorage.removeItem("earworm_debug"); }catch(e){} },
+    // Proctoring helper — consumes the event ring + returns a tiny derived view
+    // focused on methodology health (TTS reliability + answer funnel). Safe to call
+    // from debug UI or console. Only looks at recent events; never throws.
+    proctorSummary: function(){
+      try{
+        var evs = getEvents();
+        var tts = evs.filter(function(e){ return e.kind && e.kind.indexOf('tts:')===0; });
+        var answers = evs.filter(function(e){ return e.kind==='answer'; });
+        var recov = tts.filter(function(e){ return e.kind==='tts:recovery' || e.kind==='tts:fail'; }).length;
+        var firstTTS = tts.filter(function(e){ return e.kind==='tts:request' && e.data && e.data.firstInSession; });
+        var firstSuccess = firstTTS.filter(function(e){
+          // look for a matching end after it (same card if present)
+          var idx = evs.indexOf(e);
+          for(var j=idx+1; j<Math.min(idx+8,evs.length); j++){
+            var f = evs[j];
+            if(f.kind==='tts:end' && (!e.data.card || !f.data || f.data.card===e.data.card)) return true;
+          }
+          return false;
+        }).length;
+        var targetTTS = tts.filter(function(e){ return e.data && e.data.lang && !/^en/i.test(e.data.lang); });
+        var recoveredEnds = tts.filter(function(e){ return e.kind==='tts:end' && e.data && e.data.recovered; }).length;
+        var firstFlashes = evs.filter(function(e){ return e.kind==='session:firstFlash'; });
+        var recentAns = answers.slice(0,10);
+        var acc = recentAns.length ? (recentAns.filter(function(a){return a.data&&a.data.correct;}).length / recentAns.length) : null;
+        var medLat = null;
+        var lats = recentAns.map(function(a){return (a.data&&typeof a.data.latencyMs==='number')?a.data.latencyMs:null;}).filter(function(n){return typeof n==='number';}).sort(function(a,b){return a-b;});
+        if(lats.length) medLat = lats[Math.floor(lats.length/2)];
+        return {
+          ttsTotal: tts.length,
+          ttsRecoveries: recov,
+          targetTTS: targetTTS.length,
+          recoveredEnds: recoveredEnds,
+          firstCardTTSAttempts: firstTTS.length,
+          firstCardTTSSuccess: firstSuccess,
+          sessionFirstFlashes: firstFlashes.length,
+          recentAccuracy: acc,
+          recentMedianLatencyMs: medLat,
+          lastEvents: evs.slice(0,6).map(function(e){return e.kind;})
+        };
+      }catch(e){ return {error: 'proctor summary failed'}; }
+    }
   };
   window.EW_OBS = EW.obs;
 

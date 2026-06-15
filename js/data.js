@@ -251,7 +251,18 @@ function applyAnswer(i, isCorrect, modality, latencyMs){
     const m=st.byModality[modality]||{answers:0,correct:0};
     m.answers++; if(isCorrect) m.correct++;
     st.byModality[modality]=m;
-    if(window.EW&&EW.obs) EW.obs.logEvent('answer',{item:i,modality:modality,correct:!!isCorrect,latencyMs:(typeof latencyMs==='number'?latencyMs:null),course:(typeof ACTIVE_COURSE_KEY!=='undefined'?ACTIVE_COURSE_KEY:null),policy:(newSchedulerPolicy()?'v2':'v1')});
+    const pol = newSchedulerPolicy();
+    if(window.EW&&EW.obs) EW.obs.logEvent('answer',{
+      item:i,modality:modality,correct:!!isCorrect,
+      latencyMs:(typeof latencyMs==='number'?latencyMs:null),
+      course:(typeof ACTIVE_COURSE_KEY!=='undefined'?ACTIVE_COURSE_KEY:null),
+      policy:pol?'v2':'v1',
+      frontier:frontier(),
+      stage:(i>=0?(getAxisStage(i,'meaning')||0):null)
+    });
+    if(pol && i>=0 && window.dispatchStudyAction){
+      try{ window.dispatchStudyAction('ANSWER_VOCAB',{idx:i,axis:'meaning',isCorrect:!!isCorrect,responseMs:(typeof latencyMs==='number'?latencyMs:null)}); }catch(e){}
+    }
     save();
   }catch(e){ try{ if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'applyAnswer'}); }catch(_){} }
 }
@@ -285,6 +296,7 @@ function expThreshold(i){
 }
 
 function isMCEligible(i){
+  // === LEGACY v1 eligibility check — under policy, modality via resolveStudyModality + Scheduler.modality
   const ci=card(i);
   return (ci.exp||0) >= expThreshold(i);
 }
@@ -415,8 +427,8 @@ function nextWordToIntroduce(){
       nextSpine=i; break;
     }
   }
-  // v2 demand-pull override (bounded; falls back to Zipf when nothing unlocks).
-  if(newSchedulerPolicy() && nextSpine>=0){
+  // Demand-pull (v1 path only — v2 uses Scheduler.next for introduce decisions).
+  if(!newSchedulerPolicy() && nextSpine>=0){
     const dp=demandPullNextWord(nextSpine);
     if(dp>=0) nextSpine=dp;
   }
@@ -463,7 +475,7 @@ function nextWordToIntroduce(){
 const NEW_WORD_GRAD_THRESHOLD=1; // introduce new word after 1 graduation
 // ROADMAP: fatigue mechanics disabled — re-enable when ready
 // fatigueLevel, fatigueXPMultiplier, tickSessionCard all stubbed to neutral
-function fatigueLevel(){  // DISABLED
+function fatigueLevel(){  // DISABLED — v1 only; under policy, cadence via Scheduler.next
   return 0; // always no fatigue
   // 0 = fresh, 1 = optimal, 2 = fatigued
   if(sessionCardCount<30) return 0;
@@ -472,6 +484,7 @@ function fatigueLevel(){  // DISABLED
 }
 
 function shouldIntroduceNewWord(){
+  // === LEGACY v1 — under policy, Scheduler.next decides introduces
   // brandNew: introduced (exp>0) but never answered in any axis
   // Uses axisReps (primary); falls back to legacy reps+lapses
   const brandNew=D.filter((_,i)=>{
@@ -956,6 +969,7 @@ function primeSpeechEngine(lang, onReady){
     u.onerror=done; // any error (synthesis-failed, interrupted): proceed anyway
     speechSynthesis.speak(u);
     if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
+    if(window.EW&&EW.obs) EW.obs.logEvent('tts:prime',{lang:lang,sample:sample});
   }catch(e){ done(); return; }
   setTimeout(done, 500); // backstop: never block start for more than 500ms
 }
@@ -979,22 +993,28 @@ function speak(text,lang,onDone){
     const wasSpeaking=speechSynthesis.speaking||speechSynthesis.pending;
     if(wasSpeaking) speechSynthesis.cancel();
     if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
+    const cardCtx=(typeof activeCardIdx==='number'&&activeCardIdx>=0)?activeCardIdx:null;
     const u=new SpeechSynthesisUtterance(text);
     u.lang=lang; u.rate=.85;
     const v=getBestVoice(lang);
     if(v) u.voice=v;
+    if(v&&window.EW&&EW.obs) EW.obs.logEvent('tts:voice',{card:cardCtx,name:(v&&v.name)||null,local:!!(v&&v.localService),lang:lang});
+    if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:text&&text.slice(0,16),lang:lang,card:cardCtx,gen:gen});
     let fired=false;
     const finish=(cancelled)=>{
       if(fired||gen!==_ttsGen) return;
       fired=true;
       if(!cancelled&&onDone) onDone();
+      if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{card:cardCtx,gen:gen});
     };
     u.onend=()=>finish(false);
     u.onerror=(ev)=>{
       if(window.console&&console.error) console.error('TTS error:',ev&&ev.error,'text:',text,'lang:',lang);
+      if(window.EW&&EW.obs) EW.obs.logEvent('tts:fail',{card:cardCtx,error:(ev&&ev.error)||'unknown',gen:gen});
       finish(true);
       if(ev&&ev.error==='synthesis-failed'){
         const recoveryGen=gen;
+        if(window.EW&&EW.obs) EW.obs.logEvent('tts:recovery',{card:cardCtx,reason:'synthesis-failed',gen:recoveryGen});
         setTimeout(()=>{
           if(recoveryGen!==_ttsGen) return;
           try{
@@ -1004,7 +1024,12 @@ function speak(text,lang,onDone){
             recoveryU.lang=lang; recoveryU.rate=1.0;
             const rv2=getBestVoice(lang);
             if(rv2) recoveryU.voice=rv2;
-            recoveryU.onend=()=>{ if(recoveryGen===_ttsGen&&onDone) onDone(); };
+            if(rv2&&window.EW&&EW.obs) EW.obs.logEvent('tts:voice',{card:cardCtx,name:(rv2&&rv2.name)||null,local:!!(rv2&&rv2.localService),lang:lang,recovered:true});
+            if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:text&&text.slice(0,16),lang:lang,card:cardCtx,gen:recoveryGen,recovered:true});
+            recoveryU.onend=()=>{
+              if(recoveryGen===_ttsGen&&onDone) onDone();
+              if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{card:cardCtx,gen:recoveryGen,recovered:true});
+            };
             speechSynthesis.speak(recoveryU);
             if(window.console&&console.log) console.log('TTS recovery attempt after synthesis-failed');
           }catch(e){}

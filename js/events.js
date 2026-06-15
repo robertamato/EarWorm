@@ -147,6 +147,8 @@ $('debugToggle').onclick=()=>{
   const open=dm.style.display==='flex';
   dm.style.display=open?'none':'flex';
   $('debugToggle').textContent=open?'▸ DEBUG MODES':'▾ DEBUG MODES';
+  // ensure proctor + obs buttons exist when panel is revealed (in case of late attach)
+  try{ if(window.EW&&EW.obs&&EW.obs.size){ /* obs already ensures on load; re-call is harmless */ } }catch(e){}
 };
 $('ws-quit').onclick=()=>{ goHome(); };
 $('ws-next').onclick=()=>{ loadWSPassage(); };
@@ -950,18 +952,75 @@ const State = {
     S.grammar = loaded.grammar;
   }
 
-  // Proxy save() to also update State._s
+  // Initialize _session for v2 session state (pending, grammarAnswered, rings, etc.)
+  if (!State._s._session) {
+    State._s._session = {
+      grammarAnswered: new Set(),
+      studyPending: [],
+      studyEncounters: {},
+      sessionRecentCards: [],
+      sessionAnswerRing: []
+    };
+  }
+
+  // Initial sync of key session globals into _session (for v2 paths)
+  try {
+    State._s._session.studyPending = [...studyPending];
+    if (sessionGrammarAnswered && sessionGrammarAnswered.size) {
+      State._s._session.grammarAnswered = new Set(sessionGrammarAnswered);
+    }
+    State._s._session.studyEncounters = Object.fromEntries(studyEncounters);
+    State._s._session.sessionRecentCards = [...sessionRecentCards];
+    State._s._session.sessionAnswerRing = [...sessionAnswerRing];
+  } catch(e){}
+
+  // Proxy save() to also update State._s (and _session)
   const _origSave = window.save;
   window.save = function() {
     _origSave && _origSave();
     Object.assign(State._s, S);
+    if (State._s._session) {
+      State._s._session.studyPending = [...studyPending];
+      State._s._session.studyEncounters = Object.fromEntries(studyEncounters);
+      State._s._session.sessionRecentCards = [...sessionRecentCards];
+      State._s._session.sessionAnswerRing = [...sessionAnswerRing];
+      // grammarAnswered is managed via dispatch cases
+    }
   };
 
   // Wire State.dispatch for new code paths
   window.dispatchStudyAction = function(action, payload) {
-    // Update legacy S from State after dispatch
     State.dispatch(action, payload);
+    // Stronger bridge: keep legacy S and session globals in sync with State._session
     Object.assign(S, State._s);
+
+    const sess = State._s._session;
+    if (sess) {
+      if (Array.isArray(sess.studyPending)) {
+        studyPending = [...sess.studyPending];
+      }
+      if (sess.grammarAnswered) {
+        sessionGrammarAnswered.clear();
+        try { sess.grammarAnswered.forEach(k => sessionGrammarAnswered.add(k)); } catch(e){}
+      }
+      if (sess.studyEncounters) {
+        studyEncounters.clear();
+        Object.entries(sess.studyEncounters).forEach(([k,v]) => studyEncounters.set(Number(k), v));
+      }
+      if (Array.isArray(sess.sessionRecentCards)) sessionRecentCards = [...sess.sessionRecentCards];
+      if (Array.isArray(sess.sessionAnswerRing)) sessionAnswerRing = [...sess.sessionAnswerRing];
+    }
+
+    // Mirror back from legacy globals to _session after dispatch (for future Scheduler.next calls)
+    if (State._s._session) {
+      State._s._session.studyPending = [...studyPending];
+      State._s._session.studyEncounters = Object.fromEntries(studyEncounters);
+      State._s._session.sessionRecentCards = [...sessionRecentCards];
+      State._s._session.sessionAnswerRing = [...sessionAnswerRing];
+      if (sessionGrammarAnswered) {
+        State._s._session.grammarAnswered = new Set(sessionGrammarAnswered);
+      }
+    }
   };
 
   console.log('[Earworm v2] Architecture layers loaded. Scheduler and State available.');

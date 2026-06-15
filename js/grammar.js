@@ -354,42 +354,24 @@ function convergenceUnlocked(i){
 }
 
 function wordModalityFromAxes(i){
+  // Legacy v1 modality decision — session overrides (studyFlashOnly / studyModalityFilter)
+  // are now handled by resolveStudyModality in showStudyCard before we get here.
+  // Under v2 policy the caller uses Scheduler.modality() instead.
   try {
-  if(studyFlashOnly) return 'flash';
-  if(studyModalityFilter==='mc'){
-    const mstg=getAxisStage(i,'meaning');
-    if(mstg>=3&&clozeUnlocked(i)) return Math.random()<0.5?'cloze':'mc-rev';
-    return (card(i).exp||0)>0?'mc-fwd':'flash';
-  }
-  if(studyModalityFilter==='tone') return (card(i).exp||0)>0?'tone':'flash';
-  if(studyModalityFilter==='pos'){
-    const ps=Math.max(1,getAxisStage(i,'pos'));
-    return 'pos-s'+Math.min(ps,3);
-  }
   const exp=card(i).exp||0;
   // First-time exposure: always flash card, no exceptions.
   // exp is set to 1 inside showStudyFlash after the card is shown.
   // Subsequent encounters route to MC and other challenge modalities.
   if(exp===0) return 'flash';
 
-  // v2 context-forward: once a word is recognized (exp>=1) and has a coverable
-  // sentence, prefer context puzzles immediately — isolated MC only bridges.
-  // Depth accrues through context. (Full context-dominance is the next step.)
-  if(newSchedulerPolicy() && clozeUnlocked(i)){
-    const rv=Math.random();
-    if(rv<0.6) return 'cloze';
-    if(rv<0.8 && wordOrderUnlocked(i)) return 'word-order';
-    return Math.random()<0.5?'mc-fwd':'mc-rev';
-  }
-
-  // Check if convergence question is ready
+  // Check if convergence question is ready (v1 flow)
   if(convergenceUnlocked(i)&&isCardDue(i)){
     const overdue=mostOverdueAxis(i);
     if(overdue==='pos') return 'convergence';
   }
 
   // Meaning axis modality — first MC fires regardless of due date
-  // Subsequent MCs respect SRS schedule
+  // Subsequent MCs respect SRS schedule. (v1 progressive logic; v2 uses Scheduler.modality.)
   const meanStg=getAxisStage(i,'meaning');
   const meanDue=isCardDue(i)&&mostOverdueAxis(i)==='meaning';
 
@@ -1385,6 +1367,7 @@ async function showGrammarStage5(cat, fg){
       // Fallback: just mark as read
       recordGrammarResult(cat,true,5000);
       recordChallengeResult(-1,'grammar:'+cat,true,5000);
+      logGrammarAnswer(cat,'comprehension',true,5000);
       save();
       armTapAdvance($('studyPOS'),()=>nextStudyCard(),0);
     }
@@ -1394,6 +1377,7 @@ async function showGrammarStage5(cat, fg){
     $('studyPOSChar').style.cssText=CJKf+';font-size:14px;color:'+fg+';line-height:1.8;';
     $('studyPOSChar').textContent=content.s5.template;
     recordGrammarResult(cat,true,3000);
+    logGrammarAnswer(cat,'comprehension',true,3000);
     save();
     armTapAdvance($('studyPOS'),()=>nextStudyCard(),0);
   }
@@ -1445,6 +1429,7 @@ function renderComprehensionQuestion(q, cat, fg){
       const respMs=Date.now()-cardShownAtMC;
       recordGrammarResult(cat,correct,respMs);
       recordChallengeResult(-1,'grammar:'+cat,correct,respMs);
+      logGrammarAnswer(cat,'comprehension',correct,respMs);
       if(correct){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier()); }
       else resetMult();
       save();

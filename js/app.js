@@ -251,7 +251,18 @@ function applyAnswer(i, isCorrect, modality, latencyMs){
     const m=st.byModality[modality]||{answers:0,correct:0};
     m.answers++; if(isCorrect) m.correct++;
     st.byModality[modality]=m;
-    if(window.EW&&EW.obs) EW.obs.logEvent('answer',{item:i,modality:modality,correct:!!isCorrect,latencyMs:(typeof latencyMs==='number'?latencyMs:null),course:(typeof ACTIVE_COURSE_KEY!=='undefined'?ACTIVE_COURSE_KEY:null),policy:(newSchedulerPolicy()?'v2':'v1')});
+    const pol = newSchedulerPolicy();
+    if(window.EW&&EW.obs) EW.obs.logEvent('answer',{
+      item:i,modality:modality,correct:!!isCorrect,
+      latencyMs:(typeof latencyMs==='number'?latencyMs:null),
+      course:(typeof ACTIVE_COURSE_KEY!=='undefined'?ACTIVE_COURSE_KEY:null),
+      policy:pol?'v2':'v1',
+      frontier:frontier(),
+      stage:(i>=0?(getAxisStage(i,'meaning')||0):null)
+    });
+    if(pol && i>=0 && window.dispatchStudyAction){
+      try{ window.dispatchStudyAction('ANSWER_VOCAB',{idx:i,axis:'meaning',isCorrect:!!isCorrect,responseMs:(typeof latencyMs==='number'?latencyMs:null)}); }catch(e){}
+    }
     save();
   }catch(e){ try{ if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'applyAnswer'}); }catch(_){} }
 }
@@ -285,6 +296,7 @@ function expThreshold(i){
 }
 
 function isMCEligible(i){
+  // === LEGACY v1 eligibility check — under policy, modality via resolveStudyModality + Scheduler.modality
   const ci=card(i);
   return (ci.exp||0) >= expThreshold(i);
 }
@@ -415,8 +427,8 @@ function nextWordToIntroduce(){
       nextSpine=i; break;
     }
   }
-  // v2 demand-pull override (bounded; falls back to Zipf when nothing unlocks).
-  if(newSchedulerPolicy() && nextSpine>=0){
+  // Demand-pull (v1 path only — v2 uses Scheduler.next for introduce decisions).
+  if(!newSchedulerPolicy() && nextSpine>=0){
     const dp=demandPullNextWord(nextSpine);
     if(dp>=0) nextSpine=dp;
   }
@@ -463,7 +475,7 @@ function nextWordToIntroduce(){
 const NEW_WORD_GRAD_THRESHOLD=1; // introduce new word after 1 graduation
 // ROADMAP: fatigue mechanics disabled — re-enable when ready
 // fatigueLevel, fatigueXPMultiplier, tickSessionCard all stubbed to neutral
-function fatigueLevel(){  // DISABLED
+function fatigueLevel(){  // DISABLED — v1 only; under policy, cadence via Scheduler.next
   return 0; // always no fatigue
   // 0 = fresh, 1 = optimal, 2 = fatigued
   if(sessionCardCount<30) return 0;
@@ -472,6 +484,7 @@ function fatigueLevel(){  // DISABLED
 }
 
 function shouldIntroduceNewWord(){
+  // === LEGACY v1 — under policy, Scheduler.next decides introduces
   // brandNew: introduced (exp>0) but never answered in any axis
   // Uses axisReps (primary); falls back to legacy reps+lapses
   const brandNew=D.filter((_,i)=>{
@@ -956,6 +969,7 @@ function primeSpeechEngine(lang, onReady){
     u.onerror=done; // any error (synthesis-failed, interrupted): proceed anyway
     speechSynthesis.speak(u);
     if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
+    if(window.EW&&EW.obs) EW.obs.logEvent('tts:prime',{lang:lang,sample:sample});
   }catch(e){ done(); return; }
   setTimeout(done, 500); // backstop: never block start for more than 500ms
 }
@@ -979,22 +993,28 @@ function speak(text,lang,onDone){
     const wasSpeaking=speechSynthesis.speaking||speechSynthesis.pending;
     if(wasSpeaking) speechSynthesis.cancel();
     if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
+    const cardCtx=(typeof activeCardIdx==='number'&&activeCardIdx>=0)?activeCardIdx:null;
     const u=new SpeechSynthesisUtterance(text);
     u.lang=lang; u.rate=.85;
     const v=getBestVoice(lang);
     if(v) u.voice=v;
+    if(v&&window.EW&&EW.obs) EW.obs.logEvent('tts:voice',{card:cardCtx,name:(v&&v.name)||null,local:!!(v&&v.localService),lang:lang});
+    if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:text&&text.slice(0,16),lang:lang,card:cardCtx,gen:gen});
     let fired=false;
     const finish=(cancelled)=>{
       if(fired||gen!==_ttsGen) return;
       fired=true;
       if(!cancelled&&onDone) onDone();
+      if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{card:cardCtx,gen:gen});
     };
     u.onend=()=>finish(false);
     u.onerror=(ev)=>{
       if(window.console&&console.error) console.error('TTS error:',ev&&ev.error,'text:',text,'lang:',lang);
+      if(window.EW&&EW.obs) EW.obs.logEvent('tts:fail',{card:cardCtx,error:(ev&&ev.error)||'unknown',gen:gen});
       finish(true);
       if(ev&&ev.error==='synthesis-failed'){
         const recoveryGen=gen;
+        if(window.EW&&EW.obs) EW.obs.logEvent('tts:recovery',{card:cardCtx,reason:'synthesis-failed',gen:recoveryGen});
         setTimeout(()=>{
           if(recoveryGen!==_ttsGen) return;
           try{
@@ -1004,7 +1024,12 @@ function speak(text,lang,onDone){
             recoveryU.lang=lang; recoveryU.rate=1.0;
             const rv2=getBestVoice(lang);
             if(rv2) recoveryU.voice=rv2;
-            recoveryU.onend=()=>{ if(recoveryGen===_ttsGen&&onDone) onDone(); };
+            if(rv2&&window.EW&&EW.obs) EW.obs.logEvent('tts:voice',{card:cardCtx,name:(rv2&&rv2.name)||null,local:!!(rv2&&rv2.localService),lang:lang,recovered:true});
+            if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:text&&text.slice(0,16),lang:lang,card:cardCtx,gen:recoveryGen,recovered:true});
+            recoveryU.onend=()=>{
+              if(recoveryGen===_ttsGen&&onDone) onDone();
+              if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{card:cardCtx,gen:recoveryGen,recovered:true});
+            };
             speechSynthesis.speak(recoveryU);
             if(window.console&&console.log) console.log('TTS recovery attempt after synthesis-failed');
           }catch(e){}
@@ -1211,14 +1236,6 @@ function renderHome(){
     c.style.opacity=locked?'0.3':'1';
     g.appendChild(c);
   }
-  // Post-render aspect-ratio fallback for Safari <15 / iOS <15 (no native aspect-ratio support in grid).
-  // Forces square cells by explicit height=width after append (reuses existing .cell creation loop in renderHome).
-  // Safe on modern browsers (aspect-ratio will take precedence or be consistent); called on initial render + re-renders.
-  Array.from(g.children).forEach(function(cell){
-    if(cell.classList && cell.classList.contains('cell')){
-      cell.style.height = cell.offsetWidth + 'px';
-    }
-  });
   ['sw0','sw1','sw2','sw3'].forEach((id,k)=>{$(id).style.backgroundColor=stCol[k];});
   const lvl=Math.floor(S.xp/100)+1;
   $('lvl').textContent=lvl; $('xp').textContent=S.xp;
@@ -2414,13 +2431,13 @@ let studyActive=false;
 
 // Per-word encounter count across this study session
 const studyEncounters=new Map(); // idx -> count
-const sessionRecentCards=[]; // ring buffer — last N vocab card indices shown
-const sessionAnswerRing=[]; // ring buffer — last M answer booleans (true=correct)
+let sessionRecentCards=[]; // ring buffer — last N vocab card indices shown
+let sessionAnswerRing=[]; // ring buffer — last M answer booleans (true=correct)
 const RECENCY_WINDOW=10;
 const ANSWER_RING_SIZE=15;
 
 function wordModality(i){
-  // Not yet MC-eligible: always flashcard
+  // === DEPRECATED LEGACY (pre-FromAxes, pre-Scheduler) — no direct callers in primary paths
   if(!isMCEligible(i)) return 'flash';
 
   // MC-eligible: mastery drives flashcard probability
@@ -2450,7 +2467,26 @@ function grammarAxisFromKey(k){
   return GRAMMAR_AXES[enc%10]||'recognition';
 }
 
+// Single explicit session-state bag for Scheduler.next and Scheduler.modality.
+// Prefers State._s._session when populated by the bridge (v2 path).
+// Falls back to legacy globals for v1 / early migration.
+function buildSessionState(){
+  const sess=(typeof State!=='undefined'&&State._s&&State._s._session)?State._s._session:null;
+  return {
+    studyCardCount,
+    studyFlashOnly,
+    studyModalityFilter,
+    studyPending: sess&&Array.isArray(sess.studyPending)?[...sess.studyPending]:[...studyPending],
+    sessionGrammarAnswered: sess&&sess.grammarAnswered?new Set(sess.grammarAnswered):new Set(sessionGrammarAnswered),
+    studyEncounters: sess&&sess.studyEncounters?new Map(Object.entries(sess.studyEncounters).map(([k,v])=>[Number(k),v])):new Map(studyEncounters),
+    sessionRecentCards: sess&&Array.isArray(sess.sessionRecentCards)?[...sess.sessionRecentCards]:[...sessionRecentCards],
+    sessionAnswerRing: sess&&Array.isArray(sess.sessionAnswerRing)?[...sess.sessionAnswerRing]:[...sessionAnswerRing],
+    nextQueueRebuildAt
+  };
+}
+
 function buildStudyQueue(){
+  // === LEGACY v1 (only used in !policy paths or for compatibility in some v2 fallbacks) ===
   // THREE POOLS interleaved:
   // GRAMMAR: due category drills (language-agnostic) — negative keys
   // VOCABULARY: due word cards (language-specific) — D array indices
@@ -2532,6 +2568,7 @@ let studyModalityFilter=null; // null=all, 'flash','grammar','mc','tone','pos'
 const sessionGrammarAnswered=new Set(); // cats answered correctly this session
 function startStudy(flashOnly){
   studyFlashOnly=!!flashOnly;
+  if(window.EW&&EW.obs) EW.obs.logEvent('session:start',{flashOnly:!!flashOnly,policy:newSchedulerPolicy()});
   // Don't call load() here — state was loaded at page init
   // Calling load() again would overwrite in-memory state with stale localStorage
   nextQueueRebuildAt=0;
@@ -2582,6 +2619,7 @@ function startStudy(flashOnly){
 }
 
 function getIntroEvery(){
+  // === LEGACY v1 (adaptive intro cadence) — under policy, Scheduler.next handles introduces
   const n=sessionAnswerRing.length;
   if(n<5) return 4; // not enough data yet
   const correct=sessionAnswerRing.filter(Boolean).length;
@@ -2602,6 +2640,58 @@ function nextStudyCard(){
     studyIdx=0;
     scheduleNextQueueRebuild();
   }
+
+  // CLEAN MIGRATION: when policy is on, delegate to pure Scheduler.next (L3).
+  // Returns early after showing the card; v1 path below is preserved for rollback.
+  if(newSchedulerPolicy()){
+    try{
+      const schedState=(typeof State!=='undefined'&&State._s)?State._s:S;
+      const sessionState=buildSessionState();
+      const decision=Scheduler.next(schedState,D,sessionState);
+      if(window.EW&&EW.obs) EW.obs.logEvent('study:next',{type:decision&&decision.type,reason:decision&&decision.reason,idx:decision&&decision.idx,source:'v2-scheduler'});
+      if(decision){
+        if((decision.type==='pending'||decision.pending)&&decision.pending){
+          const pending=decision.pending;
+          const reIdx=typeof pending==='object'?pending.idx:pending;
+          const reMod=typeof pending==='object'?pending.mod:null;
+          if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
+            const reCat=grammarCatFromKey(reIdx);
+            if(reCat){ showGrammarDrill(reCat); return; }
+          }
+          if(reMod&&reMod!=='flash'){
+            lastModality.set(reIdx,reMod);
+            if(reMod==='convergence'){ showConvergenceQuestion(reIdx); return; }
+            if(reMod==='cloze'){ showStudyCloze(reIdx); return; }
+            if(reMod==='word-order'){ showWordOrderDrill(reIdx); return; }
+            if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
+              const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
+              showStudyPOSStaged(reIdx,ps); return;
+            }
+            showStudyMC(reIdx,reMod==='mc-rev'); return;
+          }
+          showStudyCard(reIdx); return;
+        }
+        if(decision.type==='introduce'&&decision.idx>=0){
+          showStudyCard(decision.idx); return;
+        }
+        if(decision.idx>=0){
+          if(isGrammarKey(decision.idx)){
+            const cat=grammarCatFromKey(decision.idx);
+            const axis=grammarAxisFromKey(decision.idx);
+            if(cat&&!sessionGrammarAnswered.has(cat+':'+axis)){
+              showGrammarDrill(cat,axis); return;
+            }
+          }
+          showStudyCard(decision.idx); return;
+        }
+      }
+    }catch(e){
+      console.error('Scheduler.next v2 delegation failed, falling back to legacy loop',e);
+      if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'study-loop-v2'});
+    }
+  }
+
+  // === LEGACY v1 STUDY LOOP (only executed when policy is off or on v2 delegation fallback) ===
   const forceIntro=studyCardCount===1;
   if(!studyModalityFilter&&(forceIntro||studyCardCount%getIntroEvery()===0) && shouldIntroduceNewWord()){
     const newIdx=introduceNextWord();
@@ -2682,12 +2772,31 @@ function nextStudyCard(){
   showStudyCard(i);
 }
 
+// Single place for session-level modality overrides (studyFlashOnly and studyModalityFilter).
+// Returns a concrete mod string if an override applies, otherwise null
+// (caller then chooses v2 Scheduler.modality or v1 wordModalityFromAxes).
+function resolveStudyModality(i){
+  if(studyFlashOnly) return 'flash';
+  if(studyModalityFilter==='mc'){
+    const mstg=getAxisStage(i,'meaning');
+    if(mstg>=3&&clozeUnlocked(i)) return Math.random()<0.5?'cloze':'mc-rev';
+    return (card(i).exp||0)>0?'mc-fwd':'flash';
+  }
+  if(studyModalityFilter==='tone') return (card(i).exp||0)>0?'tone':'flash';
+  if(studyModalityFilter==='pos'){
+    const ps=Math.max(1,getAxisStage(i,'pos'));
+    return 'pos-s'+Math.min(ps,3);
+  }
+  return null;
+}
+
 function showStudyCard(i){
   if(i===undefined||i===null||isGrammarKey(i)||i<0||i>=D.length){ nextStudyCard(); return; }
   clearCardState();
   studyCardCount++;
   tickSessionCard();
   studyEncounters.set(i,(studyEncounters.get(i)||0)+1);
+  if(studyCardCount===1&&window.EW&&EW.obs) EW.obs.logEvent('session:firstFlash',{idx:i});
   sessionRecentCards.push(i);
   if(sessionRecentCards.length>RECENCY_WINDOW) sessionRecentCards.shift();
 
@@ -2712,10 +2821,22 @@ function showStudyCard(i){
     return;
   }
 
-  // Mastery-based modality — no session state, uses persistent mastery score
-  // Axis-stage driven modality — each word progresses through defined stages
-  let mod;
-  try{ mod=wordModalityFromAxes(i); }catch(e){ document.title='MOD:'+e.message+' stk:'+e.stack.slice(0,80); console.error('wordModality error',e); mod='mc-fwd'; }
+  // Modality: session overrides first, then v2 Scheduler or v1 wordModalityFromAxes
+  let mod=resolveStudyModality(i);
+  if(mod===null){
+    if(newSchedulerPolicy()){
+      try{
+        const schedState=(typeof State!=='undefined'&&State._s)?State._s:S;
+        mod=Scheduler.modality(schedState,D,i);
+        if(window.EW&&EW.obs) EW.obs.logEvent('study:modality',{item:i,mod:mod,source:'v2-scheduler'});
+      }catch(e){
+        console.error('Scheduler.modality fallback',e);
+        try{ mod=wordModalityFromAxes(i); }catch(_){ mod='mc-fwd'; }
+      }
+    } else {
+      try{ mod=wordModalityFromAxes(i); }catch(e){ document.title='MOD:'+e.message+' stk:'+e.stack.slice(0,80); console.error('wordModality error',e); mod='mc-fwd'; }
+    }
+  }
   // HARD INVARIANT: a word is NEVER presented in a test modality before it has
   // been shown as a flashcard. First contact is always recognition. If anything
   // resolves a non-flash modality for an unseen word (exp===0), force the
@@ -2789,7 +2910,11 @@ function showStudyFlash(i){
   syls.forEach(([s,t])=>{ const sp=document.createElement('span'); sp.textContent=s; sp.style.color=toneColor(t,fg); py.appendChild(sp); });
 
   // Fire TTS after hanzi+pinyin are in the DOM. 30ms lets SAPI settle after prime/cancel.
-  if(S.sound!=='mute') setTimeout(()=>speak(ch,activeCourse().langCode),30);
+  if(S.sound!=='mute'){
+    const isFirst=((studyEncounters.get(i)||0)===1);
+    if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{card:i,lang:activeCourse().langCode,firstInSession:isFirst});
+    setTimeout(()=>speak(ch,activeCourse().langCode),30);
+  }
 
   $('studyBackZone').style.display='none';
   $('studyFlipHint').style.display='block';
@@ -2857,8 +2982,13 @@ function showStudyMC(i, reverse, showPosHint){
   // Target-lang TTS deferred 30ms to let SAPI settle after prime/cancel.
   // English is immediate (en-US voice doesn't need settle time).
   if(S.sound!=='mute'){
-    if(!reverse) setTimeout(()=>speak(ch,activeCourse().langCode),30);
-    else speak(def,'en-US');
+    if(!reverse){
+      const isFirst=((studyEncounters.get(i)||0)===1);
+      if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{card:i,lang:activeCourse().langCode,firstInSession:isFirst});
+      setTimeout(()=>speak(ch,activeCourse().langCode),30);
+    } else {
+      speak(def,'en-US');
+    }
   }
   const fg=getComputedStyle(document.body).color;
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
@@ -3095,6 +3225,7 @@ function toneStage(mastery){
 
 function showStudyTone(i){
   toneCur=i; toneLocked=false;
+  activeCardIdx=i;
   rollBg();
   const [ch,syls]=D[i];
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
@@ -3243,6 +3374,24 @@ function logAnswer(i, isCorrect, modality, latencyMs){
   sessionAnswerRing.push(!!isCorrect);
   if(sessionAnswerRing.length>ANSWER_RING_SIZE) sessionAnswerRing.shift();
   applyAnswer(i, isCorrect, modality, latencyMs); // funnel: durable stats + telemetry
+}
+
+function logGrammarAnswer(cat, axis, isCorrect, latencyMs){
+  try{
+    const mod='grammar:'+(cat||'unknown')+(axis?':'+axis:'');
+    applyAnswer(-1, isCorrect, mod, latencyMs);
+    const pol=newSchedulerPolicy();
+    if(pol&&window.dispatchStudyAction){
+      try{
+        window.dispatchStudyAction('ANSWER_GRAMMAR',{
+          cat:cat,
+          axis:axis||'recognition',
+          isCorrect:!!isCorrect,
+          responseMs:(typeof latencyMs==='number'?latencyMs:null)
+        });
+      }catch(e){}
+    }
+  }catch(e){ try{ if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'logGrammarAnswer'}); }catch(_){} }
 }
 
 function showSummary(returnView){
@@ -4596,42 +4745,24 @@ function convergenceUnlocked(i){
 }
 
 function wordModalityFromAxes(i){
+  // Legacy v1 modality decision — session overrides (studyFlashOnly / studyModalityFilter)
+  // are now handled by resolveStudyModality in showStudyCard before we get here.
+  // Under v2 policy the caller uses Scheduler.modality() instead.
   try {
-  if(studyFlashOnly) return 'flash';
-  if(studyModalityFilter==='mc'){
-    const mstg=getAxisStage(i,'meaning');
-    if(mstg>=3&&clozeUnlocked(i)) return Math.random()<0.5?'cloze':'mc-rev';
-    return (card(i).exp||0)>0?'mc-fwd':'flash';
-  }
-  if(studyModalityFilter==='tone') return (card(i).exp||0)>0?'tone':'flash';
-  if(studyModalityFilter==='pos'){
-    const ps=Math.max(1,getAxisStage(i,'pos'));
-    return 'pos-s'+Math.min(ps,3);
-  }
   const exp=card(i).exp||0;
   // First-time exposure: always flash card, no exceptions.
   // exp is set to 1 inside showStudyFlash after the card is shown.
   // Subsequent encounters route to MC and other challenge modalities.
   if(exp===0) return 'flash';
 
-  // v2 context-forward: once a word is recognized (exp>=1) and has a coverable
-  // sentence, prefer context puzzles immediately — isolated MC only bridges.
-  // Depth accrues through context. (Full context-dominance is the next step.)
-  if(newSchedulerPolicy() && clozeUnlocked(i)){
-    const rv=Math.random();
-    if(rv<0.6) return 'cloze';
-    if(rv<0.8 && wordOrderUnlocked(i)) return 'word-order';
-    return Math.random()<0.5?'mc-fwd':'mc-rev';
-  }
-
-  // Check if convergence question is ready
+  // Check if convergence question is ready (v1 flow)
   if(convergenceUnlocked(i)&&isCardDue(i)){
     const overdue=mostOverdueAxis(i);
     if(overdue==='pos') return 'convergence';
   }
 
   // Meaning axis modality — first MC fires regardless of due date
-  // Subsequent MCs respect SRS schedule
+  // Subsequent MCs respect SRS schedule. (v1 progressive logic; v2 uses Scheduler.modality.)
   const meanStg=getAxisStage(i,'meaning');
   const meanDue=isCardDue(i)&&mostOverdueAxis(i)==='meaning';
 
@@ -5627,6 +5758,7 @@ async function showGrammarStage5(cat, fg){
       // Fallback: just mark as read
       recordGrammarResult(cat,true,5000);
       recordChallengeResult(-1,'grammar:'+cat,true,5000);
+      logGrammarAnswer(cat,'comprehension',true,5000);
       save();
       armTapAdvance($('studyPOS'),()=>nextStudyCard(),0);
     }
@@ -5636,6 +5768,7 @@ async function showGrammarStage5(cat, fg){
     $('studyPOSChar').style.cssText=CJKf+';font-size:14px;color:'+fg+';line-height:1.8;';
     $('studyPOSChar').textContent=content.s5.template;
     recordGrammarResult(cat,true,3000);
+    logGrammarAnswer(cat,'comprehension',true,3000);
     save();
     armTapAdvance($('studyPOS'),()=>nextStudyCard(),0);
   }
@@ -5687,6 +5820,7 @@ function renderComprehensionQuestion(q, cat, fg){
       const respMs=Date.now()-cardShownAtMC;
       recordGrammarResult(cat,correct,respMs);
       recordChallengeResult(-1,'grammar:'+cat,correct,respMs);
+      logGrammarAnswer(cat,'comprehension',correct,respMs);
       if(correct){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier()); }
       else resetMult();
       save();
@@ -5952,6 +6086,7 @@ function showGrammarDrill(cat, axis){
       recordChallengeResult(-1,'grammar:'+cat+':'+axis,isCorrect,respMs);
       recordAxisResultG(cat,axis,isCorrect,respMs);
       recordGrammarAttempt(cat.toLowerCase(),isCorrect);
+      logGrammarAnswer(cat,axis,isCorrect,respMs);
       if(isCorrect){
         advanceMult();
         S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier());
@@ -5967,6 +6102,8 @@ function showGrammarDrill(cat, axis){
 
   studyDontKnowAction=function(){
     recordAxisResultG(cat,axis,false,Date.now()-cardShownAtMC);
+    recordGrammarAttempt(cat.toLowerCase(),false);
+    logGrammarAnswer(cat,axis,false,Date.now()-cardShownAtMC);
     armTapAdvance($('studyPOS'),function(){nextStudyCard();},1200);
   };
   renderWagerControl('studyPOSWager',-1);
@@ -6047,11 +6184,9 @@ function getPuzzleSentences(i){
 
 function clozeUnlocked(i){
   if(getPuzzleSentences(i).length===0) return false;
-  // v2: context is reachable at recognition level — one sighting unlocks it, so
-  // depth accrues THROUGH context instead of being gated behind isolated
-  // mastery. v1 keeps the original meaning-stage-2 gate.
-  if(newSchedulerPolicy()) return (card(i).exp||0)>=1;
-  return getAxisStage(i,'meaning')>=2;
+  // Permissive rule: one sighting unlocks cloze (depth accrues through context).
+  // The strict stage>=2 v1 gate has been removed as v2 is now the active path.
+  return (card(i).exp||0)>=1;
 }
 
 // Returns true if s has any character a TTS engine can actually pronounce.
@@ -6321,6 +6456,7 @@ function showStudyCloze(i){
 // Unlocks when: meaning stage >= 2, grammar categorization stage >= 1 for all words.
 
 function wordOrderUnlocked(i){
+  // Legacy v1 gate; under policy, Scheduler.modality handles word-order eligibility
   if(getAxisStage(i,'meaning')<2) return false;
   // Need at least 2 other introduced words for a meaningful arrangement
   const introduced=D.filter(function(_,idx){return S.cards[idx]&&S.cards[idx].exp>0;});
@@ -6858,6 +6994,8 @@ $('debugToggle').onclick=()=>{
   const open=dm.style.display==='flex';
   dm.style.display=open?'none':'flex';
   $('debugToggle').textContent=open?'▸ DEBUG MODES':'▾ DEBUG MODES';
+  // ensure proctor + obs buttons exist when panel is revealed (in case of late attach)
+  try{ if(window.EW&&EW.obs&&EW.obs.size){ /* obs already ensures on load; re-call is harmless */ } }catch(e){}
 };
 $('ws-quit').onclick=()=>{ goHome(); };
 $('ws-next').onclick=()=>{ loadWSPassage(); };
@@ -7661,18 +7799,75 @@ const State = {
     S.grammar = loaded.grammar;
   }
 
-  // Proxy save() to also update State._s
+  // Initialize _session for v2 session state (pending, grammarAnswered, rings, etc.)
+  if (!State._s._session) {
+    State._s._session = {
+      grammarAnswered: new Set(),
+      studyPending: [],
+      studyEncounters: {},
+      sessionRecentCards: [],
+      sessionAnswerRing: []
+    };
+  }
+
+  // Initial sync of key session globals into _session (for v2 paths)
+  try {
+    State._s._session.studyPending = [...studyPending];
+    if (sessionGrammarAnswered && sessionGrammarAnswered.size) {
+      State._s._session.grammarAnswered = new Set(sessionGrammarAnswered);
+    }
+    State._s._session.studyEncounters = Object.fromEntries(studyEncounters);
+    State._s._session.sessionRecentCards = [...sessionRecentCards];
+    State._s._session.sessionAnswerRing = [...sessionAnswerRing];
+  } catch(e){}
+
+  // Proxy save() to also update State._s (and _session)
   const _origSave = window.save;
   window.save = function() {
     _origSave && _origSave();
     Object.assign(State._s, S);
+    if (State._s._session) {
+      State._s._session.studyPending = [...studyPending];
+      State._s._session.studyEncounters = Object.fromEntries(studyEncounters);
+      State._s._session.sessionRecentCards = [...sessionRecentCards];
+      State._s._session.sessionAnswerRing = [...sessionAnswerRing];
+      // grammarAnswered is managed via dispatch cases
+    }
   };
 
   // Wire State.dispatch for new code paths
   window.dispatchStudyAction = function(action, payload) {
-    // Update legacy S from State after dispatch
     State.dispatch(action, payload);
+    // Stronger bridge: keep legacy S and session globals in sync with State._session
     Object.assign(S, State._s);
+
+    const sess = State._s._session;
+    if (sess) {
+      if (Array.isArray(sess.studyPending)) {
+        studyPending = [...sess.studyPending];
+      }
+      if (sess.grammarAnswered) {
+        sessionGrammarAnswered.clear();
+        try { sess.grammarAnswered.forEach(k => sessionGrammarAnswered.add(k)); } catch(e){}
+      }
+      if (sess.studyEncounters) {
+        studyEncounters.clear();
+        Object.entries(sess.studyEncounters).forEach(([k,v]) => studyEncounters.set(Number(k), v));
+      }
+      if (Array.isArray(sess.sessionRecentCards)) sessionRecentCards = [...sess.sessionRecentCards];
+      if (Array.isArray(sess.sessionAnswerRing)) sessionAnswerRing = [...sess.sessionAnswerRing];
+    }
+
+    // Mirror back from legacy globals to _session after dispatch (for future Scheduler.next calls)
+    if (State._s._session) {
+      State._s._session.studyPending = [...studyPending];
+      State._s._session.studyEncounters = Object.fromEntries(studyEncounters);
+      State._s._session.sessionRecentCards = [...sessionRecentCards];
+      State._s._session.sessionAnswerRing = [...sessionAnswerRing];
+      if (sessionGrammarAnswered) {
+        State._s._session.grammarAnswered = new Set(sessionGrammarAnswered);
+      }
+    }
   };
 
   console.log('[Earworm v2] Architecture layers loaded. Scheduler and State available.');

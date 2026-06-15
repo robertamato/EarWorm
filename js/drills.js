@@ -69,6 +69,7 @@
       recordChallengeResult(-1,'grammar:'+cat+':'+axis,isCorrect,respMs);
       recordAxisResultG(cat,axis,isCorrect,respMs);
       recordGrammarAttempt(cat.toLowerCase(),isCorrect);
+      logGrammarAnswer(cat,axis,isCorrect,respMs);
       if(isCorrect){
         advanceMult();
         S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier());
@@ -84,6 +85,8 @@
 
   studyDontKnowAction=function(){
     recordAxisResultG(cat,axis,false,Date.now()-cardShownAtMC);
+    recordGrammarAttempt(cat.toLowerCase(),false);
+    logGrammarAnswer(cat,axis,false,Date.now()-cardShownAtMC);
     armTapAdvance($('studyPOS'),function(){nextStudyCard();},1200);
   };
   renderWagerControl('studyPOSWager',-1);
@@ -164,11 +167,9 @@ function getPuzzleSentences(i){
 
 function clozeUnlocked(i){
   if(getPuzzleSentences(i).length===0) return false;
-  // v2: context is reachable at recognition level — one sighting unlocks it, so
-  // depth accrues THROUGH context instead of being gated behind isolated
-  // mastery. v1 keeps the original meaning-stage-2 gate.
-  if(newSchedulerPolicy()) return (card(i).exp||0)>=1;
-  return getAxisStage(i,'meaning')>=2;
+  // Permissive rule: one sighting unlocks cloze (depth accrues through context).
+  // The strict stage>=2 v1 gate has been removed as v2 is now the active path.
+  return (card(i).exp||0)>=1;
 }
 
 // Returns true if s has any character a TTS engine can actually pronounce.
@@ -438,6 +439,7 @@ function showStudyCloze(i){
 // Unlocks when: meaning stage >= 2, grammar categorization stage >= 1 for all words.
 
 function wordOrderUnlocked(i){
+  // Legacy v1 gate; under policy, Scheduler.modality handles word-order eligibility
   if(getAxisStage(i,'meaning')<2) return false;
   // Need at least 2 other introduced words for a meaningful arrangement
   const introduced=D.filter(function(_,idx){return S.cards[idx]&&S.cards[idx].exp>0;});
