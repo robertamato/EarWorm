@@ -44,7 +44,7 @@
   .title { font-size:22px; letter-spacing:2px; text-align:center; margin-top:8px; }
   .statrow { display:flex; justify-content:space-between; font-size:9px; }
   .panel { padding:12px; border:4px solid; }
-  #grid { display:grid; grid-template-columns:repeat(10,1fr); gap:3px; flex:0 0 auto; }
+  #map { display:grid; grid-template-columns:repeat(10,1fr); gap:3px; flex:0 0 auto; }
   .cell { border:2px solid; } /* aspect-ratio fallback below + JS sizing in renderHome for Safari <15 */
   @supports (aspect-ratio: 1) {
     .cell { aspect-ratio:1; }
@@ -313,16 +313,16 @@
   <div id="home">
     <!-- IDENTITY -->
     <div class="title">EARWORM</div>
-    <div style="font-size:8px;text-align:center;letter-spacing:3px;opacity:.7;margin-top:-6px;" id="langLabel">MANDARIN CHINESE</div>
+    <div style="font-size:9px;text-align:center;letter-spacing:3px;cursor:pointer;border:2px solid;padding:4px 14px;align-self:center;margin-top:-2px;" id="courseId">MANDARIN CHINESE</div>
 
     <!-- PRIMARY RANK -->
     <div class="panel" style="text-align:center;padding:14px 10px;">
       <div style="font-size:9px;opacity:.7;letter-spacing:2px;margin-bottom:4px;">FRONTIER</div>
-      <div id="frontierDisplay" style="font-size:48px;line-height:1;letter-spacing:-1px;">0</div>
+      <div id="frontier" style="font-size:48px;line-height:1;letter-spacing:-1px;">0</div>
     </div>
 
     <!-- PRIMARY ACTION -->
-    <button class="btn" id="startStudy" style="font-size:16px;letter-spacing:2px">★ STUDY</button>
+    <button class="btn" id="startStudy" style="font-size:16px;letter-spacing:2px">★ EXPLORE</button>
 
     <!-- PROGRESS BARS -->
     <div class="prog-wrap" id="dailyProgWrap">
@@ -346,9 +346,9 @@
       <div class="prog-milestone" id="milestoneProgNote"></div>
     </div>
 
-    <!-- MASTERY GRID -->
-    <div id="frontierSub" style="font-size:8px;opacity:.6;letter-spacing:2px;margin-bottom:-2px;cursor:pointer;">MANDARIN · FREQUENCY RANK</div>
-    <div id="grid" class="panel"></div>
+    <!-- MAP -->
+    <div id="mapLabel" style="font-size:8px;opacity:.6;letter-spacing:2px;margin-bottom:-2px;cursor:pointer;">MANDARIN · FREQUENCY RANK</div>
+    <div id="map" class="panel"></div>
     <div id="legend" class="panel">
       <span class="lg"><span class="sw" id="sw0"></span>UNSEEN</span>
       <span class="lg"><span class="sw" id="sw1"></span>LEARNING</span>
@@ -376,7 +376,7 @@
       <button class="btn" id="muteBtn" style="font-size:9px;flex:1">SOUND: AUTO</button>
     </div>
     <div id="ttsStatus" style="font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;opacity:.4;"></div>
-    <button class="btn" id="statsBtn" style="font-size:9px;">◷ YOUR LEARNING</button>
+    <button class="btn" id="profileBtn" style="font-size:9px;">◷ PROFILE</button>
 
     <!-- DEBUG MODES (hidden by default) -->
     <div id="debugToggle" style="font-size:7px;text-align:center;opacity:.35;cursor:pointer;padding:4px;letter-spacing:2px;">▸ DEBUG MODES</div>

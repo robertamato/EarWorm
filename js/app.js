@@ -5686,18 +5686,19 @@ function showCoursePicker(){
     }catch(e){}
     const total=course.lexicon.length;
     const row=document.createElement('div');
-    row.style.cssText='border:3px solid;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;'+(isActive?'':'cursor:pointer;opacity:.6;');
+    row.style.cssText='border:'+(isActive?'4px':'3px')+' solid;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;'+(isActive?'':'cursor:pointer;');
     const left=document.createElement('div');
+    left.style.cssText='flex:1;min-width:0;';
     const native=document.createElement('div');
-    native.style.cssText='font-size:15px;letter-spacing:1px;'+(course.script==='rtl'?'direction:rtl;text-align:right;':'');
+    native.style.cssText='font-size:22px;font-family:"PingFang SC","Heiti SC","Noto Sans","Noto Sans Arabic","Arial Unicode MS",sans-serif;letter-spacing:1px;'+(course.script==='rtl'?'direction:rtl;':'');
     native.textContent=course.langNameNative;
     const sub=document.createElement('div');
-    sub.style.cssText='font-size:7px;opacity:.6;margin-top:5px;letter-spacing:2px;';
-    sub.textContent=course.langName.toUpperCase()+'  ·  '+seen+' / '+total;
+    sub.style.cssText='font-size:7px;opacity:.55;margin-top:6px;letter-spacing:2px;';
+    sub.textContent=course.langName.toUpperCase()+'  ·  '+seen+' / '+total+' WORDS';
     left.appendChild(native); left.appendChild(sub);
     const marker=document.createElement('div');
-    marker.style.cssText='font-size:12px;margin-left:12px;flex-shrink:0;';
-    marker.textContent=isActive?'★':'';
+    marker.style.cssText='font-size:14px;margin-left:14px;flex-shrink:0;opacity:'+(isActive?'1':'.45')+';';
+    marker.textContent=isActive?'★':'▶';
     row.appendChild(left); row.appendChild(marker);
     if(!isActive) row.onclick=()=>{ overlay.remove(); switchCourse(key); };
     sheet.appendChild(row);
