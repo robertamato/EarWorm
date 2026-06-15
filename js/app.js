@@ -5653,16 +5653,35 @@ const COURSES={
     lexicon:D_AR,
     storageKey:'earworm-arabic-levantine-v1',
     hasGrammar:false,
-    // Pre-recorded audio (Amazon Polly, extracted from reference Anki deck).
-    // speak() checks this map first; falls through to TTS for words not covered.
-    // Expand as course vocabulary grows.
+    // Pre-rendered audio — speak() checks this before falling through to browser TTS.
+    // Sources: Amazon Polly Neural (amazon-*) from reference deck; Google TTS (gtts-*) generated
+    // for words not covered. All MSA-approximated; dialect distinction deferred.
+    // Regenerate with higher-quality source when available — audioMap is the seam.
     audioMap:{
+      // Amazon Polly Neural (reference deck) — higher quality
       'في':   'audio/ar/amazon-fe9c5823-bc898e46-70cba867-19d309e7-55b0c09e.mp3',
       'شو':   'audio/ar/amazon-93dc6942-2bc1546e-472c9c06-c778dd81-12815639.mp3',
       'شوي':  'audio/ar/amazon-68d4bcc4-f9c2f544-df903ba5-e57b13d7-e91e5b5b.mp3',
       'هيك':  'audio/ar/amazon-8a0cb071-e8f92c73-ba20c2d2-bece254f-6e371178.mp3',
       'بس':   'audio/ar/amazon-27c4c2ec-67435f4f-3199e1f8-a1efafe6-8c578f67.mp3',
       'يعني': 'audio/ar/amazon-28dc4e14-119d075e-7d05b038-46e5e10b-1ca62d7e.mp3',
+      // Google TTS (gtts) — generated for remaining seed words
+      'من':   'audio/ar/gtts-ar-min.mp3',
+      'على':  'audio/ar/gtts-ar-ala.mp3',
+      'مع':   'audio/ar/gtts-ar-maa.mp3',
+      'ب':    'audio/ar/gtts-ar-bi.mp3',
+      'أنا':  'audio/ar/gtts-ar-ana.mp3',
+      'أنت':  'audio/ar/gtts-ar-inta.mp3',
+      'هو':   'audio/ar/gtts-ar-huwwe.mp3',
+      'هي':   'audio/ar/gtts-ar-hiyye.mp3',
+      'إحنا': 'audio/ar/gtts-ar-ihna.mp3',
+      'مين':  'audio/ar/gtts-ar-min2.mp3',
+      'وين':  'audio/ar/gtts-ar-wen.mp3',
+      'كيف':  'audio/ar/gtts-ar-kif.mp3',
+      'كتير': 'audio/ar/gtts-ar-ktir.mp3',
+      'هلق':  'audio/ar/gtts-ar-halla2.mp3',
+      'لا':   'audio/ar/gtts-ar-la.mp3',
+      'يلا':  'audio/ar/gtts-ar-yalla.mp3',
     },
   },
   'japanese':{

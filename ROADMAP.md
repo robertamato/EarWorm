@@ -104,19 +104,30 @@ Keep every logEvent wrapped so the observer itself never throws.
 
 ## Tiered Audio Architecture
 
-The long-term audio stack has three tiers, each unlocking at a higher mastery level. The principle: controlled synthesis early (learner needs reliability), authentic speech late (learner needs naturalness and input exposure).
+**Invariant:** pre-rendered audio is the *primary* source for first exposure in every course. Browser TTS is a fallback for words the course hasn't generated yet — a missing-asset state, not a feature. A course that ships with browser TTS covering first-exposure words is incomplete; the proctor should surface this gap.
+
+The stack has three tiers, each unlocking at a higher mastery level:
 
 ```
-Tier 1 — Static pre-recorded (cloud TTS)    mastery 0+   what we have now for 6 Arabic words
-Tier 2 — Browser synthesis fallback         mastery 0+   zh/ja already; ar-LB as best effort
-Tier 3 — Natural speech samples             mastery 2+   authentic clips from real content
+Tier 1 — Pre-rendered static MP3        mastery 0+   primary; language-agnostic; generated at course build time
+Tier 2 — Browser synthesis fallback     mastery 0+   acceptable for zh/ja; last resort for Arabic/Greek/Navajo
+Tier 3 — Natural speech samples         mastery 2+   authentic clips; highest ceiling; finite corpus
 ```
 
-**Tier 1 — Static pre-recorded audio.**
-`speak()` checks `course.audioMap[text]` before falling through to synthesis. Map lives in the COURSES registry per language. Populated from the reference Anki deck (Amazon Polly/Azure MP3s) for covered words; gaps fall to Tier 2. For Arabic, the reference .apkg has ~12K entries — expand `audioMap` as course vocabulary is curated and frequency-ranked. Keep the .apkg local; commit only the extracted MP3s that correspond to active D[] entries.
+**speak() resolution order:** audioMap[text] (Tier 1) → browser TTS (Tier 2). Natural clips (Tier 3) overlay Tier 1 when mastery ≥ 2 and a clip exists. Dialect accuracy is a quality concern within Tier 1, not an architectural concern — MSA audio is acceptable where Levantine-specific audio is unavailable. Regenerate entries as better sources appear; the audioMap is the seam.
+
+**Course authorship contract:** when a new vocabulary batch is added to D[], audio must be generated for those entries before the course is considered playable. Generation tool is flexible (Anki reference deck extraction, gTTS, Azure batch, native recording) — what matters is that `audioMap` coverage tracks `D[]` coverage.
+
+`audioSource` field in COURSES (not yet implemented) will encode the generation spec so entries can be targeted for regeneration:
+```js
+audioSource: 'gtts:ar'  // or 'azure:ar-LB-Layla', 'polly:Zeina', 'native-recording'
+```
+
+**Tier 1 — Pre-rendered audio.**
+`speak()` checks `course.audioMap[text]` before synthesis. Map lives in the COURSES registry. For Arabic: 6 entries from Amazon Polly (reference .apkg), 16 entries generated via gTTS. Expand as vocabulary grows. Keep .apkg local; commit only MP3s corresponding to active D[] entries.
 
 **Tier 2 — Browser synthesis.**
-Works well for zh/ja (local SAPI voices). For Arabic: `ar-LB` locale (Lebanese) gives the engine a dialect signal. Still MSA-approximated on most systems; acceptable for cross-dialectal vocabulary (في، من، هو، هي…), poor for distinctly Levantine forms. Short of pre-recorded audio, there is no good browser fix for Levantine-specific words.
+Works well for zh/ja (local SAPI voices on most platforms). For Arabic: `ar-LB` locale gives the engine a dialect signal; still MSA-approximated. No browser fix exists for Levantine-specific words — pre-rendered audio is the only path there.
 
 **Tier 3 — Natural speech samples (design only — do not build yet).**
 At mastery ≥ 2 (familiar tier), word audio could come from authentic speech clips rather than synthesis — a 1–3 second excerpt from a podcast, news segment, or native conversation where the word appears in natural context. This is the comprehensible input progression made tangible: controlled synthesis during acquisition, authentic speech as reinforcement. Design questions that must be resolved first:
