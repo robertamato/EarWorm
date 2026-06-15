@@ -245,7 +245,7 @@ function speakWithBlank(zh,ch,langCode){
 
 function showStudyCloze(i){
   const [ch,syls,def,,pos]=D[i];
-  const sents=EXAMPLE_SENTENCES[ch]||[];
+  const sents=getPuzzleSentences(i);
   if(!sents.length){ nextStudyCard(); return; }
 
   activeCardIdx=i;
@@ -448,8 +448,9 @@ function wordOrderUnlocked(i){
 
 function showWordOrderDrill(i){
   const [ch,syls,def,,pos]=D[i];
-  // Find a sentence containing this word
-  const sents=EXAMPLE_SENTENCES[ch]||[];
+  // Find a sentence containing this word — routed through getPuzzleSentences so
+  // a future generation backend only needs to implement that one function.
+  const sents=getPuzzleSentences(i);
   if(!sents.length){ nextStudyCard(); return; }
   // Only use sentences where every multi-char D[] word is already introduced
   const validSentsWO=sents.filter(function(s){ return sentenceAllIntroduced(s[0]); });

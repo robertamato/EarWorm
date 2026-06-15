@@ -302,13 +302,13 @@ const Scheduler = {
         if (meanStg === 1) return 'mc-fwd';
         if (meanStg === 2) return Math.random() < 0.6 ? 'mc-fwd' : 'mc-rev';
         if (meanStg === 3) {
-          const hasSentences = (EXAMPLE_SENTENCES[D[i][0]] || []).length > 0;
+          const hasSentences = getPuzzleSentences(i).length > 0;
           if (hasSentences) return Math.random() < 0.4 ? 'cloze' : 'mc-rev';
           return Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev';
         }
         if (meanStg >= 4) {
           const r = Math.random();
-          const hasSentences = (EXAMPLE_SENTENCES[D[i][0]] || []).length > 0;
+          const hasSentences = getPuzzleSentences(i).length > 0;
           if (r < 0.35 && hasSentences) return 'cloze';
           if (r < 0.55) return 'word-order';
           return Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev';

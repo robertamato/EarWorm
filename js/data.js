@@ -266,6 +266,36 @@ function applyAnswer(i, isCorrect, modality, latencyMs){
     save();
   }catch(e){ try{ if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'applyAnswer'}); }catch(_){} }
 }
+// ── CARD STATE SIGNALS — AUTHORITATIVE USES ─────────────────────────────────
+// Each field on a card object has one authoritative purpose. Use the right one.
+//
+//  .seen      {boolean}  Set true in showStudyFlash when the flashcard is displayed.
+//                        THE gate for "has this word been introduced?". Never use .exp
+//                        for this purpose — .exp can be >0 from migration artifacts.
+//
+//  .exp       {number}   Flashcard showing count (incremented each time, starts at 0→1
+//                        in showStudyFlash). Used for isMCEligible and expThreshold only.
+//                        NOT a reliable "introduced" gate — use .seen instead.
+//
+//  .m         {number}   Mastery score, 0–MASTERY_MAX(4). Accumulates from drill results.
+//                        Drives: state() display tier, toneStage(), modality difficulty.
+//                        NOT the primary review-spacing signal — axisDue handles that.
+//
+//  .axisDue   {object}   Per-axis SRS due timestamps {meaning, pos, tone}.
+//                        Primary signal for WHEN to show a card (forgetting curve).
+//
+//  .axisStage {object}   Per-axis progression level {meaning:0-3, pos:0-3}.
+//                        Drives which variant of a modality to use (e.g. MC difficulty).
+//
+//  .axisCorrect {object} Consecutive correct answers per axis. Used for stage promotion.
+//
+//  .flipMs    {number}   EMA of time spent on flashcard (front+back). Used to calibrate
+//                        SRS intervals (fast flips → learner is confident → longer interval).
+//
+//  .reps/.lapses/.iv/.due — Legacy SM-2 fields. Still written by rate() for backward
+//                        compat but the per-axis system (axisDue) is now authoritative
+//                        for scheduling. Do not use .iv or .due for new scheduler logic.
+// ─────────────────────────────────────────────────────────────────────────────
 function card(i){
   if(!S.cards[i]) S.cards[i]={reps:0,lapses:0,iv:0,due:0,seen:false,m:0,exp:0,flipMs:0,axisStage:{pos:0,meaning:0},axisCorrect:{pos:0,meaning:0}};
   return S.cards[i];
@@ -320,7 +350,7 @@ function isMastered(i){ return masteryScore(i)>=MASTERY_MAX; }
 
 // ── FRONTIER MODEL ──────────────────────────────────────────────
 // Words enter one at a time in strict frequency order.
-// A word is INTRODUCED when it has been shown as a flashcard (exp > 0).
+// A word is INTRODUCED when it has been shown as a flashcard (seen:true).
 // A word GRADUATES when meaning axis stage >= 2 AND pos axis stage >= 1.
 // The frontier is the index of the next word to be introduced.
 // New words are introduced by the scheduler, not unlocked in batches.
@@ -503,6 +533,43 @@ function shouldIntroduceNewWord(){
   return inRotation<30;
 }
 
+// ── MASTERY SCORING — PER-MODALITY GAIN/LOSS TABLE ─────────────────────────
+// MASTERY_MAX=4. A word reaches "mastered" state at 4. Gains/losses per event:
+//
+//  Flashcard (showStudyFlash)     no direct gain — but sets seen:true and unlocks tests
+//
+//  MC forward/reverse             +0.5–2.0 correct (base ~1.0, modulated by wager
+//                                 confidence, response speed, and combo multiplier)
+//                                 -0.2–1.5 wrong  (base ~-0.5, higher penalty for
+//                                 overconfident wrong answers)
+//                                 -0.3 don't-know
+//
+//  Tone drill (force-correct)     +0.25 * tSpeedM  first-try correct
+//                                 -0.1             wrong tap (dim button, stay on card)
+//  Intentionally conservative: tone is a distinct skill requiring many reps.
+//  Expected ~16 first-try correct answers to go 0→4 (more with wrong taps).
+//
+//  Cloze                          +0.5 * speedM    correct
+//                                 -0.3             wrong / don't-know
+//
+//  Word-order                     +0.6             correct (highest fixed gain — hardest
+//                                 -0.2             wrong / don't-know    receptive modality)
+//
+//  POS drill                      +0.4 * speedMult correct
+//                                 -0.2 * wagerMult wrong
+//
+//  Convergence                    +0.3 for target item
+//
+// Design note: MC gains are variable (wager * speed) because MC is the primary
+// modality and the wager system is calibrated there. Other modalities use fixed
+// or lightly adjusted gains. MC correct (~+1.0 typical) is higher than word-order
+// (+0.6) despite word-order being harder — this is intentional because MC fires
+// far more frequently early in the learning arc. Word-order unlocks later and its
+// gain is applied from a higher mastery baseline (typically 2+).
+//
+// DO NOT change gain values without playtesting — the tone drill stage gates and
+// the active-rotation cap (max 30 words in rotation) are calibrated to these rates.
+// ─────────────────────────────────────────────────────────────────────────────
 function addMastery(i, delta){
   const c=card(i);
   c.m=Math.min(MASTERY_MAX, Math.max(0, (c.m||0)+delta));
