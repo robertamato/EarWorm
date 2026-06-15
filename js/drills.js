@@ -459,7 +459,9 @@ function showWordOrderDrill(i){
 
   // Extract words — split on common boundaries
   // Simple tokenizer: split on punctuation, keep CJK chars grouped by known words
-  const introduced=D.filter(function(_,idx){return S.cards[idx]&&S.cards[idx].exp>0;}).map(function(d){return d[0];});
+  // Use .seen (not .exp) — .seen is set only when the flashcard is actually displayed,
+  // guarding against migration artifacts where exp>0 but the word was never shown.
+  const introduced=D.filter(function(_,idx){return S.cards[idx]&&S.cards[idx].seen;}).map(function(d){return d[0];});
   // Find 3-4 known words that appear in this sentence
   const wordsInSent=introduced.filter(function(w){return zh.includes(w)&&w.length>0;});
   if(wordsInSent.length<3){ nextStudyCard(); return; }
@@ -467,6 +469,14 @@ function showWordOrderDrill(i){
   let drillWords=[ch,...wordsInSent.filter(function(w){return w!==ch;}).slice(0,3)];
   if(drillWords.length<3){ nextStudyCard(); return; }
   drillWords=drillWords.slice(0,4);
+  // Invariant check: every tile must have been properly seen as a flashcard.
+  // Log any breach so the observability panel surfaces it immediately.
+  drillWords.forEach(function(w){
+    const wi=D.findIndex(function(d){return d[0]===w;});
+    if(wi>=0&&!(S.cards[wi]&&S.cards[wi].seen)){
+      try{ if(window.EW&&EW.obs) EW.obs.logEvent('violation',{type:'unseen-tile-in-word-order',char:w,targetChar:ch,sentence:zh}); }catch(e){}
+    }
+  });
 
   // Correct order: words as they appear in zh
   const correctOrder=drillWords.slice().sort(function(a,b){

@@ -166,6 +166,43 @@
         };
         panel.appendChild(pbtn);
       }
+      if(!document.getElementById("ew-violations-btn")){
+        var vbtn = document.createElement("button");
+        vbtn.id = "ew-violations-btn";
+        vbtn.className = "btn";
+        vbtn.style.cssText = "font-size:8px;opacity:.6";
+        vbtn.textContent = "VIOLATIONS (0)";
+        vbtn.onclick = function(){
+          var evs = EW && EW.obs ? EW.obs.getEvents() : [];
+          var viols = evs.filter(function(e){ return e.kind === 'violation'; });
+          if(!viols.length){
+            try{ window.alert('No design-philosophy violations recorded this session.'); }catch(e){}
+            return;
+          }
+          var lines = viols.slice(0,20).map(function(v,idx){
+            var d = v.data || {};
+            var ts = new Date(v.ts).toLocaleTimeString();
+            return (idx+1)+'. ['+ts+'] '+d.type
+              + (d.char ? ' char='+d.char : '')
+              + (d.modality ? ' mod='+d.modality : '')
+              + (d.sentence ? ' sent='+d.sentence.slice(0,12) : '')
+              + (typeof d.exp!=='undefined' ? ' exp='+d.exp+' seen='+d.seen : '');
+          });
+          try{ window.alert('VIOLATIONS ('+viols.length+' total):\n\n'+lines.join('\n')); }catch(e){}
+          try{ console.log('[EW violations]', viols); }catch(e){}
+        };
+        panel.appendChild(vbtn);
+        // Keep the badge updated whenever logEvent fires a violation
+        var _origLog = logEvent;
+        logEvent = function(kind, data){
+          _origLog(kind, data);
+          if(kind === 'violation'){
+            var evs2 = EW && EW.obs ? EW.obs.getEvents() : events.slice().reverse();
+            var vc = evs2.filter(function(e){ return e.kind==='violation'; }).length;
+            try{ vbtn.textContent = 'VIOLATIONS ('+vc+')'; vbtn.style.color=vc>0?'hsl(30,90%,55%)':''; vbtn.style.borderColor=vc>0?'hsl(30,90%,55%)':''; }catch(e){}
+          }
+        };
+      }
     }catch(e){}
   }
 
@@ -226,6 +263,7 @@
         var medLat = null;
         var lats = recentAns.map(function(a){return (a.data&&typeof a.data.latencyMs==='number')?a.data.latencyMs:null;}).filter(function(n){return typeof n==='number';}).sort(function(a,b){return a-b;});
         if(lats.length) medLat = lats[Math.floor(lats.length/2)];
+        var viols = evs.filter(function(e){ return e.kind==='violation'; });
         return {
           ttsTotal: tts.length,
           ttsRecoveries: recov,
@@ -236,7 +274,12 @@
           sessionFirstFlashes: firstFlashes.length,
           recentAccuracy: acc,
           recentMedianLatencyMs: medLat,
-          lastEvents: evs.slice(0,6).map(function(e){return e.kind;})
+          lastEvents: evs.slice(0,6).map(function(e){return e.kind;}),
+          violations: viols.length,
+          recentViolations: viols.slice(0,5).map(function(v){
+            var d=v.data||{};
+            return {type:d.type,char:d.char,mod:d.modality,exp:d.exp,seen:d.seen,ts:v.ts};
+          })
         };
       }catch(e){ return {error: 'proctor summary failed'}; }
     }

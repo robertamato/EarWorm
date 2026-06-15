@@ -356,10 +356,12 @@ function isUnlocked(i){
 }
 
 // Returns true only if every D[] entry (single or multi-char) that appears
-// in the sentence has already been introduced as a flashcard.
+// in the sentence has been properly introduced (seen as a flashcard).
+// Uses .seen (set in showStudyFlash) rather than .exp, which can be >0 from
+// migration artifacts without the user having actually seen the flashcard.
 function sentenceAllIntroduced(zh){
   for(let j=0;j<D.length;j++){
-    if(S.cards[j]&&S.cards[j].exp) continue;
+    if(S.cards[j]&&S.cards[j].seen) continue;
     if(zh.includes(D[j][0])) return false;
   }
   return true;

@@ -759,11 +759,11 @@ function showStudyCard(i){
   }
   // HARD INVARIANT: a word is NEVER presented in a test modality before it has
   // been shown as a flashcard. First contact is always recognition. If anything
-  // resolves a non-flash modality for an unseen word (exp===0), force the
-  // flashcard and log a violation — this should be impossible, so it's logged to
-  // the observability bus to make any future breach visible rather than silent.
-  if(mod!=='flash' && (card(i).exp||0)===0){
-    try{ if(window.EW&&EW.obs) EW.obs.logEvent('violation',{type:'unseen-in-test',item:i,modality:mod,char:(D[i]&&D[i][0])}); }catch(e){}
+  // resolves a non-flash modality for an unseen word, force the flashcard and
+  // log a violation. Checks both exp===0 AND !seen — exp can be >0 from migration
+  // artifacts without the word ever being properly shown as a flashcard.
+  if(mod!=='flash' && ((card(i).exp||0)===0 || !card(i).seen)){
+    try{ if(window.EW&&EW.obs) EW.obs.logEvent('violation',{type:'unseen-in-test',item:i,modality:mod,char:(D[i]&&D[i][0]),exp:(card(i).exp||0),seen:!!card(i).seen}); }catch(e){}
     mod='flash';
   }
   lastModality.set(i,mod);

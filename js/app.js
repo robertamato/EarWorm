@@ -356,10 +356,12 @@ function isUnlocked(i){
 }
 
 // Returns true only if every D[] entry (single or multi-char) that appears
-// in the sentence has already been introduced as a flashcard.
+// in the sentence has been properly introduced (seen as a flashcard).
+// Uses .seen (set in showStudyFlash) rather than .exp, which can be >0 from
+// migration artifacts without the user having actually seen the flashcard.
 function sentenceAllIntroduced(zh){
   for(let j=0;j<D.length;j++){
-    if(S.cards[j]&&S.cards[j].exp) continue;
+    if(S.cards[j]&&S.cards[j].seen) continue;
     if(zh.includes(D[j][0])) return false;
   }
   return true;
@@ -2962,11 +2964,11 @@ function showStudyCard(i){
   }
   // HARD INVARIANT: a word is NEVER presented in a test modality before it has
   // been shown as a flashcard. First contact is always recognition. If anything
-  // resolves a non-flash modality for an unseen word (exp===0), force the
-  // flashcard and log a violation — this should be impossible, so it's logged to
-  // the observability bus to make any future breach visible rather than silent.
-  if(mod!=='flash' && (card(i).exp||0)===0){
-    try{ if(window.EW&&EW.obs) EW.obs.logEvent('violation',{type:'unseen-in-test',item:i,modality:mod,char:(D[i]&&D[i][0])}); }catch(e){}
+  // resolves a non-flash modality for an unseen word, force the flashcard and
+  // log a violation. Checks both exp===0 AND !seen — exp can be >0 from migration
+  // artifacts without the word ever being properly shown as a flashcard.
+  if(mod!=='flash' && ((card(i).exp||0)===0 || !card(i).seen)){
+    try{ if(window.EW&&EW.obs) EW.obs.logEvent('violation',{type:'unseen-in-test',item:i,modality:mod,char:(D[i]&&D[i][0]),exp:(card(i).exp||0),seen:!!card(i).seen}); }catch(e){}
     mod='flash';
   }
   lastModality.set(i,mod);
@@ -6657,7 +6659,9 @@ function showWordOrderDrill(i){
 
   // Extract words — split on common boundaries
   // Simple tokenizer: split on punctuation, keep CJK chars grouped by known words
-  const introduced=D.filter(function(_,idx){return S.cards[idx]&&S.cards[idx].exp>0;}).map(function(d){return d[0];});
+  // Use .seen (not .exp) — .seen is set only when the flashcard is actually displayed,
+  // guarding against migration artifacts where exp>0 but the word was never shown.
+  const introduced=D.filter(function(_,idx){return S.cards[idx]&&S.cards[idx].seen;}).map(function(d){return d[0];});
   // Find 3-4 known words that appear in this sentence
   const wordsInSent=introduced.filter(function(w){return zh.includes(w)&&w.length>0;});
   if(wordsInSent.length<3){ nextStudyCard(); return; }
@@ -6665,6 +6669,14 @@ function showWordOrderDrill(i){
   let drillWords=[ch,...wordsInSent.filter(function(w){return w!==ch;}).slice(0,3)];
   if(drillWords.length<3){ nextStudyCard(); return; }
   drillWords=drillWords.slice(0,4);
+  // Invariant check: every tile must have been properly seen as a flashcard.
+  // Log any breach so the observability panel surfaces it immediately.
+  drillWords.forEach(function(w){
+    const wi=D.findIndex(function(d){return d[0]===w;});
+    if(wi>=0&&!(S.cards[wi]&&S.cards[wi].seen)){
+      try{ if(window.EW&&EW.obs) EW.obs.logEvent('violation',{type:'unseen-tile-in-word-order',char:w,targetChar:ch,sentence:zh}); }catch(e){}
+    }
+  });
 
   // Correct order: words as they appear in zh
   const correctOrder=drillWords.slice().sort(function(a,b){
