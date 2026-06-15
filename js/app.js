@@ -5665,9 +5665,9 @@ function showCoursePicker(){
   overlay.id='coursePickerOverlay';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:900;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
   const sheet=document.createElement('div');
-  sheet.style.cssText='font-family:inherit;min-width:240px;max-width:340px;width:100%;';
+  sheet.style.cssText='font-family:inherit;min-width:260px;max-width:360px;width:100%;background:var(--bg);border:4px solid var(--fg);padding:16px;';
   const hdr=document.createElement('div');
-  hdr.style.cssText='font-size:7px;letter-spacing:3px;opacity:.5;margin-bottom:12px;text-align:center;color:var(--fg);';
+  hdr.style.cssText='font-size:7px;letter-spacing:3px;opacity:.5;margin-bottom:14px;text-align:center;';
   hdr.textContent='SELECT COURSE';
   sheet.appendChild(hdr);
   Object.entries(COURSES).forEach(([key,course])=>{
@@ -5683,18 +5683,18 @@ function showCoursePicker(){
     }catch(e){}
     const total=course.lexicon.length;
     const row=document.createElement('div');
-    row.style.cssText='border:4px solid var(--fg);padding:14px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;'+(isActive?'opacity:1;':'opacity:.5;cursor:pointer;');
+    row.style.cssText='border:3px solid;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;'+(isActive?'':'cursor:pointer;opacity:.6;');
     const left=document.createElement('div');
     const native=document.createElement('div');
-    native.style.cssText='font-size:16px;letter-spacing:1px;color:var(--fg);'+(course.script==='rtl'?'direction:rtl;text-align:right;':'');
+    native.style.cssText='font-size:15px;letter-spacing:1px;'+(course.script==='rtl'?'direction:rtl;text-align:right;':'');
     native.textContent=course.langNameNative;
     const sub=document.createElement('div');
-    sub.style.cssText='font-size:7px;opacity:.55;margin-top:5px;letter-spacing:2px;color:var(--fg);';
+    sub.style.cssText='font-size:7px;opacity:.6;margin-top:5px;letter-spacing:2px;';
     sub.textContent=course.langName.toUpperCase()+'  ·  '+seen+' / '+total;
     left.appendChild(native); left.appendChild(sub);
     const marker=document.createElement('div');
-    marker.style.cssText='font-size:12px;color:var(--fg);margin-left:12px;flex-shrink:0;';
-    marker.textContent=isActive?'★':'▶';
+    marker.style.cssText='font-size:12px;margin-left:12px;flex-shrink:0;';
+    marker.textContent=isActive?'★':'';
     row.appendChild(left); row.appendChild(marker);
     if(!isActive) row.onclick=()=>{ overlay.remove(); switchCourse(key); };
     sheet.appendChild(row);
