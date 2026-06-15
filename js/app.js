@@ -1007,7 +1007,10 @@ function _doPrewarm(){
     const u=new SpeechSynthesisUtterance(item.text);
     u.lang=item.lang||'zh-CN'; u.volume=0; u.rate=1;
     const v=getBestVoice(item.lang||'zh-CN');
-    if(v) u.voice=v;
+    // volume=0 is only respected by local SAPI voices — online/neural voices
+    // ignore it and play audibly. Skip pre-warm if no confirmed local voice.
+    if(!v||!v.localService){ _prewarmActive=false; return; }
+    u.voice=v;
     const done=()=>{ _prewarmActive=false; if(_prewarmQueue.length) setTimeout(_doPrewarm,80); };
     u.onend=done; u.onerror=done;
     speechSynthesis.speak(u);
@@ -3035,10 +3038,12 @@ function showStudyFlash(i){
   syls.forEach(([s,t])=>{ const sp=document.createElement('span'); sp.textContent=s; sp.style.color=toneColor(t,fg); py.appendChild(sp); });
 
   // Fire TTS after hanzi+pinyin are in the DOM. 30ms lets SAPI settle after prime/cancel.
+  // Guard with activeCardIdx: if the user advances before the timeout fires, skip stale speak.
   if(S.sound!=='mute'){
     const isFirst=((studyEncounters.get(i)||0)===1);
     if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{card:i,lang:activeCourse().langCode,firstInSession:isFirst});
-    setTimeout(()=>speak(ch,activeCourse().langCode),30);
+    const _flashTTSCard=i;
+    setTimeout(()=>{ if(activeCardIdx===_flashTTSCard) speak(ch,activeCourse().langCode); },30);
   }
 
   $('studyBackZone').style.display='none';
@@ -3110,7 +3115,8 @@ function showStudyMC(i, reverse, showPosHint){
     if(!reverse){
       const isFirst=((studyEncounters.get(i)||0)===1);
       if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{card:i,lang:activeCourse().langCode,firstInSession:isFirst});
-      setTimeout(()=>speak(ch,activeCourse().langCode),30);
+      const _mcTTSCard=i;
+      setTimeout(()=>{ if(activeCardIdx===_mcTTSCard) speak(ch,activeCourse().langCode); },30);
     } else {
       speak(def,'en-US');
     }

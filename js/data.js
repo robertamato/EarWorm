@@ -1007,7 +1007,10 @@ function _doPrewarm(){
     const u=new SpeechSynthesisUtterance(item.text);
     u.lang=item.lang||'zh-CN'; u.volume=0; u.rate=1;
     const v=getBestVoice(item.lang||'zh-CN');
-    if(v) u.voice=v;
+    // volume=0 is only respected by local SAPI voices — online/neural voices
+    // ignore it and play audibly. Skip pre-warm if no confirmed local voice.
+    if(!v||!v.localService){ _prewarmActive=false; return; }
+    u.voice=v;
     const done=()=>{ _prewarmActive=false; if(_prewarmQueue.length) setTimeout(_doPrewarm,80); };
     u.onend=done; u.onerror=done;
     speechSynthesis.speak(u);
