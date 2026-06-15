@@ -812,20 +812,32 @@ const COURSES={
     langCode:'zh-CN',
     langName:'Mandarin Chinese',
     langNameNative:'普通话',
-    script:'CJK',
+    script:'ltr',
+    hasTone:true,
     lexicon:D_MANDARIN,
     storageKey:'earworm-mandarin-v1',
     hasGrammar:true,
+  },
+  'arabic-levantine':{
+    langCode:'ar',
+    langName:'Levantine Arabic',
+    langNameNative:'عربي شامي',
+    script:'rtl',
+    hasTone:false,
+    lexicon:D_AR,
+    storageKey:'earworm-arabic-levantine-v1',
+    hasGrammar:false,
   },
   'japanese':{
     langCode:'ja-JP',
     langName:'Japanese',
     langNameNative:'日本語',
-    script:'Japanese',
+    script:'ltr',
+    hasTone:false,
     lexicon:D_JA,
     storageKey:'earworm-japanese-v1',
-    hasGrammar:false, // no grammar exemplar data yet
-  }
+    hasGrammar:false,
+  },
 };
 const ACTIVE_COURSE_PREF='earworm-active-course';
 let ACTIVE_COURSE_KEY='mandarin';
@@ -864,11 +876,53 @@ function switchCourse(key){
   show('home');
 }
 
-function cycleCourse(){
-  const keys=Object.keys(COURSES);
-  const idx=keys.indexOf(ACTIVE_COURSE_KEY);
-  switchCourse(keys[(idx+1)%keys.length]);
+function showCoursePicker(){
+  const existing=document.getElementById('coursePickerOverlay');
+  if(existing){ existing.remove(); return; }
+  const overlay=document.createElement('div');
+  overlay.id='coursePickerOverlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:900;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+  const sheet=document.createElement('div');
+  sheet.style.cssText='font-family:inherit;min-width:240px;max-width:340px;width:100%;';
+  const hdr=document.createElement('div');
+  hdr.style.cssText='font-size:7px;letter-spacing:3px;opacity:.5;margin-bottom:12px;text-align:center;color:var(--fg);';
+  hdr.textContent='SELECT COURSE';
+  sheet.appendChild(hdr);
+  Object.entries(COURSES).forEach(([key,course])=>{
+    const isActive=key===ACTIVE_COURSE_KEY;
+    let seen=0;
+    try{
+      if(isActive){
+        seen=(S.uniqueSeen&&S.uniqueSeen.length)||0;
+      } else {
+        const raw=localStorage.getItem(course.storageKey);
+        if(raw){ const st=JSON.parse(raw); seen=(st.uniqueSeen&&Array.isArray(st.uniqueSeen))?st.uniqueSeen.length:0; }
+      }
+    }catch(e){}
+    const total=course.lexicon.length;
+    const row=document.createElement('div');
+    row.style.cssText='border:4px solid var(--fg);padding:14px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;'+(isActive?'opacity:1;':'opacity:.5;cursor:pointer;');
+    const left=document.createElement('div');
+    const native=document.createElement('div');
+    native.style.cssText='font-size:16px;letter-spacing:1px;color:var(--fg);'+(course.script==='rtl'?'direction:rtl;text-align:right;':'');
+    native.textContent=course.langNameNative;
+    const sub=document.createElement('div');
+    sub.style.cssText='font-size:7px;opacity:.55;margin-top:5px;letter-spacing:2px;color:var(--fg);';
+    sub.textContent=course.langName.toUpperCase()+'  ·  '+seen+' / '+total;
+    left.appendChild(native); left.appendChild(sub);
+    const marker=document.createElement('div');
+    marker.style.cssText='font-size:12px;color:var(--fg);margin-left:12px;flex-shrink:0;';
+    marker.textContent=isActive?'★':'▶';
+    row.appendChild(left); row.appendChild(marker);
+    if(!isActive) row.onclick=()=>{ overlay.remove(); switchCourse(key); };
+    sheet.appendChild(row);
+  });
+  overlay.appendChild(sheet);
+  overlay.onclick=(e)=>{ if(e.target===overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
 }
+
+function cycleCourse(){ showCoursePicker(); }
 
 // Rank of word i within the active deck's frequency ordering
 // Returns 1-based position among words the user has been introduced to

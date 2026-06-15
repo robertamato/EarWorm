@@ -2,11 +2,11 @@
   const mastN=D.filter((_,i)=>isMastered(i)).length;
   const frVal=frontier();
   $('due').textContent=`DUE ${dueN}  NEW ${newN}`;
-  $('frontierDisplay').textContent=frVal;
+  $('frontier').textContent=frVal;
   const course=activeCourse&&activeCourse();
-  $('frontierSub').textContent=activeDeckName().toUpperCase()+' · '+frVal+' / '+D.length+' WORDS ▸';
-  const ll=$('langLabel');
-  if(ll&&course){ ll.textContent=course.langName.toUpperCase()+'  ⇄'; ll.style.cursor='pointer'; }
+  $('mapLabel').textContent=activeDeckName().toUpperCase()+' · '+frVal+' / '+D.length+' WORDS ▸';
+  const ll=$('courseId');
+  if(ll&&course){ ll.textContent=course.langName.toUpperCase()+'  ▾'; ll.style.cursor='pointer'; }
 
   // Daily progress bar
   const today=new Date().toDateString();
@@ -902,7 +902,7 @@ function openCharDetail(word, charIdx, deckIdx){
     // Show a brief overlay message instead of full detail
     const msg=document.createElement('div');
     msg.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.85);color:#fff;padding:20px 28px;font-family:inherit;font-size:9px;letter-spacing:2px;text-align:center;z-index:999;border-radius:2px;';
-    msg.textContent='STUDY THIS WORD FIRST';
+    msg.textContent='EXPLORE EARLIER WORDS FIRST';
     document.body.appendChild(msg);
     setTimeout(()=>msg.remove(),1200);
     return;

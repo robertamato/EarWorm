@@ -187,6 +187,36 @@ let D_JA=[
 ["から",[["ka"],["ra"]],"from, because",[],"particle"]
 ];
 
+/* ============ ARABIC-LEVANTINE — core vocabulary stub ============ */
+// Levantine (Shami): Syrian / Lebanese / Jordanian / Palestinian spoken Arabic.
+// Schema matches D_MANDARIN. Slot 1 tone = 0 (Arabic is stress-timed, not lexically tonal).
+// Slot 3 (radicals) left empty — trilateral root graph to be co-designed with owner as teacher.
+// Romanization is a working placeholder; owner to revise freely as course is built.
+let D_AR=[
+  ["في",[["fi",0]],"in, at",[],"preposition"],
+  ["من",[["min",0]],"from, of",[],"preposition"],
+  ["على",[["a",0],["la",0]],"on, upon",[],"preposition"],
+  ["مع",[["ma3",0]],"with, together",[],"preposition"],
+  ["ب",[["bi",0]],"in, with, by",[],"preposition"],
+  ["أنا",[["a",0],["na",0]],"I, me",[],"pronoun"],
+  ["أنت",[["in",0],["ta",0]],"you (m.sg.)",[],"pronoun"],
+  ["هو",[["huw",0],["we",0]],"he",[],"pronoun"],
+  ["هي",[["hiy",0],["ye",0]],"she",[],"pronoun"],
+  ["إحنا",[["ih",0],["na",0]],"we",[],"pronoun"],
+  ["شو",[["shu",0]],"what",[],"pronoun"],
+  ["مين",[["min",0]],"who",[],"pronoun"],
+  ["وين",[["wen",0]],"where",[],"pronoun"],
+  ["كيف",[["kif",0]],"how",[],"adverb"],
+  ["كتير",[["ktir",0]],"very, a lot",[],"adverb"],
+  ["شوي",[["shwey",0]],"a little, a bit",[],"adverb"],
+  ["هلق",[["hal",0],["la2",0]],"now",[],"adverb"],
+  ["هيك",[["hek",0]],"like this, thus",[],"adverb"],
+  ["لا",[["la",0]],"no",[],"adverb"],
+  ["بس",[["bas",0]],"only, but, enough",[],"particle"],
+  ["يلا",[["ya",0],["la",0]],"let's go, come on",[],"interjection"],
+  ["يعني",[["ya3",0],["ni",0]],"means, like, you know",[],"particle"],
+];
+
 
 /* ============ STATE ============ */
 // KEY is the ACTIVE course's localStorage key — reassigned by switchCourse().
@@ -1398,7 +1428,7 @@ function renderHome(){
   // Always destroy fatigue overlay on home screen
   const overlay=document.getElementById('fatigueOverlay');
   if(overlay) overlay.remove();
-  const g=$('grid'); g.innerHTML='';
+  const g=$('map'); g.innerHTML='';
   const fg=hsl(bgHue+GA,80,24);
   const stCol=[ 'transparent', hsl(bgHue,60,30), hsl(bgHue,60,20), hsl(bgHue,60,12) ];
   const fr=frontier();
@@ -1448,11 +1478,11 @@ function renderHome(){
   const mastN=D.filter((_,i)=>isMastered(i)).length;
   const frVal=frontier();
   $('due').textContent=`DUE ${dueN}  NEW ${newN}`;
-  $('frontierDisplay').textContent=frVal;
+  $('frontier').textContent=frVal;
   const course=activeCourse&&activeCourse();
-  $('frontierSub').textContent=activeDeckName().toUpperCase()+' · '+frVal+' / '+D.length+' WORDS ▸';
-  const ll=$('langLabel');
-  if(ll&&course){ ll.textContent=course.langName.toUpperCase()+'  ⇄'; ll.style.cursor='pointer'; }
+  $('mapLabel').textContent=activeDeckName().toUpperCase()+' · '+frVal+' / '+D.length+' WORDS ▸';
+  const ll=$('courseId');
+  if(ll&&course){ ll.textContent=course.langName.toUpperCase()+'  ▾'; ll.style.cursor='pointer'; }
 
   // Daily progress bar
   const today=new Date().toDateString();
@@ -2348,7 +2378,7 @@ function openCharDetail(word, charIdx, deckIdx){
     // Show a brief overlay message instead of full detail
     const msg=document.createElement('div');
     msg.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.85);color:#fff;padding:20px 28px;font-family:inherit;font-size:9px;letter-spacing:2px;text-align:center;z-index:999;border-radius:2px;';
-    msg.textContent='STUDY THIS WORD FIRST';
+    msg.textContent='EXPLORE EARLIER WORDS FIRST';
     document.body.appendChild(msg);
     setTimeout(()=>msg.remove(),1200);
     return;
@@ -4095,7 +4125,7 @@ const FATIGUE_MESSAGES=[
   "still here? bold choice.",
   "the neurons are tired. they're not mad, just disappointed.",
   "you've been staring at flashcards for a while now...",
-  "fun fact: more studying right now does approximately nothing.",
+  "fun fact: more exploring right now does approximately nothing.",
   "the optimal move is to touch grass.",
   "your brain has left the building.",
   "at this point you're just collecting XP dust.",
@@ -4512,7 +4542,7 @@ function renderCollBreakdown(components, fg){
       left.style.cursor='pointer';
     } else {
       // Show "not yet introduced" hint
-      left.title='Study this word to unlock';
+      left.title='Explore earlier words to unlock this one';
     }
 
     box.appendChild(row);
@@ -5564,20 +5594,32 @@ const COURSES={
     langCode:'zh-CN',
     langName:'Mandarin Chinese',
     langNameNative:'普通话',
-    script:'CJK',
+    script:'ltr',
+    hasTone:true,
     lexicon:D_MANDARIN,
     storageKey:'earworm-mandarin-v1',
     hasGrammar:true,
+  },
+  'arabic-levantine':{
+    langCode:'ar',
+    langName:'Levantine Arabic',
+    langNameNative:'عربي شامي',
+    script:'rtl',
+    hasTone:false,
+    lexicon:D_AR,
+    storageKey:'earworm-arabic-levantine-v1',
+    hasGrammar:false,
   },
   'japanese':{
     langCode:'ja-JP',
     langName:'Japanese',
     langNameNative:'日本語',
-    script:'Japanese',
+    script:'ltr',
+    hasTone:false,
     lexicon:D_JA,
     storageKey:'earworm-japanese-v1',
-    hasGrammar:false, // no grammar exemplar data yet
-  }
+    hasGrammar:false,
+  },
 };
 const ACTIVE_COURSE_PREF='earworm-active-course';
 let ACTIVE_COURSE_KEY='mandarin';
@@ -5616,11 +5658,53 @@ function switchCourse(key){
   show('home');
 }
 
-function cycleCourse(){
-  const keys=Object.keys(COURSES);
-  const idx=keys.indexOf(ACTIVE_COURSE_KEY);
-  switchCourse(keys[(idx+1)%keys.length]);
+function showCoursePicker(){
+  const existing=document.getElementById('coursePickerOverlay');
+  if(existing){ existing.remove(); return; }
+  const overlay=document.createElement('div');
+  overlay.id='coursePickerOverlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:900;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+  const sheet=document.createElement('div');
+  sheet.style.cssText='font-family:inherit;min-width:240px;max-width:340px;width:100%;';
+  const hdr=document.createElement('div');
+  hdr.style.cssText='font-size:7px;letter-spacing:3px;opacity:.5;margin-bottom:12px;text-align:center;color:var(--fg);';
+  hdr.textContent='SELECT COURSE';
+  sheet.appendChild(hdr);
+  Object.entries(COURSES).forEach(([key,course])=>{
+    const isActive=key===ACTIVE_COURSE_KEY;
+    let seen=0;
+    try{
+      if(isActive){
+        seen=(S.uniqueSeen&&S.uniqueSeen.length)||0;
+      } else {
+        const raw=localStorage.getItem(course.storageKey);
+        if(raw){ const st=JSON.parse(raw); seen=(st.uniqueSeen&&Array.isArray(st.uniqueSeen))?st.uniqueSeen.length:0; }
+      }
+    }catch(e){}
+    const total=course.lexicon.length;
+    const row=document.createElement('div');
+    row.style.cssText='border:4px solid var(--fg);padding:14px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;'+(isActive?'opacity:1;':'opacity:.5;cursor:pointer;');
+    const left=document.createElement('div');
+    const native=document.createElement('div');
+    native.style.cssText='font-size:16px;letter-spacing:1px;color:var(--fg);'+(course.script==='rtl'?'direction:rtl;text-align:right;':'');
+    native.textContent=course.langNameNative;
+    const sub=document.createElement('div');
+    sub.style.cssText='font-size:7px;opacity:.55;margin-top:5px;letter-spacing:2px;color:var(--fg);';
+    sub.textContent=course.langName.toUpperCase()+'  ·  '+seen+' / '+total;
+    left.appendChild(native); left.appendChild(sub);
+    const marker=document.createElement('div');
+    marker.style.cssText='font-size:12px;color:var(--fg);margin-left:12px;flex-shrink:0;';
+    marker.textContent=isActive?'★':'▶';
+    row.appendChild(left); row.appendChild(marker);
+    if(!isActive) row.onclick=()=>{ overlay.remove(); switchCourse(key); };
+    sheet.appendChild(row);
+  });
+  overlay.appendChild(sheet);
+  overlay.onclick=(e)=>{ if(e.target===overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
 }
+
+function cycleCourse(){ showCoursePicker(); }
 
 // Rank of word i within the active deck's frequency ordering
 // Returns 1-based position among words the user has been introduced to
@@ -7293,8 +7377,8 @@ function classifyDistractorError(targetIdx, chosenDef){
 
 /* ============ EVENTS ============ */
 // Tap the language label under the title to cycle courses.
-if($('langLabel')) $('langLabel').onclick=cycleCourse;
-if($('statsBtn')) $('statsBtn').onclick=()=>{ renderStats(); show('stats'); };
+if($('courseId')) $('courseId').onclick=cycleCourse;
+if($('profileBtn')) $('profileBtn').onclick=()=>{ renderStats(); show('stats'); };
 if($('stats-back')) $('stats-back').onclick=()=>{ rollBg(); renderHome(); show('home'); };
 if($('debugPolicy')){
   $('debugPolicy').textContent='⚙ POLICY: '+(newSchedulerPolicy()?'V2 (context)':'V1');
@@ -7401,7 +7485,7 @@ $('muteBtn').onclick=()=>{
   S.sound=S.sound==='auto'?'tap':S.sound==='tap'?'mute':'auto';
   save(); renderHome();
 };
-$('frontierSub').onclick=()=>{ rollBg(); renderDeckMgr(); show('deckMgr'); };
+$('mapLabel').onclick=()=>{ rollBg(); renderDeckMgr(); show('deckMgr'); };
 $('deckMgr-back').onclick=()=>{ goHome(); };
 if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   const inp=$('deckMgr-input');

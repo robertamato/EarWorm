@@ -187,6 +187,36 @@ let D_JA=[
 ["から",[["ka"],["ra"]],"from, because",[],"particle"]
 ];
 
+/* ============ ARABIC-LEVANTINE — core vocabulary stub ============ */
+// Levantine (Shami): Syrian / Lebanese / Jordanian / Palestinian spoken Arabic.
+// Schema matches D_MANDARIN. Slot 1 tone = 0 (Arabic is stress-timed, not lexically tonal).
+// Slot 3 (radicals) left empty — trilateral root graph to be co-designed with owner as teacher.
+// Romanization is a working placeholder; owner to revise freely as course is built.
+let D_AR=[
+  ["في",[["fi",0]],"in, at",[],"preposition"],
+  ["من",[["min",0]],"from, of",[],"preposition"],
+  ["على",[["a",0],["la",0]],"on, upon",[],"preposition"],
+  ["مع",[["ma3",0]],"with, together",[],"preposition"],
+  ["ب",[["bi",0]],"in, with, by",[],"preposition"],
+  ["أنا",[["a",0],["na",0]],"I, me",[],"pronoun"],
+  ["أنت",[["in",0],["ta",0]],"you (m.sg.)",[],"pronoun"],
+  ["هو",[["huw",0],["we",0]],"he",[],"pronoun"],
+  ["هي",[["hiy",0],["ye",0]],"she",[],"pronoun"],
+  ["إحنا",[["ih",0],["na",0]],"we",[],"pronoun"],
+  ["شو",[["shu",0]],"what",[],"pronoun"],
+  ["مين",[["min",0]],"who",[],"pronoun"],
+  ["وين",[["wen",0]],"where",[],"pronoun"],
+  ["كيف",[["kif",0]],"how",[],"adverb"],
+  ["كتير",[["ktir",0]],"very, a lot",[],"adverb"],
+  ["شوي",[["shwey",0]],"a little, a bit",[],"adverb"],
+  ["هلق",[["hal",0],["la2",0]],"now",[],"adverb"],
+  ["هيك",[["hek",0]],"like this, thus",[],"adverb"],
+  ["لا",[["la",0]],"no",[],"adverb"],
+  ["بس",[["bas",0]],"only, but, enough",[],"particle"],
+  ["يلا",[["ya",0],["la",0]],"let's go, come on",[],"interjection"],
+  ["يعني",[["ya3",0],["ni",0]],"means, like, you know",[],"particle"],
+];
+
 
 /* ============ STATE ============ */
 // KEY is the ACTIVE course's localStorage key — reassigned by switchCourse().
