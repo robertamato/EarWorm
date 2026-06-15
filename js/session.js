@@ -2024,7 +2024,7 @@ function collUnlocked(collIdx){
   const componentChars=entry[6]||[];
   return componentChars.every(ch=>{
     const dIdx=D.findIndex(([c])=>c===ch);
-    return dIdx<0||hasBeenIntroducedIdx(dIdx); // chars not in deck are fine
+    return dIdx<0||masteryScore(dIdx)>=1; // must be consolidated (m≥1), not just seen
   });
 }
 
@@ -2106,6 +2106,25 @@ function renderCollBreakdown(components, fg){
     posDiv.textContent=posHint.toUpperCase();
     right.appendChild(transDiv);
     right.appendChild(posDiv);
+    // Near-homophone disambiguation: surface seen words sharing the same bare syllable root
+    if([...chars].length===1){
+      const _stripDia=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'');
+      const _cDIdx=D.findIndex(([ch])=>ch===chars);
+      if(_cDIdx>=0){
+        const _roots=new Set(D[_cDIdx][1].map(([s])=>_stripDia(s)));
+        const _homos=[];
+        D.forEach(([ch,syls,def],_idx)=>{
+          if(ch===chars||!(card(_idx).seen)) return;
+          if(syls.some(([s])=>_roots.has(_stripDia(s)))) _homos.push(ch+' ('+def.split('/')[0].trim().toLowerCase()+')');
+        });
+        if(_homos.length){
+          const _nd=document.createElement('div');
+          _nd.style.cssText='font-size:8px;opacity:.55;letter-spacing:1px;font-family:'Noto Sans',Arial,sans-serif;margin-top:1px;';
+          _nd.textContent='≠ '+_homos.slice(0,2).join(', ');
+          right.appendChild(_nd);
+        }
+      }
+    }
 
     row.appendChild(left);
     row.appendChild(right);
