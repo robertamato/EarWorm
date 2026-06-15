@@ -48,15 +48,20 @@ Without this guard, the deferred call fires after the user has advanced to a new
 
 ---
 
-## State signals — use `.seen`, not `.exp`
+## State signals — use the right one
 
-`.seen` is set to `true` in `showStudyFlash` when the flashcard is actually displayed to the user. `.exp` starts at 0 and is incremented the same moment, but historical state may have `exp > 0` and `seen: false` from migration artifacts.
+Each field on a card object has one authoritative purpose:
 
-**Use `.seen` as the "has been introduced as a flashcard" gate everywhere:**
-- `sentenceAllIntroduced(zh)` — already correct
-- `showWordOrderDrill` `introduced` filter — already correct
-- The hard invariant guard in `showStudyCard` — already correct
-- Any new code that gates on "has the user seen this word?" — must use `.seen`
+| Field | Type | Authoritative use |
+|-------|------|-------------------|
+| `.seen` | bool | **"Has this word been introduced?"** Set in `showStudyFlash`. Use this as the introduced gate — never `.exp`. |
+| `.exp` | number | Flashcard showing count. Used only for `isMCEligible`/`expThreshold`. Not a reliable introduced gate. |
+| `.m` | number 0–4 | Mastery score. Drives `state()` display tier, `toneStage()`, modality difficulty. NOT the review-spacing signal. |
+| `.axisDue` | object | Per-axis SRS due timestamps `{meaning, pos, tone}`. Primary signal for WHEN to show a card. |
+| `.axisStage` | object | Per-axis progression level `{meaning:0-3, pos:0-3}`. Drives modality variant difficulty. |
+| `.reps/.lapses/.iv/.due` | legacy | Written by `rate()` for backward compat. Do NOT use `.iv` or `.due` in new scheduler logic — `axisDue` is authoritative. |
+
+**Use `.seen` as the introduced gate everywhere.** `.exp` can be >0 from migration artifacts where the flashcard was never shown.
 
 ---
 

@@ -98,6 +98,18 @@ Keep every logEvent wrapped so the observer itself never throws.
 - [ ] (Future) persist a bounded proctor snapshot to localStorage for "across sessions" views
 - [ ] (Future) optional "TTS required" strict mode that falls back or warns if a target speak didn't fire
 
+## Grammar Track Re-integration
+
+Grammar drills are **disabled in the main study flow** (`dueDrills=[]` in `buildStudyQueue`). Still reachable via the GRAMMAR DRILL debug button. The `toneAdvancedUnlocked()` gate (40+ grammar attempts, 3+ categories) is currently unreachable.
+
+**Blocked on:** metalanguage teaching design. Grammar drills use terms like 名词/动词/形容词 that have never been introduced as flashcards. This violates the "never test before first flash" invariant for the metalanguage itself.
+
+**Re-integration path (design only — do not implement until settled):**
+1. Add metalanguage terms to `D[]` as proper flashcard entries at appropriate frequency rank: 名词 (noun), 动词 (verb), 形容词 (adjective), 副词 (adverb), 代词 (pronoun), 介词 (preposition), 量词 (measure word), 助词 (particle). These are genuinely useful vocabulary, not just scaffolding.
+2. Gate each grammar drill axis on `seen:true` for the relevant metalanguage card — same invariant enforced for sentence components.
+3. Re-enable grammar in `buildStudyQueue` once the gate is wired.
+4. Open design question: `POS_LOGICAL` maps English POS names to Chinese. The gate needs a join between the POS axis and the `D[]` metalanguage entry for that category.
+
 ## Out of Scope (for now)
 - Real build system (unless the manual concat pain becomes real)
 - Server-side anything
