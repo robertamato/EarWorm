@@ -1725,7 +1725,7 @@ function advanceCard(){
   if(!S.uniqueSeen.includes(cur)){ S.uniqueSeen.push(cur); save(); }
   sessionSeen.set(cur,(sessionSeen.get(cur)||0)+1);
   tickSessionCard(); rollBg(); renderCard();
-  if(S.sound==='auto') setTimeout(()=>speakFront(),350);
+  const _fc1=cur; if(S.sound==='auto') setTimeout(()=>{ if(cur===_fc1) speakFront(); },350);
 }
 
 function inferRating(){
@@ -1848,7 +1848,7 @@ function flip(){
   if(!flipped){
     // Tap 1: reveal back, speak English
     flipped=true; renderCard();
-    if(S.sound==='auto'||S.sound==='tap') setTimeout(()=>speakBack(),200);
+    const _fc2=cur; if(S.sound==='auto'||S.sound==='tap') setTimeout(()=>{ if(cur===_fc2) speakBack(); },200);
   } else {
     // Tap 2: advance to next card. No SRS write — flashcard is exposure only.
     combo++;
@@ -2363,7 +2363,7 @@ function jumpToCard(i){
   cur=i; flipped=false;
   cardShownAt=Date.now();
   rollBg(); renderCard();
-  if(S.sound==='auto') setTimeout(()=>speakFront(),350);
+  const _fc3=cur; if(S.sound==='auto') setTimeout(()=>{ if(cur===_fc3) speakFront(); },350);
 }
 
 
@@ -3609,7 +3609,8 @@ function showStudyTone(i){
   function scheduleReplay(){
     cancelReplay();
     if(S.sound==='mute') return;
-    replayTimer=setTimeout(()=>{ replayTimer=null; if(!toneLocked) speak(ch,activeCourse().langCode); },650);
+    const _toneCard=activeCardIdx;
+    replayTimer=setTimeout(()=>{ replayTimer=null; if(!toneLocked&&activeCardIdx===_toneCard) speak(ch,activeCourse().langCode); },650);
   }
 
   // Tap tone prompt to replay audio (before answer)
@@ -6667,6 +6668,7 @@ function speakWithBlank(zh,ch,langCode){
   const u=new SpeechSynthesisUtterance(zh);
   u.lang=langCode; u.rate=0.85;
   if(v) u.voice=v;
+  if(v&&window.EW&&EW.obs) EW.obs.logEvent('tts:voice',{chosenName:v.name,localService:!!v.localService,lang:langCode});
 
   let cut=false;
 
@@ -6674,6 +6676,7 @@ function speakWithBlank(zh,ch,langCode){
     if(cut||ev.name!=='word'||ev.charIndex<idx) return;
     cut=true;
     try{ speechSynthesis.cancel(); }catch(e){}
+    if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{gen:myGen,modality:'cloze',cut:true});
     if(_ttsGen!==myGen) return;
     beepBlank(function(){
       if(_ttsGen!==myGen) return;
@@ -6684,6 +6687,7 @@ function speakWithBlank(zh,ch,langCode){
   // onboundary not supported (iOS) or target was at the very end —
   // full sentence already played; trailing beep marks the blank.
   u.onend=function(){
+    if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{gen:myGen,modality:'cloze',cut:false});
     if(!cut&&_ttsGen===myGen) beepBlank();
   };
 
@@ -6694,6 +6698,7 @@ function speakWithBlank(zh,ch,langCode){
     if(!cut&&_ttsGen===myGen) speak(zh,langCode);
   };
 
+  if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:zh&&zh.slice(0,16),lang:langCode,gen:myGen,modality:'cloze'});
   const wasSpeaking=speechSynthesis.speaking||speechSynthesis.pending;
   if(wasSpeaking){
     speechSynthesis.cancel();
@@ -6728,8 +6733,9 @@ function showStudyCloze(i){
   // 30ms delay lets SAPI settle after prime/cancel before first target-lang utterance.
   if(S.sound!=='mute'){
     const stg=getAxisStage(i,'meaning');
-    if(stg<3){ setTimeout(()=>speak(zh,activeCourse().langCode),30); }
-    else { setTimeout(()=>speakWithBlank(zh,ch,activeCourse().langCode),30); }
+    const _clozeCard=activeCardIdx;
+    if(stg<3){ setTimeout(()=>{ if(activeCardIdx===_clozeCard) speak(zh,activeCourse().langCode); },30); }
+    else { setTimeout(()=>{ if(activeCardIdx===_clozeCard) speakWithBlank(zh,ch,activeCourse().langCode); },30); }
   }
 
   // Create cloze: replace target word with blank
@@ -7072,7 +7078,8 @@ function showWordOrderDrill(i){
     box.appendChild(b);
   });
 
-  if(S.sound!=='mute') setTimeout(function(){ speak(en,'en-US'); },0);
+  const _woCard=activeCardIdx;
+  if(S.sound!=='mute') setTimeout(function(){ if(activeCardIdx===_woCard) speak(en,'en-US'); },0);
 
   // Tap prompt area to repeat English TTS before answering
   $('studyMCPrompt').style.cursor='pointer';

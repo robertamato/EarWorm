@@ -1187,7 +1187,8 @@ function showStudyTone(i){
   function scheduleReplay(){
     cancelReplay();
     if(S.sound==='mute') return;
-    replayTimer=setTimeout(()=>{ replayTimer=null; if(!toneLocked) speak(ch,activeCourse().langCode); },650);
+    const _toneCard=activeCardIdx;
+    replayTimer=setTimeout(()=>{ replayTimer=null; if(!toneLocked&&activeCardIdx===_toneCard) speak(ch,activeCourse().langCode); },650);
   }
 
   // Tap tone prompt to replay audio (before answer)

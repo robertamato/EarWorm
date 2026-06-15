@@ -249,7 +249,7 @@ function advanceCard(){
   if(!S.uniqueSeen.includes(cur)){ S.uniqueSeen.push(cur); save(); }
   sessionSeen.set(cur,(sessionSeen.get(cur)||0)+1);
   tickSessionCard(); rollBg(); renderCard();
-  if(S.sound==='auto') setTimeout(()=>speakFront(),350);
+  const _fc1=cur; if(S.sound==='auto') setTimeout(()=>{ if(cur===_fc1) speakFront(); },350);
 }
 
 function inferRating(){
@@ -372,7 +372,7 @@ function flip(){
   if(!flipped){
     // Tap 1: reveal back, speak English
     flipped=true; renderCard();
-    if(S.sound==='auto'||S.sound==='tap') setTimeout(()=>speakBack(),200);
+    const _fc2=cur; if(S.sound==='auto'||S.sound==='tap') setTimeout(()=>{ if(cur===_fc2) speakBack(); },200);
   } else {
     // Tap 2: advance to next card. No SRS write — flashcard is exposure only.
     combo++;
@@ -887,7 +887,7 @@ function jumpToCard(i){
   cur=i; flipped=false;
   cardShownAt=Date.now();
   rollBg(); renderCard();
-  if(S.sound==='auto') setTimeout(()=>speakFront(),350);
+  const _fc3=cur; if(S.sound==='auto') setTimeout(()=>{ if(cur===_fc3) speakFront(); },350);
 }
 
 
