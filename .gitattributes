@@ -1,0 +1,11 @@
+# Force LF line endings for all source files.
+# Overrides core.autocrlf on Windows so files stay LF in the working tree.
+# This prevents CRLF from corrupting CJK regex ranges during builds and
+# allows text-based edit tools to work reliably on all source files.
+*.js    text eol=lf
+*.json  text eol=lf
+*.html  text eol=lf
+*.css   text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
