@@ -2932,7 +2932,7 @@ function buildStudyQueue(){
   // debug button, which builds its own queue in startStudy and does not use this
   // pool. Re-enable here only once a progressive-localization design teaches the
   // terms first (each Chinese grammar term introduced as a flashcard before use).
-  const dueDrills=activeCourse()&&activeCourse().hasGrammar?dueGrammarDrills():[];
+  const dueDrills=[];
   dueDrills.forEach(({cat,axis})=>{
     grammarDuePool.push(grammarQueueKey(cat,axis));
   });
@@ -5780,7 +5780,7 @@ const COURSES={
     hasTone:false,
     lexicon:D_AR,
     storageKey:'earworm-arabic-levantine-v1',
-    hasGrammar:true,
+    hasGrammar:false,
     // Pre-rendered audio — speak() checks this before falling through to browser TTS.
     // Sources: Amazon Polly Neural (amazon-*) from reference deck; Google TTS (gtts-*) generated
     // for words not covered. All MSA-approximated; dialect distinction deferred.
@@ -6544,6 +6544,7 @@ function scheduleNextQueueRebuild(){
 
 function showGrammarDrill(cat, axis){
   if(!axis) axis=mostOverdueAxis_G(cat)||'recognition';
+  S.totalSeen=(S.totalSeen||0)+1;
   activeCardIdx=-1;
   rollBg();
   const fg=getComputedStyle(document.body).color;

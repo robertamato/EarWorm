@@ -393,7 +393,7 @@ function buildStudyQueue(){
   // debug button, which builds its own queue in startStudy and does not use this
   // pool. Re-enable here only once a progressive-localization design teaches the
   // terms first (each Chinese grammar term introduced as a flashcard before use).
-  const dueDrills=activeCourse()&&activeCourse().hasGrammar?dueGrammarDrills():[];
+  const dueDrills=[];
   dueDrills.forEach(({cat,axis})=>{
     grammarDuePool.push(grammarQueueKey(cat,axis));
   });
