@@ -393,7 +393,7 @@ function buildStudyQueue(){
   // debug button, which builds its own queue in startStudy and does not use this
   // pool. Re-enable here only once a progressive-localization design teaches the
   // terms first (each Chinese grammar term introduced as a flashcard before use).
-  const dueDrills=[]; // was: (course hasGrammar) ? dueGrammarDrills() : []
+  const dueDrills=activeCourse()&&activeCourse().hasGrammar?dueGrammarDrills():[];
   dueDrills.forEach(({cat,axis})=>{
     grammarDuePool.push(grammarQueueKey(cat,axis));
   });
@@ -546,22 +546,28 @@ function nextStudyCard(){
           const pending=decision.pending;
           const reIdx=typeof pending==='object'?pending.idx:pending;
           const reMod=typeof pending==='object'?pending.mod:null;
-          if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
-            const reCat=grammarCatFromKey(reIdx);
-            if(reCat){ showGrammarDrill(reCat); return; }
-          }
-          if(reMod&&reMod!=='flash'){
-            lastModality.set(reIdx,reMod);
-            if(reMod==='convergence'){ showConvergenceQuestion(reIdx); return; }
-            if(reMod==='cloze'){ showStudyCloze(reIdx); return; }
-            if(reMod==='word-order'){ showWordOrderDrill(reIdx); return; }
-            if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
-              const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
-              showStudyPOSStaged(reIdx,ps); return;
+          // Hard invariant: never show same card twice in a row.
+          const _v2LastShown=sessionRecentCards[sessionRecentCards.length-1];
+          if(typeof reIdx==='number'&&!isGrammarKey(reIdx)&&reIdx===_v2LastShown){
+            // Defer this pending card — fall through to queue/intro logic below
+          } else {
+            if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
+              const reCat=grammarCatFromKey(reIdx);
+              if(reCat){ showGrammarDrill(reCat); return; }
             }
-            showStudyMC(reIdx,reMod==='mc-rev'); return;
+            if(reMod&&reMod!=='flash'){
+              lastModality.set(reIdx,reMod);
+              if(reMod==='convergence'){ showConvergenceQuestion(reIdx); return; }
+              if(reMod==='cloze'){ showStudyCloze(reIdx); return; }
+              if(reMod==='word-order'){ showWordOrderDrill(reIdx); return; }
+              if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
+                const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
+                showStudyPOSStaged(reIdx,ps); return;
+              }
+              showStudyMC(reIdx,reMod==='mc-rev'); return;
+            }
+            showStudyCard(reIdx); return;
           }
-          showStudyCard(reIdx); return;
         }
         if(decision.type==='introduce'&&decision.idx>=0){
           showStudyCard(decision.idx); return;
@@ -602,30 +608,38 @@ function nextStudyCard(){
     const pending=studyPending.shift();
     const reIdx=typeof pending==='object'?pending.idx:pending;
     const reMod=typeof pending==='object'?pending.mod:null;
-    // Grammar re-queue — negative key means grammar drill
-    if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
-      const reCat=grammarCatFromKey(reIdx);
-      if(reCat) showGrammarDrill(reCat);
-      return;
-    }
-    if(reMod&&reMod!=='flash'){
-      lastModality.set(reIdx,reMod);
-      if(reMod==='convergence'){
-        showConvergenceQuestion(reIdx);
-      } else if(reMod==='cloze'){
-        showStudyCloze(reIdx);
-      } else if(reMod==='word-order'){
-        showWordOrderDrill(reIdx);
-      } else if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
-        const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
-        showStudyPOSStaged(reIdx,ps);
-      } else {
-        showStudyMC(reIdx, reMod==='mc-rev');
+    // Hard invariant: never show same card twice in a row.
+    // If the pending card is the one just shown, defer it and fall through to queue.
+    const _lastShown=sessionRecentCards[sessionRecentCards.length-1];
+    if(typeof reIdx==='number'&&!isGrammarKey(reIdx)&&reIdx===_lastShown){
+      studyPending.push(pending);
+      // fall through to queue selection below
+    } else {
+      // Grammar re-queue — negative key means grammar drill
+      if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
+        const reCat=grammarCatFromKey(reIdx);
+        if(reCat) showGrammarDrill(reCat);
+        return;
       }
+      if(reMod&&reMod!=='flash'){
+        lastModality.set(reIdx,reMod);
+        if(reMod==='convergence'){
+          showConvergenceQuestion(reIdx);
+        } else if(reMod==='cloze'){
+          showStudyCloze(reIdx);
+        } else if(reMod==='word-order'){
+          showWordOrderDrill(reIdx);
+        } else if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
+          const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
+          showStudyPOSStaged(reIdx,ps);
+        } else {
+          showStudyMC(reIdx, reMod==='mc-rev');
+        }
+        return;
+      }
+      showStudyCard(reIdx);
       return;
     }
-    showStudyCard(reIdx);
-    return;
   }
   if(studyIdx>=studyQueue.length){
     studyQueue=buildStudyQueue();
@@ -639,13 +653,21 @@ function nextStudyCard(){
   // Scan ahead for a non-recent alternative and swap it into the current slot.
   if(!isGrammarKey(i) && sessionRecentCards.includes(i)){
     const limit=Math.min(studyIdx+RECENCY_WINDOW, studyQueue.length);
+    let _swapped=false;
     for(let s=studyIdx; s<limit; s++){
       const ni=studyQueue[s];
       if(isGrammarKey(ni) || !sessionRecentCards.includes(ni)){
         studyQueue[s]=i; // defer i to later
         i=ni;
+        _swapped=true;
         break;
       }
+    }
+    // Hard invariant: if swap failed and i is still the card just shown, advance past it.
+    if(!_swapped && i===sessionRecentCards[sessionRecentCards.length-1] && studyIdx<studyQueue.length){
+      studyQueue[studyIdx-1]=i; // put it back at a later position
+      i=studyQueue[studyIdx++];
+      if(i===undefined||i===null){ goHome(); return; }
     }
   }
   // Route grammar pool cards to grammar drill
@@ -1515,6 +1537,12 @@ const POS_LOGICAL={
   'noun/prep':{cat:'LOGICAL GLUE',
     def:'names a location or relationship and also marks positional structure in a sentence',
     mandarin_note:'里 上 下 前 后 — can be nouns (the inside) or positional markers (inside [of]).'},
+  'preposition':{cat:'LOGICAL GLUE',
+    def:'marks the relationship between a noun and the rest of the sentence — location, direction, source, or instrument',
+    mandarin_note:''},
+  'modal':{cat:'ACTION/STATE',
+    def:'expresses necessity, possibility, desire, or obligation — precedes a main verb',
+    mandarin_note:''},
 };
 
 // ── CATEGORY DESCRIPTIONS (stage 1 prompt text) ──────────────────
@@ -1537,7 +1565,7 @@ const POS_STAGE2_MAP={
   'suffix':'particle', // suffix → particle family at this stage
 };
 const POS_STAGE2=['noun','verb','adjective','adverb','pronoun',
-                  'particle','conjunction','modal verb','measure word'];
+                  'particle','conjunction','modal verb','measure word','preposition'];
 
 // ── AXIS STAGE 3: Mandarin-specific compound types revealed
 // User sees that some words straddle categories — this is Mandarin's feature not a bug

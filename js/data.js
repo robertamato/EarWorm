@@ -234,6 +234,37 @@ let D_AR=[
   ["أجا",[["a",0],["ja",0]],"came",[],"verb"],
   ["راح",[["raa7",0]],"went",[],"verb"],
   ["بيت",[["bayt",0]],"house, home",[],"noun"],
+  // Batch 3 — verbs, adjectives, location, nouns, connectives
+  ["كان",[["kaan",0]],"was, were",[],"verb"],
+  ["قال",[["2aal",0]],"said",[],"verb"],
+  ["عمل",[["3ml",0]],"made, did",[],"verb"],
+  ["أكل",[["akl",0]],"ate",[],"verb"],
+  ["شرب",[["shrb",0]],"drank",[],"verb"],
+  ["صار",[["Saar",0]],"became, happened",[],"verb"],
+  ["رجع",[["rj3",0]],"returned",[],"verb"],
+  ["بيحب",[["bi",0],["7b",0]],"loves, likes",[],"verb"],
+  ["بيعرف",[["bi",0],["3rf",0]],"knows",[],"verb"],
+  ["عندي",[["3nd",0],["i",0]],"I have",[],"verb"],
+  ["كبير",[["kbiir",0]],"big, old",[],"adjective"],
+  ["صغير",[["S8iir",0]],"small, young",[],"adjective"],
+  ["جديد",[["jdiid",0]],"new",[],"adjective"],
+  ["حلو",[["7lu",0]],"nice, pretty, sweet",[],"adjective"],
+  ["كويس",[["kwis",0]],"good, fine",[],"adjective"],
+  ["صح",[["S7",0]],"right, correct",[],"adjective"],
+  ["غلط",[["8lT",0]],"wrong, mistake",[],"adjective"],
+  ["هون",[["hoon",0]],"here",[],"adverb"],
+  ["هناك",[["hn",0],["aak",0]],"there",[],"adverb"],
+  ["فوق",[["foo2",0]],"above, up",[],"adverb"],
+  ["تحت",[["t7t",0]],"under, below",[],"adverb"],
+  ["جنب",[["jnb",0]],"next to, beside",[],"preposition"],
+  ["ولد",[["wld",0]],"boy, kid",[],"noun"],
+  ["بنت",[["bnt",0]],"girl",[],"noun"],
+  ["اسم",[["ism",0]],"name",[],"noun"],
+  ["شغل",[["sh8l",0]],"work, job",[],"noun"],
+  ["أهل",[["ahl",0]],"family",[],"noun"],
+  ["و",[["w",0]],"and",[],"conjunction"],
+  ["أو",[["aw",0]],"or",[],"conjunction"],
+  ["إذا",[["i",0],["dhaa",0]],"if",[],"particle"],
 ];
 
 
@@ -660,23 +691,30 @@ function setAxisDue(i, axis, isCorrect, responseMs){
   if(!ci.axisReps) ci.axisReps={meaning:0,pos:0,tone:0};
   const now=Date.now();
 
+  // Wager tier jump: steps above default → stability tier bonus (0–3)
+  const wagerUplift=(typeof currentMultIdx!=='undefined'&&typeof defaultMultIdx!=='undefined')
+    ?Math.max(0,currentMultIdx-defaultMultIdx):0;
+  const tierBonus=Math.floor(wagerUplift*0.75);
+
   if(!isCorrect){
-    // Wrong: short interval — review within same session or shortly after
     ci.axisReps[axis]=0;
     const stage=getAxisStage(i,axis);
-    // Stage 0-1: 5 min, Stage 2: 20 min, Stage 3+: 1 hour
     const wrongMs=stage<=1?5*60000:stage===2?20*60000:60*60000;
-    ci.axisDue[axis]=now+wrongMs;
+    // High wager wrong: review sooner — overclaiming deserves urgency
+    const wagerWrongFactor=wagerUplift>0?Math.max(0.25,1-wagerUplift*0.15):1;
+    ci.axisDue[axis]=now+Math.round(wrongMs*wagerWrongFactor);
   } else {
     ci.axisReps[axis]=(ci.axisReps[axis]||0)+1;
     const stage=getAxisStage(i,axis);
     const stability=AXIS_STABILITY[axis]||[1,3,7,14];
     const reps=ci.axisReps[axis];
-    // Interval grows with reps, modulated by response speed
     const speedFactor=responseMs<2000?1.2:responseMs<5000?1.0:0.8;
-    const baseDays=stability[Math.min(reps-1,stability.length-1)]||30;
-    const intervalMs=Math.max(60000, Math.round(baseDays*speedFactor*DAY)); // min 1 minute
-    ci.axisDue[axis]=now+intervalMs;
+    // Tier jump: high wager correct selects a higher stability tier
+    const effectiveReps=Math.min(reps+tierBonus,stability.length);
+    const baseDays=stability[Math.min(effectiveReps-1,stability.length-1)]||30;
+    const intervalMs=Math.max(60000,Math.round(baseDays*speedFactor*DAY));
+    // Calibration: adjust based on historical wager accuracy for this card
+    ci.axisDue[axis]=now+confidenceAdjustedInterval(i,intervalMs);
   }
   save();
 }
@@ -733,9 +771,23 @@ function recordAxisResultNew(i, axis, isCorrect, responseMs){
   if(!ci.axisStage) ci.axisStage={pos:0,meaning:0};
   const currentStage=ci.axisStage[axis]||0;
   const maxStage=AXIS_MAX[axis]||3;
+
+  // High-wager wrong: regress stage proportional to uplift
+  if(!isCorrect){
+    const wagerUplift=(typeof currentMultIdx!=='undefined'&&typeof defaultMultIdx!=='undefined')
+      ?Math.max(0,currentMultIdx-defaultMultIdx):0;
+    if(wagerUplift>=3&&currentStage>0){
+      const regression=Math.min(currentStage,Math.floor(wagerUplift/2));
+      ci.axisStage[axis]=Math.max(0,currentStage-regression);
+      ci.axisHistory[axis]=[];
+      save();
+    }
+    return;
+  }
+
   if(currentStage>=maxStage) return;
 
-  // Check if accuracy window threshold met for stage advancement
+  // Stage advancement: accuracy window threshold
   const hist=ci.axisHistory[axis]||[];
   const baseWindow=(AXIS_ADVANCE_WINDOW[axis]&&AXIS_ADVANCE_WINDOW[axis][currentStage])||5;
   // Wager above default compresses the stage gate (max -3 from window)
@@ -746,7 +798,6 @@ function recordAxisResultNew(i, axis, isCorrect, responseMs){
     const acc=axisAccuracy(i,axis,windowSize);
     if(acc>=AXIS_ADVANCE_ACCURACY){
       ci.axisStage[axis]=(currentStage+1);
-      // Reset history for new stage
       ci.axisHistory[axis]=[];
     }
   }
@@ -759,12 +810,12 @@ function confidenceAdjustedInterval(i, baseInterval){
   const ci=card(i);
   if(!ci.wagerLog||ci.wagerLog.length<3) return baseInterval;
   const recent=ci.wagerLog.slice(-10);
-  const avgBetRatio=recent.reduce((s,r)=>s+r.betRatio,0)/recent.length;
+  // r.w = wagerIdx, r.def = defaultMultIdx at time of answer
+  const avgBetRatio=recent.reduce((s,r)=>s+r.w/Math.max(1,r.def),0)/recent.length;
   const accuracy=recent.filter(r=>r.ok).length/recent.length;
   // Overconfident: bet high, wrong often → shorter interval
   // Underconfident: bet low, right often → longer interval (they know it)
   const calibration=accuracy/Math.max(0.1,avgBetRatio);
-  // calibration < 1 = overconfident → shorten; > 1 = underconfident → lengthen
   return Math.round(baseInterval*Math.min(2.0,Math.max(0.4,calibration)));
 }
 

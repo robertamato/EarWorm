@@ -830,7 +830,7 @@ const COURSES={
     hasTone:false,
     lexicon:D_AR,
     storageKey:'earworm-arabic-levantine-v1',
-    hasGrammar:false,
+    hasGrammar:true,
     // Pre-rendered audio — speak() checks this before falling through to browser TTS.
     // Sources: Amazon Polly Neural (amazon-*) from reference deck; Google TTS (gtts-*) generated
     // for words not covered. All MSA-approximated; dialect distinction deferred.
@@ -1593,6 +1593,17 @@ function showGrammarDrill(cat, axis){
   const stage=gStage(cat,axis);
   const content=GRAMMAR_CONTENT[cat];
   if(!content){ recordAxisResultG(cat,axis,true,100); nextStudyCard(); return; }
+
+  // Axes beyond the language-agnostic boundary contain Mandarin-specific content.
+  // For non-Mandarin courses, auto-advance past them — they will never show.
+  const _isMandarin=activeCourse()&&activeCourse().langCode==='zh-CN';
+  if(!_isMandarin){
+    if(axis==='application'||axis==='tl_integration'){
+      recordAxisResultG(cat,axis,true,100); nextStudyCard(); return;
+    }
+    if(axis==='categorization'&&stage>=2){ recordAxisResultG(cat,axis,true,100); nextStudyCard(); return; }
+    if(axis==='discrimination'&&stage>=3){ recordAxisResultG(cat,axis,true,100); nextStudyCard(); return; }
+  }
 
   $('studyMode').textContent='GRAMMAR \u00b7 '+cat.replace('/',' / ');
   cardShownAtMC=Date.now();

@@ -234,6 +234,37 @@ let D_AR=[
   ["أجا",[["a",0],["ja",0]],"came",[],"verb"],
   ["راح",[["raa7",0]],"went",[],"verb"],
   ["بيت",[["bayt",0]],"house, home",[],"noun"],
+  // Batch 3 — verbs, adjectives, location, nouns, connectives
+  ["كان",[["kaan",0]],"was, were",[],"verb"],
+  ["قال",[["2aal",0]],"said",[],"verb"],
+  ["عمل",[["3ml",0]],"made, did",[],"verb"],
+  ["أكل",[["akl",0]],"ate",[],"verb"],
+  ["شرب",[["shrb",0]],"drank",[],"verb"],
+  ["صار",[["Saar",0]],"became, happened",[],"verb"],
+  ["رجع",[["rj3",0]],"returned",[],"verb"],
+  ["بيحب",[["bi",0],["7b",0]],"loves, likes",[],"verb"],
+  ["بيعرف",[["bi",0],["3rf",0]],"knows",[],"verb"],
+  ["عندي",[["3nd",0],["i",0]],"I have",[],"verb"],
+  ["كبير",[["kbiir",0]],"big, old",[],"adjective"],
+  ["صغير",[["S8iir",0]],"small, young",[],"adjective"],
+  ["جديد",[["jdiid",0]],"new",[],"adjective"],
+  ["حلو",[["7lu",0]],"nice, pretty, sweet",[],"adjective"],
+  ["كويس",[["kwis",0]],"good, fine",[],"adjective"],
+  ["صح",[["S7",0]],"right, correct",[],"adjective"],
+  ["غلط",[["8lT",0]],"wrong, mistake",[],"adjective"],
+  ["هون",[["hoon",0]],"here",[],"adverb"],
+  ["هناك",[["hn",0],["aak",0]],"there",[],"adverb"],
+  ["فوق",[["foo2",0]],"above, up",[],"adverb"],
+  ["تحت",[["t7t",0]],"under, below",[],"adverb"],
+  ["جنب",[["jnb",0]],"next to, beside",[],"preposition"],
+  ["ولد",[["wld",0]],"boy, kid",[],"noun"],
+  ["بنت",[["bnt",0]],"girl",[],"noun"],
+  ["اسم",[["ism",0]],"name",[],"noun"],
+  ["شغل",[["sh8l",0]],"work, job",[],"noun"],
+  ["أهل",[["ahl",0]],"family",[],"noun"],
+  ["و",[["w",0]],"and",[],"conjunction"],
+  ["أو",[["aw",0]],"or",[],"conjunction"],
+  ["إذا",[["i",0],["dhaa",0]],"if",[],"particle"],
 ];
 
 
@@ -660,23 +691,30 @@ function setAxisDue(i, axis, isCorrect, responseMs){
   if(!ci.axisReps) ci.axisReps={meaning:0,pos:0,tone:0};
   const now=Date.now();
 
+  // Wager tier jump: steps above default → stability tier bonus (0–3)
+  const wagerUplift=(typeof currentMultIdx!=='undefined'&&typeof defaultMultIdx!=='undefined')
+    ?Math.max(0,currentMultIdx-defaultMultIdx):0;
+  const tierBonus=Math.floor(wagerUplift*0.75);
+
   if(!isCorrect){
-    // Wrong: short interval — review within same session or shortly after
     ci.axisReps[axis]=0;
     const stage=getAxisStage(i,axis);
-    // Stage 0-1: 5 min, Stage 2: 20 min, Stage 3+: 1 hour
     const wrongMs=stage<=1?5*60000:stage===2?20*60000:60*60000;
-    ci.axisDue[axis]=now+wrongMs;
+    // High wager wrong: review sooner — overclaiming deserves urgency
+    const wagerWrongFactor=wagerUplift>0?Math.max(0.25,1-wagerUplift*0.15):1;
+    ci.axisDue[axis]=now+Math.round(wrongMs*wagerWrongFactor);
   } else {
     ci.axisReps[axis]=(ci.axisReps[axis]||0)+1;
     const stage=getAxisStage(i,axis);
     const stability=AXIS_STABILITY[axis]||[1,3,7,14];
     const reps=ci.axisReps[axis];
-    // Interval grows with reps, modulated by response speed
     const speedFactor=responseMs<2000?1.2:responseMs<5000?1.0:0.8;
-    const baseDays=stability[Math.min(reps-1,stability.length-1)]||30;
-    const intervalMs=Math.max(60000, Math.round(baseDays*speedFactor*DAY)); // min 1 minute
-    ci.axisDue[axis]=now+intervalMs;
+    // Tier jump: high wager correct selects a higher stability tier
+    const effectiveReps=Math.min(reps+tierBonus,stability.length);
+    const baseDays=stability[Math.min(effectiveReps-1,stability.length-1)]||30;
+    const intervalMs=Math.max(60000,Math.round(baseDays*speedFactor*DAY));
+    // Calibration: adjust based on historical wager accuracy for this card
+    ci.axisDue[axis]=now+confidenceAdjustedInterval(i,intervalMs);
   }
   save();
 }
@@ -733,9 +771,23 @@ function recordAxisResultNew(i, axis, isCorrect, responseMs){
   if(!ci.axisStage) ci.axisStage={pos:0,meaning:0};
   const currentStage=ci.axisStage[axis]||0;
   const maxStage=AXIS_MAX[axis]||3;
+
+  // High-wager wrong: regress stage proportional to uplift
+  if(!isCorrect){
+    const wagerUplift=(typeof currentMultIdx!=='undefined'&&typeof defaultMultIdx!=='undefined')
+      ?Math.max(0,currentMultIdx-defaultMultIdx):0;
+    if(wagerUplift>=3&&currentStage>0){
+      const regression=Math.min(currentStage,Math.floor(wagerUplift/2));
+      ci.axisStage[axis]=Math.max(0,currentStage-regression);
+      ci.axisHistory[axis]=[];
+      save();
+    }
+    return;
+  }
+
   if(currentStage>=maxStage) return;
 
-  // Check if accuracy window threshold met for stage advancement
+  // Stage advancement: accuracy window threshold
   const hist=ci.axisHistory[axis]||[];
   const baseWindow=(AXIS_ADVANCE_WINDOW[axis]&&AXIS_ADVANCE_WINDOW[axis][currentStage])||5;
   // Wager above default compresses the stage gate (max -3 from window)
@@ -746,7 +798,6 @@ function recordAxisResultNew(i, axis, isCorrect, responseMs){
     const acc=axisAccuracy(i,axis,windowSize);
     if(acc>=AXIS_ADVANCE_ACCURACY){
       ci.axisStage[axis]=(currentStage+1);
-      // Reset history for new stage
       ci.axisHistory[axis]=[];
     }
   }
@@ -759,12 +810,12 @@ function confidenceAdjustedInterval(i, baseInterval){
   const ci=card(i);
   if(!ci.wagerLog||ci.wagerLog.length<3) return baseInterval;
   const recent=ci.wagerLog.slice(-10);
-  const avgBetRatio=recent.reduce((s,r)=>s+r.betRatio,0)/recent.length;
+  // r.w = wagerIdx, r.def = defaultMultIdx at time of answer
+  const avgBetRatio=recent.reduce((s,r)=>s+r.w/Math.max(1,r.def),0)/recent.length;
   const accuracy=recent.filter(r=>r.ok).length/recent.length;
   // Overconfident: bet high, wrong often → shorter interval
   // Underconfident: bet low, right often → longer interval (they know it)
   const calibration=accuracy/Math.max(0.1,avgBetRatio);
-  // calibration < 1 = overconfident → shorten; > 1 = underconfident → lengthen
   return Math.round(baseInterval*Math.min(2.0,Math.max(0.4,calibration)));
 }
 
@@ -2880,7 +2931,7 @@ function buildStudyQueue(){
   // debug button, which builds its own queue in startStudy and does not use this
   // pool. Re-enable here only once a progressive-localization design teaches the
   // terms first (each Chinese grammar term introduced as a flashcard before use).
-  const dueDrills=[]; // was: (course hasGrammar) ? dueGrammarDrills() : []
+  const dueDrills=activeCourse()&&activeCourse().hasGrammar?dueGrammarDrills():[];
   dueDrills.forEach(({cat,axis})=>{
     grammarDuePool.push(grammarQueueKey(cat,axis));
   });
@@ -3033,22 +3084,28 @@ function nextStudyCard(){
           const pending=decision.pending;
           const reIdx=typeof pending==='object'?pending.idx:pending;
           const reMod=typeof pending==='object'?pending.mod:null;
-          if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
-            const reCat=grammarCatFromKey(reIdx);
-            if(reCat){ showGrammarDrill(reCat); return; }
-          }
-          if(reMod&&reMod!=='flash'){
-            lastModality.set(reIdx,reMod);
-            if(reMod==='convergence'){ showConvergenceQuestion(reIdx); return; }
-            if(reMod==='cloze'){ showStudyCloze(reIdx); return; }
-            if(reMod==='word-order'){ showWordOrderDrill(reIdx); return; }
-            if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
-              const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
-              showStudyPOSStaged(reIdx,ps); return;
+          // Hard invariant: never show same card twice in a row.
+          const _v2LastShown=sessionRecentCards[sessionRecentCards.length-1];
+          if(typeof reIdx==='number'&&!isGrammarKey(reIdx)&&reIdx===_v2LastShown){
+            // Defer this pending card — fall through to queue/intro logic below
+          } else {
+            if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
+              const reCat=grammarCatFromKey(reIdx);
+              if(reCat){ showGrammarDrill(reCat); return; }
             }
-            showStudyMC(reIdx,reMod==='mc-rev'); return;
+            if(reMod&&reMod!=='flash'){
+              lastModality.set(reIdx,reMod);
+              if(reMod==='convergence'){ showConvergenceQuestion(reIdx); return; }
+              if(reMod==='cloze'){ showStudyCloze(reIdx); return; }
+              if(reMod==='word-order'){ showWordOrderDrill(reIdx); return; }
+              if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
+                const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
+                showStudyPOSStaged(reIdx,ps); return;
+              }
+              showStudyMC(reIdx,reMod==='mc-rev'); return;
+            }
+            showStudyCard(reIdx); return;
           }
-          showStudyCard(reIdx); return;
         }
         if(decision.type==='introduce'&&decision.idx>=0){
           showStudyCard(decision.idx); return;
@@ -3089,30 +3146,38 @@ function nextStudyCard(){
     const pending=studyPending.shift();
     const reIdx=typeof pending==='object'?pending.idx:pending;
     const reMod=typeof pending==='object'?pending.mod:null;
-    // Grammar re-queue — negative key means grammar drill
-    if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
-      const reCat=grammarCatFromKey(reIdx);
-      if(reCat) showGrammarDrill(reCat);
-      return;
-    }
-    if(reMod&&reMod!=='flash'){
-      lastModality.set(reIdx,reMod);
-      if(reMod==='convergence'){
-        showConvergenceQuestion(reIdx);
-      } else if(reMod==='cloze'){
-        showStudyCloze(reIdx);
-      } else if(reMod==='word-order'){
-        showWordOrderDrill(reIdx);
-      } else if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
-        const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
-        showStudyPOSStaged(reIdx,ps);
-      } else {
-        showStudyMC(reIdx, reMod==='mc-rev');
+    // Hard invariant: never show same card twice in a row.
+    // If the pending card is the one just shown, defer it and fall through to queue.
+    const _lastShown=sessionRecentCards[sessionRecentCards.length-1];
+    if(typeof reIdx==='number'&&!isGrammarKey(reIdx)&&reIdx===_lastShown){
+      studyPending.push(pending);
+      // fall through to queue selection below
+    } else {
+      // Grammar re-queue — negative key means grammar drill
+      if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
+        const reCat=grammarCatFromKey(reIdx);
+        if(reCat) showGrammarDrill(reCat);
+        return;
       }
+      if(reMod&&reMod!=='flash'){
+        lastModality.set(reIdx,reMod);
+        if(reMod==='convergence'){
+          showConvergenceQuestion(reIdx);
+        } else if(reMod==='cloze'){
+          showStudyCloze(reIdx);
+        } else if(reMod==='word-order'){
+          showWordOrderDrill(reIdx);
+        } else if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
+          const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
+          showStudyPOSStaged(reIdx,ps);
+        } else {
+          showStudyMC(reIdx, reMod==='mc-rev');
+        }
+        return;
+      }
+      showStudyCard(reIdx);
       return;
     }
-    showStudyCard(reIdx);
-    return;
   }
   if(studyIdx>=studyQueue.length){
     studyQueue=buildStudyQueue();
@@ -3126,13 +3191,21 @@ function nextStudyCard(){
   // Scan ahead for a non-recent alternative and swap it into the current slot.
   if(!isGrammarKey(i) && sessionRecentCards.includes(i)){
     const limit=Math.min(studyIdx+RECENCY_WINDOW, studyQueue.length);
+    let _swapped=false;
     for(let s=studyIdx; s<limit; s++){
       const ni=studyQueue[s];
       if(isGrammarKey(ni) || !sessionRecentCards.includes(ni)){
         studyQueue[s]=i; // defer i to later
         i=ni;
+        _swapped=true;
         break;
       }
+    }
+    // Hard invariant: if swap failed and i is still the card just shown, advance past it.
+    if(!_swapped && i===sessionRecentCards[sessionRecentCards.length-1] && studyIdx<studyQueue.length){
+      studyQueue[studyIdx-1]=i; // put it back at a later position
+      i=studyQueue[studyIdx++];
+      if(i===undefined||i===null){ goHome(); return; }
     }
   }
   // Route grammar pool cards to grammar drill
@@ -4002,6 +4075,12 @@ const POS_LOGICAL={
   'noun/prep':{cat:'LOGICAL GLUE',
     def:'names a location or relationship and also marks positional structure in a sentence',
     mandarin_note:'里 上 下 前 后 — can be nouns (the inside) or positional markers (inside [of]).'},
+  'preposition':{cat:'LOGICAL GLUE',
+    def:'marks the relationship between a noun and the rest of the sentence — location, direction, source, or instrument',
+    mandarin_note:''},
+  'modal':{cat:'ACTION/STATE',
+    def:'expresses necessity, possibility, desire, or obligation — precedes a main verb',
+    mandarin_note:''},
 };
 
 // ── CATEGORY DESCRIPTIONS (stage 1 prompt text) ──────────────────
@@ -4024,7 +4103,7 @@ const POS_STAGE2_MAP={
   'suffix':'particle', // suffix → particle family at this stage
 };
 const POS_STAGE2=['noun','verb','adjective','adverb','pronoun',
-                  'particle','conjunction','modal verb','measure word'];
+                  'particle','conjunction','modal verb','measure word','preposition'];
 
 // ── AXIS STAGE 3: Mandarin-specific compound types revealed
 // User sees that some words straddle categories — this is Mandarin's feature not a bug
@@ -5700,7 +5779,7 @@ const COURSES={
     hasTone:false,
     lexicon:D_AR,
     storageKey:'earworm-arabic-levantine-v1',
-    hasGrammar:false,
+    hasGrammar:true,
     // Pre-rendered audio — speak() checks this before falling through to browser TTS.
     // Sources: Amazon Polly Neural (amazon-*) from reference deck; Google TTS (gtts-*) generated
     // for words not covered. All MSA-approximated; dialect distinction deferred.
@@ -6463,6 +6542,17 @@ function showGrammarDrill(cat, axis){
   const stage=gStage(cat,axis);
   const content=GRAMMAR_CONTENT[cat];
   if(!content){ recordAxisResultG(cat,axis,true,100); nextStudyCard(); return; }
+
+  // Axes beyond the language-agnostic boundary contain Mandarin-specific content.
+  // For non-Mandarin courses, auto-advance past them — they will never show.
+  const _isMandarin=activeCourse()&&activeCourse().langCode==='zh-CN';
+  if(!_isMandarin){
+    if(axis==='application'||axis==='tl_integration'){
+      recordAxisResultG(cat,axis,true,100); nextStudyCard(); return;
+    }
+    if(axis==='categorization'&&stage>=2){ recordAxisResultG(cat,axis,true,100); nextStudyCard(); return; }
+    if(axis==='discrimination'&&stage>=3){ recordAxisResultG(cat,axis,true,100); nextStudyCard(); return; }
+  }
 
   $('studyMode').textContent='GRAMMAR \u00b7 '+cat.replace('/',' / ');
   cardShownAtMC=Date.now();
