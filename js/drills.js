@@ -711,7 +711,7 @@ function applyProficiency(level2){
         S.grammar[cat][axis].stage=Math.min(AXIS_MAX_STAGES[axis]||4, grammarStageTarget);
         S.grammar[cat][axis].reps=Math.round((level2/100)*10);
         // Not due — already learned
-        S.grammar[cat][axis].due=level>=50?Date.now()+7*DAY:Date.now()-1000;
+        S.grammar[cat][axis].due=level>=50?(S.totalSeen||0)+200:0;
         const histLen=Math.round((level2/100)*10);
         S.grammar[cat][axis].history=Array(histLen).fill(1);
       }

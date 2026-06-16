@@ -1033,11 +1033,12 @@ const AXIS_MAX_STAGES={
 
 // SRS intervals per axis stage (in hours — grammar advances faster than vocabulary)
 const AXIS_INTERVALS={
-  recognition:    [0,    4,   12,  48,  168],  // hours
-  categorization: [0,    4,   12,  48,  168],
-  discrimination: [0,    8,   24,  96       ],
-  application:    [0,    8,   24,  96,  336 ],
-  tl_integration: [0,    12,  48,  168, 504 ],
+  // Card-count intervals per stage: show again after N total cards seen
+  recognition:    [5,  15,  50,  200],
+  categorization: [5,  15,  50,  200],
+  discrimination: [8,  25, 100      ],
+  application:    [8,  25, 100, 400 ],
+  tl_integration: [10, 40, 150, 600 ],
 };
 
 // Initialize grammar state — safe to call multiple times (idempotent)
@@ -1077,7 +1078,11 @@ function gAxis(cat, axis){
 function gStage(cat, axis){ return gAxis(cat,axis).stage||0; }
 function gDue(cat, axis){ return gAxis(cat,axis).due||0; }
 function gHistory(cat, axis){ return gAxis(cat,axis).history||[]; }
-function isAxisDue(cat, axis){ return gDue(cat,axis)<=Date.now(); }
+function isAxisDue(cat, axis){
+  const v=gDue(cat,axis);
+  if(v>1e9) return true; // migration: old ms timestamp → immediately due
+  return v<=(S.totalSeen||0);
+}
 
 // Overall grammar stage for a category = minimum sub-axis stage
 // Reflects genuine mastery only when all dimensions are solid
@@ -1097,19 +1102,19 @@ function axisAccuracyG(cat, axis, window=5){
 // Record result for a specific sub-axis
 function recordAxisResultG(cat, axis, isCorrect, responseMs){
   const ax=gAxis(cat,axis);
-  const now=Date.now();
-  const HOUR=3600000;
+  const seen=S.totalSeen||0;
 
   ax.history.push(isCorrect?1:0);
   if(ax.history.length>30) ax.history.shift();
 
   const stage=ax.stage||0;
   const maxStage=AXIS_MAX_STAGES[axis]||3;
-  const intervals=AXIS_INTERVALS[axis]||[0,8,24,96,168];
+  const intervals=AXIS_INTERVALS[axis]||[8,25,100];
 
   if(!isCorrect){
     ax.reps=0;
-    ax.due=now+Math.max(intervals[0]||4,1)*HOUR*0.5;
+    const wrongCards=stage<=1?3:stage<=2?6:12;
+    ax.due=seen+wrongCards;
   } else {
     ax.reps=(ax.reps||0)+1;
     // Accuracy window for advancement
@@ -1120,13 +1125,13 @@ function recordAxisResultG(cat, axis, isCorrect, responseMs){
     const threshold=stage===0?1.0:0.8;
     const shouldAdvance=recent.length>=windowSize&&acc>=threshold&&stage<maxStage;
 
-    const speedMult=responseMs<1500?1.3:responseMs<4000?1.0:0.8;
+    const speedMult=responseMs<1500?1.2:responseMs<4000?1.0:0.9;
     if(shouldAdvance){
       ax.stage=stage+1;
       ax.reps=0;
-      ax.due=now+(intervals[Math.min(stage+1,intervals.length-1)]||48)*HOUR;
+      ax.due=seen+Math.round((intervals[Math.min(stage+1,intervals.length-1)]||100)*speedMult);
     } else {
-      ax.due=now+Math.round((intervals[Math.min(stage,intervals.length-1)]||8)*HOUR*speedMult);
+      ax.due=seen+Math.max(1,Math.round((intervals[Math.min(stage,intervals.length-1)]||8)*speedMult));
     }
   }
   save();
@@ -1134,11 +1139,12 @@ function recordAxisResultG(cat, axis, isCorrect, responseMs){
 
 // Which sub-axis is most overdue for a category?
 function mostOverdueAxis_G(cat){
-  const now=Date.now();
+  const seen=S.totalSeen||0;
   let worst=null; let worstOverdue=-Infinity;
   GRAMMAR_AXES.forEach(axis=>{
     if(!isAxisDue(cat,axis)) return; // not due yet
-    const overdue=now-gDue(cat,axis);
+    const v=gDue(cat,axis);
+    const overdue=seen-(v>1e9?0:v);
     if(overdue>worstOverdue){ worstOverdue=overdue; worst=axis; }
   });
   return worst;
@@ -1200,7 +1206,7 @@ function grammarCatUnlocked(cat){
 }
 
 function dueGrammarDrills(){
-  const now=Date.now();
+  const seen=S.totalSeen||0;
   const drills=[];
   GRAMMAR_CATS.forEach(function(cat){
     GRAMMAR_AXES.forEach(function(axis){
@@ -1208,7 +1214,8 @@ function dueGrammarDrills(){
       if(sessionGrammarAnswered.has(cat+':'+axis)) return;
       // Only drill if vocabulary evidence is sufficient
       if(!grammarAxisUnlocked(cat,axis)) return;
-      drills.push({cat,axis,overdue:now-gDue(cat,axis)});
+      const v=gDue(cat,axis);
+      drills.push({cat,axis,overdue:seen-(v>1e9?0:v)});
     });
   });
   return drills.sort(function(a,b){return b.overdue-a.overdue;});

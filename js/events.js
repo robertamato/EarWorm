@@ -384,9 +384,8 @@ const Scheduler = {
     if (!S.grammar[cat][axis]) S.grammar[cat][axis] = { stage: 0, history: [], due: 0, reps: 0 };
 
     const ax = S.grammar[cat][axis];
-    const now = Date.now();
-    const HOUR = 3600000;
-    const intervals = AXIS_INTERVALS[axis] || [0, 4, 12, 48, 168];
+    const seen = S.totalSeen || 0;
+    const intervals = AXIS_INTERVALS[axis] || [8, 25, 100];
 
     ax.history.push(isCorrect ? 1 : 0);
     if (ax.history.length > 30) ax.history.shift();
@@ -396,7 +395,8 @@ const Scheduler = {
 
     if (!isCorrect) {
       ax.reps = 0;
-      ax.due = now + (intervals[0] || 4) * HOUR * 0.5;
+      const wrongCards = stage <= 1 ? 3 : stage <= 2 ? 6 : 12;
+      ax.due = seen + wrongCards;
     } else {
       ax.reps = (ax.reps || 0) + 1;
       const wagerBonus = currentMultIdx > defaultMultIdx ? 1 : 0;
@@ -405,14 +405,14 @@ const Scheduler = {
       const acc = recent.reduce((s,v) => s+v, 0) / Math.max(1, recent.length);
       const threshold = stage === 0 ? 1.0 : 0.8;
       const shouldAdvance = recent.length >= windowSize && acc >= threshold && stage < maxStage;
-      const speedMult = responseMs < 1500 ? 1.3 : responseMs < 4000 ? 1.0 : 0.8;
+      const speedMult = responseMs < 1500 ? 1.2 : responseMs < 4000 ? 1.0 : 0.9;
 
       if (shouldAdvance) {
         ax.stage = stage + 1;
         ax.reps = 0;
-        ax.due = now + (intervals[Math.min(stage + 1, intervals.length - 1)] || 48) * HOUR;
+        ax.due = seen + Math.round((intervals[Math.min(stage + 1, intervals.length - 1)] || 100) * speedMult);
       } else {
-        ax.due = now + Math.round((intervals[Math.min(stage, intervals.length - 1)] || 8) * HOUR * speedMult);
+        ax.due = seen + Math.max(1, Math.round((intervals[Math.min(stage, intervals.length - 1)] || 8) * speedMult));
       }
     }
 
@@ -544,15 +544,18 @@ const Scheduler = {
 
   _dueGrammarDrills(S, D, sessionGrammarAnswered) {
     if (!S.grammar) return [];
-    const now = Date.now();
+    const seen = S.totalSeen || 0;
     const drills = [];
     GRAMMAR_CATS.forEach(cat => {
       GRAMMAR_AXES.forEach(axis => {
         const ax = S.grammar[cat] && S.grammar[cat][axis];
-        if (!ax || ax.due > now) return;
+        if (!ax) return;
+        const v = ax.due || 0;
+        const effectiveDue = v > 1e9 ? 0 : v; // migration guard
+        if (effectiveDue > seen) return;
         if (sessionGrammarAnswered && sessionGrammarAnswered.has(cat + ':' + axis)) return;
         if (!this._grammarAxisUnlocked(S, D, cat, axis)) return;
-        drills.push({ cat, axis, overdue: now - ax.due });
+        drills.push({ cat, axis, overdue: seen - effectiveDue });
       });
     });
     return drills.sort((a, b) => b.overdue - a.overdue);
@@ -915,7 +918,7 @@ const State = {
         this._s.grammar[cat][axis] = {
           stage: Math.min(AXIS_MAX_STAGES[axis] || 4, grammarStageTarget),
           reps: Math.round((level / 100) * 10),
-          due: level >= 50 ? Date.now() + 7 * DAY_MS : Date.now() - 1000,
+          due: level >= 50 ? (S.totalSeen || 0) + 200 : 0,
           history: Array(Math.round((level / 100) * 10)).fill(1),
         };
       });
