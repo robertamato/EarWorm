@@ -333,7 +333,7 @@ const Scheduler = {
   recordAnswer(S, i, axis, isCorrect, responseMs) {
     if (!S.cards[i]) S.cards[i] = this._freshCard();
     const ci = S.cards[i];
-    const now = Date.now();
+    const seen = S.totalSeen || 0;
 
     // History
     if (!ci.axisHistory) ci.axisHistory = {};
@@ -347,19 +347,19 @@ const Scheduler = {
     if (!ci.axisStage) ci.axisStage = { meaning: 0, pos: 0 };
 
     const stage = ci.axisStage[axis] || 0;
-    const stability = AXIS_STABILITY[axis] || [0.002, 0.04, 0.5, 2, 7, 21];
+    const stability = AXIS_STABILITY[axis] || [3, 10, 30, 100];
     const maxStage = AXIS_MAX[axis] || 5;
 
     if (!isCorrect) {
       ci.axisReps[axis] = 0;
-      const wrongMs = stage <= 1 ? 5 * 60000 : stage === 2 ? 20 * 60000 : 60 * 60000;
-      ci.axisDue[axis] = now + wrongMs;
+      const wrongCards = stage <= 1 ? 3 : stage === 2 ? 8 : 20;
+      ci.axisDue[axis] = seen + wrongCards;
     } else {
       ci.axisReps[axis] = (ci.axisReps[axis] || 0) + 1;
       const speedFactor = responseMs < 2000 ? 1.2 : responseMs < 5000 ? 1.0 : 0.8;
-      const baseDays = stability[Math.min((ci.axisReps[axis] || 1) - 1, stability.length - 1)] || 0.002;
-      const intervalMs = Math.max(60000, Math.round(baseDays * speedFactor * DAY));
-      ci.axisDue[axis] = now + intervalMs;
+      const baseCards = stability[Math.min((ci.axisReps[axis] || 1) - 1, stability.length - 1)] || 3;
+      const intervalCards = Math.max(1, Math.round(baseCards * speedFactor));
+      ci.axisDue[axis] = seen + intervalCards;
 
       // Stage advancement
       const windowSize = (AXIS_ADVANCE_WINDOW[axis] && AXIS_ADVANCE_WINDOW[axis][stage]) || 5;
@@ -477,7 +477,10 @@ const Scheduler = {
 
   _isAxisDue(ci, axis) {
     if (!ci || !ci.axisDue) return true;
-    return (ci.axisDue[axis] || 0) <= Date.now();
+    const v = ci.axisDue[axis] || 0;
+    if (v > 1e9) return true; // migration: old ms timestamp → immediately due
+    const seen = (typeof S !== 'undefined' ? S.totalSeen : 0) || 0;
+    return v <= seen;
   },
 
   _isCardDue(ci) {
@@ -485,10 +488,10 @@ const Scheduler = {
   },
 
   _mostOverdueAxis(ci) {
-    const now = Date.now();
-    const mOverdue = now - (ci.axisDue && ci.axisDue.meaning || 0);
-    const pOverdue = now - (ci.axisDue && ci.axisDue.pos || 0);
-    return mOverdue >= pOverdue ? 'meaning' : 'pos';
+    const seen = (typeof S !== 'undefined' ? S.totalSeen : 0) || 0;
+    const mDue = ci.axisDue && ci.axisDue.meaning ? (ci.axisDue.meaning > 1e9 ? 0 : ci.axisDue.meaning) : 0;
+    const pDue = ci.axisDue && ci.axisDue.pos ? (ci.axisDue.pos > 1e9 ? 0 : ci.axisDue.pos) : 0;
+    return (seen - mDue) >= (seen - pDue) ? 'meaning' : 'pos';
   },
 
   _isGraduated(ci) {
@@ -524,7 +527,6 @@ const Scheduler = {
   },
 
   _dueVocab(S, D) {
-    const now = Date.now();
     return D.map((_, i) => i).filter(i => {
       if (!this._isUnlocked(S, i)) return false;
       const ci = S.cards[i];
@@ -758,8 +760,8 @@ const State = {
           ci.exp = 1;
           ci.seen = true;
           if (!ci.axisDue) ci.axisDue = {};
-          ci.axisDue.meaning = Date.now() + Math.round(0.002 * DAY_MS);
-          ci.axisDue.pos = Date.now() + Math.round(0.006 * DAY_MS);
+          ci.axisDue.meaning = (S.totalSeen || 0) + AXIS_STABILITY.meaning[0];
+          ci.axisDue.pos = (S.totalSeen || 0) + AXIS_STABILITY.pos[0];
         }
         break;
       }
@@ -903,7 +905,7 @@ const State = {
       ci.m = Math.round((level / 100) * 4 * 10) / 10;
       ci.axisStage = { meaning: Math.min(5, axisStageTarget), pos: Math.min(4, Math.floor(axisStageTarget / 2)) };
       ci.axisReps = { meaning: Math.round((level / 100) * 20), pos: 0, tone: 0 };
-      ci.axisDue = { meaning: Date.now() - 1000, pos: Date.now() - 1000 };
+      ci.axisDue = { meaning: 0, pos: 0 }; // always due immediately
       ci.axisHistory = { meaning: Array(Math.round((level / 100) * 15)).fill(1), pos: [], tone: [] };
       this._s.cards[i] = ci;
     });

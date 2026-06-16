@@ -695,8 +695,8 @@ function applyProficiency(level2){
     ci.axisReps.meaning=Math.round((level2/100)*20);
     if(!ci.axisDue) ci.axisDue={};
     // Cards are due now for review
-    ci.axisDue.meaning=Date.now()-1000;
-    ci.axisDue.pos=Date.now()-1000;
+    ci.axisDue.meaning=0; // always due immediately
+    ci.axisDue.pos=0;
     if(!ci.axisHistory) ci.axisHistory={meaning:[],pos:[],tone:[]};
     // Simulate successful history
     const histLen=Math.round((level2/100)*15);

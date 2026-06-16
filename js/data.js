@@ -272,7 +272,7 @@ let D_AR=[
 // KEY is the ACTIVE course's localStorage key — reassigned by switchCourse().
 let KEY='earworm-mandarin-v1';
 function defaultState(){
-  return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},
+  return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},totalSeen:0,
     // Independent grammar track — multi-dimensional, per-category
     // Each category has 5 independent sub-axes with their own SRS schedules
     grammar:{},
@@ -304,6 +304,7 @@ function load(){
       // Ensure grammar track exists with all categories
       if(!S.grammar||typeof S.grammar!=='object') S.grammar={};
       if(!S.decks||typeof S.decks!=='object') S.decks={};
+      if(typeof S.totalSeen!=='number') S.totalSeen=0;
     }
   }catch(e){ console.warn('Load failed, fresh start',e); }
 }
@@ -673,23 +674,24 @@ const DAY=86400000;
 // POS axis: conceptual — longer intervals once learned
 // Meaning axis: higher frequency repetition early, then extends
 const AXIS_STABILITY={
-  // Stage 0: same-session, Stage 1: hours, Stage 2+: days
-  meaning: [0.002, 0.04, 0.5, 2, 7, 21], // 0.002d=3min, 0.04d=58min, 0.5d=12hr
-  pos:     [0.01, 0.2, 2, 7],
-  tone:    [0.01, 0.1, 1, 5],
+  // Card-count intervals: show this axis again after N total cards seen
+  meaning: [3, 10, 30, 100, 300, 1000],
+  pos:     [5, 20, 60, 200],
+  tone:    [4, 15, 50, 150],
 };
 
 function getAxisDue(i, axis){
   const ci=card(i);
   if(!ci.axisDue) ci.axisDue={};
-  return ci.axisDue[axis]||0;
+  const v=ci.axisDue[axis]||0;
+  return v>1e9?0:v; // migration: old ms timestamps → immediately due
 }
 
 function setAxisDue(i, axis, isCorrect, responseMs){
   const ci=card(i);
   if(!ci.axisDue) ci.axisDue={};
   if(!ci.axisReps) ci.axisReps={meaning:0,pos:0,tone:0};
-  const now=Date.now();
+  const seen=S.totalSeen||0;
 
   // Wager tier jump: steps above default → stability tier bonus (0–3)
   const wagerUplift=(typeof currentMultIdx!=='undefined'&&typeof defaultMultIdx!=='undefined')
@@ -699,38 +701,37 @@ function setAxisDue(i, axis, isCorrect, responseMs){
   if(!isCorrect){
     ci.axisReps[axis]=0;
     const stage=getAxisStage(i,axis);
-    const wrongMs=stage<=1?5*60000:stage===2?20*60000:60*60000;
+    const wrongCards=stage<=1?3:stage===2?8:20;
     // High wager wrong: review sooner — overclaiming deserves urgency
     const wagerWrongFactor=wagerUplift>0?Math.max(0.25,1-wagerUplift*0.15):1;
-    ci.axisDue[axis]=now+Math.round(wrongMs*wagerWrongFactor);
+    ci.axisDue[axis]=seen+Math.max(1,Math.round(wrongCards*wagerWrongFactor));
   } else {
     ci.axisReps[axis]=(ci.axisReps[axis]||0)+1;
-    const stage=getAxisStage(i,axis);
-    const stability=AXIS_STABILITY[axis]||[1,3,7,14];
+    const stability=AXIS_STABILITY[axis]||[3,10,30,100];
     const reps=ci.axisReps[axis];
     const speedFactor=responseMs<2000?1.2:responseMs<5000?1.0:0.8;
     // Tier jump: high wager correct selects a higher stability tier
     const effectiveReps=Math.min(reps+tierBonus,stability.length);
-    const baseDays=stability[Math.min(effectiveReps-1,stability.length-1)]||30;
-    const intervalMs=Math.max(60000,Math.round(baseDays*speedFactor*DAY));
+    const baseCards=stability[Math.min(effectiveReps-1,stability.length-1)]||100;
+    const intervalCards=Math.max(1,Math.round(baseCards*speedFactor));
     // Calibration: adjust based on historical wager accuracy for this card
-    ci.axisDue[axis]=now+confidenceAdjustedInterval(i,intervalMs);
+    ci.axisDue[axis]=seen+confidenceAdjustedInterval(i,intervalCards);
   }
   save();
 }
 
 // Is any axis of this card due?
 function isCardDue(i){
-  const now=Date.now();
-  return ['meaning','pos'].some(axis=>getAxisDue(i,axis)<=now);
+  const seen=S.totalSeen||0;
+  return ['meaning','pos'].some(axis=>getAxisDue(i,axis)<=seen);
 }
 
 // Which axis is most overdue? Used to select modality for due cards
 function mostOverdueAxis(i){
-  const now=Date.now();
+  const seen=S.totalSeen||0;
   let worst=null; let worstOverdue=-Infinity;
   ['meaning','pos'].forEach(axis=>{
-    const overdue=now-getAxisDue(i,axis);
+    const overdue=seen-getAxisDue(i,axis);
     if(overdue>worstOverdue){ worstOverdue=overdue; worst=axis; }
   });
   return worst;

@@ -726,6 +726,7 @@ function showStudyCard(i){
   if(i===undefined||i===null||isGrammarKey(i)||i<0||i>=D.length){ nextStudyCard(); return; }
   clearCardState();
   studyCardCount++;
+  S.totalSeen=(S.totalSeen||0)+1; save();
   tickSessionCard();
   studyEncounters.set(i,(studyEncounters.get(i)||0)+1);
   if(studyCardCount===1&&window.EW&&EW.obs) EW.obs.logEvent('session:firstFlash',{idx:i});
@@ -819,9 +820,8 @@ function showStudyFlash(i){
     ci0.seen=true;
     // Set initial due date so MC can fire after short interval
     if(!ci0.axisDue) ci0.axisDue={};
-    const introInterval=Math.round(0.012*DAY); // ~17 min
-    ci0.axisDue['meaning']=Date.now()+introInterval;
-    ci0.axisDue['pos']=Date.now()+introInterval*3;
+    ci0.axisDue['meaning']=(S.totalSeen||0)+AXIS_STABILITY.meaning[0]; // 3 cards
+    ci0.axisDue['pos']=(S.totalSeen||0)+AXIS_STABILITY.pos[0]; // 5 cards
     save();
   }
 

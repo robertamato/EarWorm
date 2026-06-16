@@ -272,7 +272,7 @@ let D_AR=[
 // KEY is the ACTIVE course's localStorage key — reassigned by switchCourse().
 let KEY='earworm-mandarin-v1';
 function defaultState(){
-  return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},
+  return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},totalSeen:0,
     // Independent grammar track — multi-dimensional, per-category
     // Each category has 5 independent sub-axes with their own SRS schedules
     grammar:{},
@@ -304,6 +304,7 @@ function load(){
       // Ensure grammar track exists with all categories
       if(!S.grammar||typeof S.grammar!=='object') S.grammar={};
       if(!S.decks||typeof S.decks!=='object') S.decks={};
+      if(typeof S.totalSeen!=='number') S.totalSeen=0;
     }
   }catch(e){ console.warn('Load failed, fresh start',e); }
 }
@@ -673,23 +674,24 @@ const DAY=86400000;
 // POS axis: conceptual — longer intervals once learned
 // Meaning axis: higher frequency repetition early, then extends
 const AXIS_STABILITY={
-  // Stage 0: same-session, Stage 1: hours, Stage 2+: days
-  meaning: [0.002, 0.04, 0.5, 2, 7, 21], // 0.002d=3min, 0.04d=58min, 0.5d=12hr
-  pos:     [0.01, 0.2, 2, 7],
-  tone:    [0.01, 0.1, 1, 5],
+  // Card-count intervals: show this axis again after N total cards seen
+  meaning: [3, 10, 30, 100, 300, 1000],
+  pos:     [5, 20, 60, 200],
+  tone:    [4, 15, 50, 150],
 };
 
 function getAxisDue(i, axis){
   const ci=card(i);
   if(!ci.axisDue) ci.axisDue={};
-  return ci.axisDue[axis]||0;
+  const v=ci.axisDue[axis]||0;
+  return v>1e9?0:v; // migration: old ms timestamps → immediately due
 }
 
 function setAxisDue(i, axis, isCorrect, responseMs){
   const ci=card(i);
   if(!ci.axisDue) ci.axisDue={};
   if(!ci.axisReps) ci.axisReps={meaning:0,pos:0,tone:0};
-  const now=Date.now();
+  const seen=S.totalSeen||0;
 
   // Wager tier jump: steps above default → stability tier bonus (0–3)
   const wagerUplift=(typeof currentMultIdx!=='undefined'&&typeof defaultMultIdx!=='undefined')
@@ -699,38 +701,37 @@ function setAxisDue(i, axis, isCorrect, responseMs){
   if(!isCorrect){
     ci.axisReps[axis]=0;
     const stage=getAxisStage(i,axis);
-    const wrongMs=stage<=1?5*60000:stage===2?20*60000:60*60000;
+    const wrongCards=stage<=1?3:stage===2?8:20;
     // High wager wrong: review sooner — overclaiming deserves urgency
     const wagerWrongFactor=wagerUplift>0?Math.max(0.25,1-wagerUplift*0.15):1;
-    ci.axisDue[axis]=now+Math.round(wrongMs*wagerWrongFactor);
+    ci.axisDue[axis]=seen+Math.max(1,Math.round(wrongCards*wagerWrongFactor));
   } else {
     ci.axisReps[axis]=(ci.axisReps[axis]||0)+1;
-    const stage=getAxisStage(i,axis);
-    const stability=AXIS_STABILITY[axis]||[1,3,7,14];
+    const stability=AXIS_STABILITY[axis]||[3,10,30,100];
     const reps=ci.axisReps[axis];
     const speedFactor=responseMs<2000?1.2:responseMs<5000?1.0:0.8;
     // Tier jump: high wager correct selects a higher stability tier
     const effectiveReps=Math.min(reps+tierBonus,stability.length);
-    const baseDays=stability[Math.min(effectiveReps-1,stability.length-1)]||30;
-    const intervalMs=Math.max(60000,Math.round(baseDays*speedFactor*DAY));
+    const baseCards=stability[Math.min(effectiveReps-1,stability.length-1)]||100;
+    const intervalCards=Math.max(1,Math.round(baseCards*speedFactor));
     // Calibration: adjust based on historical wager accuracy for this card
-    ci.axisDue[axis]=now+confidenceAdjustedInterval(i,intervalMs);
+    ci.axisDue[axis]=seen+confidenceAdjustedInterval(i,intervalCards);
   }
   save();
 }
 
 // Is any axis of this card due?
 function isCardDue(i){
-  const now=Date.now();
-  return ['meaning','pos'].some(axis=>getAxisDue(i,axis)<=now);
+  const seen=S.totalSeen||0;
+  return ['meaning','pos'].some(axis=>getAxisDue(i,axis)<=seen);
 }
 
 // Which axis is most overdue? Used to select modality for due cards
 function mostOverdueAxis(i){
-  const now=Date.now();
+  const seen=S.totalSeen||0;
   let worst=null; let worstOverdue=-Infinity;
   ['meaning','pos'].forEach(axis=>{
-    const overdue=now-getAxisDue(i,axis);
+    const overdue=seen-getAxisDue(i,axis);
     if(overdue>worstOverdue){ worstOverdue=overdue; worst=axis; }
   });
   return worst;
@@ -3264,6 +3265,7 @@ function showStudyCard(i){
   if(i===undefined||i===null||isGrammarKey(i)||i<0||i>=D.length){ nextStudyCard(); return; }
   clearCardState();
   studyCardCount++;
+  S.totalSeen=(S.totalSeen||0)+1; save();
   tickSessionCard();
   studyEncounters.set(i,(studyEncounters.get(i)||0)+1);
   if(studyCardCount===1&&window.EW&&EW.obs) EW.obs.logEvent('session:firstFlash',{idx:i});
@@ -3357,9 +3359,8 @@ function showStudyFlash(i){
     ci0.seen=true;
     // Set initial due date so MC can fire after short interval
     if(!ci0.axisDue) ci0.axisDue={};
-    const introInterval=Math.round(0.012*DAY); // ~17 min
-    ci0.axisDue['meaning']=Date.now()+introInterval;
-    ci0.axisDue['pos']=Date.now()+introInterval*3;
+    ci0.axisDue['meaning']=(S.totalSeen||0)+AXIS_STABILITY.meaning[0]; // 3 cards
+    ci0.axisDue['pos']=(S.totalSeen||0)+AXIS_STABILITY.pos[0]; // 5 cards
     save();
   }
 
@@ -7389,8 +7390,8 @@ function applyProficiency(level2){
     ci.axisReps.meaning=Math.round((level2/100)*20);
     if(!ci.axisDue) ci.axisDue={};
     // Cards are due now for review
-    ci.axisDue.meaning=Date.now()-1000;
-    ci.axisDue.pos=Date.now()-1000;
+    ci.axisDue.meaning=0; // always due immediately
+    ci.axisDue.pos=0;
     if(!ci.axisHistory) ci.axisHistory={meaning:[],pos:[],tone:[]};
     // Simulate successful history
     const histLen=Math.round((level2/100)*15);
@@ -7874,7 +7875,7 @@ const Scheduler = {
   recordAnswer(S, i, axis, isCorrect, responseMs) {
     if (!S.cards[i]) S.cards[i] = this._freshCard();
     const ci = S.cards[i];
-    const now = Date.now();
+    const seen = S.totalSeen || 0;
 
     // History
     if (!ci.axisHistory) ci.axisHistory = {};
@@ -7888,19 +7889,19 @@ const Scheduler = {
     if (!ci.axisStage) ci.axisStage = { meaning: 0, pos: 0 };
 
     const stage = ci.axisStage[axis] || 0;
-    const stability = AXIS_STABILITY[axis] || [0.002, 0.04, 0.5, 2, 7, 21];
+    const stability = AXIS_STABILITY[axis] || [3, 10, 30, 100];
     const maxStage = AXIS_MAX[axis] || 5;
 
     if (!isCorrect) {
       ci.axisReps[axis] = 0;
-      const wrongMs = stage <= 1 ? 5 * 60000 : stage === 2 ? 20 * 60000 : 60 * 60000;
-      ci.axisDue[axis] = now + wrongMs;
+      const wrongCards = stage <= 1 ? 3 : stage === 2 ? 8 : 20;
+      ci.axisDue[axis] = seen + wrongCards;
     } else {
       ci.axisReps[axis] = (ci.axisReps[axis] || 0) + 1;
       const speedFactor = responseMs < 2000 ? 1.2 : responseMs < 5000 ? 1.0 : 0.8;
-      const baseDays = stability[Math.min((ci.axisReps[axis] || 1) - 1, stability.length - 1)] || 0.002;
-      const intervalMs = Math.max(60000, Math.round(baseDays * speedFactor * DAY));
-      ci.axisDue[axis] = now + intervalMs;
+      const baseCards = stability[Math.min((ci.axisReps[axis] || 1) - 1, stability.length - 1)] || 3;
+      const intervalCards = Math.max(1, Math.round(baseCards * speedFactor));
+      ci.axisDue[axis] = seen + intervalCards;
 
       // Stage advancement
       const windowSize = (AXIS_ADVANCE_WINDOW[axis] && AXIS_ADVANCE_WINDOW[axis][stage]) || 5;
@@ -8018,7 +8019,10 @@ const Scheduler = {
 
   _isAxisDue(ci, axis) {
     if (!ci || !ci.axisDue) return true;
-    return (ci.axisDue[axis] || 0) <= Date.now();
+    const v = ci.axisDue[axis] || 0;
+    if (v > 1e9) return true; // migration: old ms timestamp → immediately due
+    const seen = (typeof S !== 'undefined' ? S.totalSeen : 0) || 0;
+    return v <= seen;
   },
 
   _isCardDue(ci) {
@@ -8026,10 +8030,10 @@ const Scheduler = {
   },
 
   _mostOverdueAxis(ci) {
-    const now = Date.now();
-    const mOverdue = now - (ci.axisDue && ci.axisDue.meaning || 0);
-    const pOverdue = now - (ci.axisDue && ci.axisDue.pos || 0);
-    return mOverdue >= pOverdue ? 'meaning' : 'pos';
+    const seen = (typeof S !== 'undefined' ? S.totalSeen : 0) || 0;
+    const mDue = ci.axisDue && ci.axisDue.meaning ? (ci.axisDue.meaning > 1e9 ? 0 : ci.axisDue.meaning) : 0;
+    const pDue = ci.axisDue && ci.axisDue.pos ? (ci.axisDue.pos > 1e9 ? 0 : ci.axisDue.pos) : 0;
+    return (seen - mDue) >= (seen - pDue) ? 'meaning' : 'pos';
   },
 
   _isGraduated(ci) {
@@ -8065,7 +8069,6 @@ const Scheduler = {
   },
 
   _dueVocab(S, D) {
-    const now = Date.now();
     return D.map((_, i) => i).filter(i => {
       if (!this._isUnlocked(S, i)) return false;
       const ci = S.cards[i];
@@ -8299,8 +8302,8 @@ const State = {
           ci.exp = 1;
           ci.seen = true;
           if (!ci.axisDue) ci.axisDue = {};
-          ci.axisDue.meaning = Date.now() + Math.round(0.002 * DAY_MS);
-          ci.axisDue.pos = Date.now() + Math.round(0.006 * DAY_MS);
+          ci.axisDue.meaning = (S.totalSeen || 0) + AXIS_STABILITY.meaning[0];
+          ci.axisDue.pos = (S.totalSeen || 0) + AXIS_STABILITY.pos[0];
         }
         break;
       }
@@ -8444,7 +8447,7 @@ const State = {
       ci.m = Math.round((level / 100) * 4 * 10) / 10;
       ci.axisStage = { meaning: Math.min(5, axisStageTarget), pos: Math.min(4, Math.floor(axisStageTarget / 2)) };
       ci.axisReps = { meaning: Math.round((level / 100) * 20), pos: 0, tone: 0 };
-      ci.axisDue = { meaning: Date.now() - 1000, pos: Date.now() - 1000 };
+      ci.axisDue = { meaning: 0, pos: 0 }; // always due immediately
       ci.axisHistory = { meaning: Array(Math.round((level / 100) * 15)).fill(1), pos: [], tone: [] };
       this._s.cards[i] = ci;
     });
