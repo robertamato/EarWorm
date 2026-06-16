@@ -291,12 +291,15 @@ function recordAxisResult(i, axis, isCorrect){
 
   if(isCorrect){
     ci.axisCorrect[axis]=(ci.axisCorrect[axis]||0)+1;
-    // Advance stage if gate met
-    if(ci.axisCorrect[axis]>=axisGate(axis, ci.axisStage[axis]||0)){
+    const baseGate=axisGate(axis, ci.axisStage[axis]||0);
+    const _wBonus2=(typeof currentMultIdx!=='undefined'&&typeof defaultMultIdx!=='undefined')
+      ?Math.min(2,Math.max(0,currentMultIdx-defaultMultIdx)):0;
+    const gate=Math.max(1,baseGate-_wBonus2);
+    if(ci.axisCorrect[axis]>=gate){
       const maxStage=AXIS_MAX[axis];
       if(ci.axisStage[axis]<maxStage){
         ci.axisStage[axis]++;
-        ci.axisCorrect[axis]=0; // reset streak for next stage
+        ci.axisCorrect[axis]=0;
       }
     }
   } else {

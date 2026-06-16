@@ -172,7 +172,7 @@ contains its vowel. Never split it off as a standalone token.
 |------|-------|-------|
 | على | `["a","la"]` | `["3la"]` |
 | عمل | `["a","mal"]` | `["3a","mal"]` |
-| حكى | `["7","aka"]` | `["7a","ka"]` |
+| حكى | `["7","aka"]` | `["7k","a"]` |
 | راح | `["raa","7"]` | `["raa7"]` |
 | أجا | `["a","ja"]` | `["2a","ja"]` |
 
@@ -181,17 +181,30 @@ contains its vowel. Never split it off as a standalone token.
 If the Arabic glyph is ع، ح، خ، غ، ء the digit MUST appear in the romanization.
 Dropping it silently is the most common error and the hardest for learners to detect.
 
-### Rule 3 — hamza (2) on word-initial alef
+### Rule 3 — word-initial hamza: omit from latinization, keep in Arabic text
 
-أ and إ carry a hamza — the glottal stop is real. Write `2`. Apply consistently:
-`أنا → 2ana`, `أنت → 2inta`, `إحنا → 2ihna`, `أجا → 2aja`.
-Exception: bare ا (alef without hamza diacritic, used as vowel carrier mid-word)
-has no glottal stop and takes no `2`.
+Arabic words beginning with أ or إ have an automatic glottal onset — functionally
+identical to how English speakers think of any vowel-initial word. Writing `2` here
+is more confusing than helpful: non-native speakers will never reliably distinguish
+it from a plain vowel onset, and native speakers don't consciously produce it as a
+separate phoneme at word boundaries.
+
+**Display rule:** omit the leading `2`. `أنا → ana`, `أجا → aja`, `إحنا → i7na`.
+
+**Audio rule:** keep the full Arabic text (أ، إ) in D_AR and the audioMap key — gTTS
+and all TTS engines read the hamza diacritic and produce the correct onset automatically.
+
+**Mid-word and word-final hamza** (ؤ، ئ، ء) keep the `2` — these ARE phonemically
+salient contrasts that learners must hear and distinguish.
 
 ### Rule 4 — gemination (shadda) splits at the boundary
 
 Write the doubled consonant across the split: `بدّي → ["bid","di"]`, not `["bidd","i"]`
 or `["b","iddi"]`. The hyphen in the display (`bid-di`) falls at this split point.
+
+**Rule 8 exception:** the short vowel immediately before a shadda is kept even when
+unwritten. It is the syllable anchor that makes the doubling legible — without it,
+`bd-di` is unreadable. Pre-shadda vowels are always written.
 
 ### Rule 5 — long vowels stay in their syllable
 
@@ -207,8 +220,37 @@ syllable. Do not split `shaaf` into `sha + af`.
 ### Rule 6 — Levantine ق reduction
 
 In Levantine speech ق → 2 (glottal stop) in most words. Encode the reduced form
-in the syllabification since that is what the learner will hear: `وقت → ["wa2t"]`.
+in the syllabification since that is what the learner will hear: `وقت → ["w2t"]`.
 Note the reduction in the lexicon comment if it is non-obvious.
+(Rule 8 also removes the unwritten short `a` between و and ق: `wa2t` → `w2t`.)
+
+### Rule 8 — omit short vowels not represented by a written letter
+
+Arabic script writes long vowels (aa ii uu) via the letters ا ي و. Short vowels
+between consonants are almost never written. The latinization reflects what is
+written, not what is inferred.
+
+**Default: omit.** If a short vowel has no corresponding letter in the Arabic text
+and no harakat diacritic, do not write it.
+
+| Arabic | Unwritten vowel | Wrong | Right |
+|--------|----------------|-------|-------|
+| مع | short `a` between م and ع | `ma3` | `m3` |
+| ب | short `i` after ب | `bi` | `b` |
+| حكى | short `a` after ح | `7aka` | `7k-a` |
+| من | short `i` between م and ن | `min` | `mn` |
+
+**Exceptions (readability threshold):** if omitting all short vowels makes a word
+unpronounceable or genuinely unrecognizable as a visual anchor — use judgment and
+document the exception. The audio is primary; the latinization is a glyph anchor,
+not a phonetic spelling.
+
+**Vowels that ARE written (keep them):**
+- ا (alef) in the body of a word → write `a` or `aa`
+- ي (ya) as vowel → write `i`, `ii`, or `ey` as appropriate
+- و (waw) as vowel → write `u`, `uu`, or `w` as appropriate
+- ى (alef maqsura) → write `a`
+- Word-initial أ/إ alef → write its vowel per Rule 3 (hamza display omitted, vowel kept)
 
 ### Rule 7 — sun-letter assimilation is NOT encoded
 

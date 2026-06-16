@@ -818,7 +818,7 @@ function showStudyFlash(i){
 
   // Pinyin
   const py=$('studyPinyin'); py.innerHTML='';
-  syls.forEach(([s,t])=>{ const sp=document.createElement('span'); sp.textContent=s; sp.style.color=toneColor(t,fg); py.appendChild(sp); });
+  renderSyls(py,syls,fg);
 
   // Fire TTS after hanzi+pinyin are in the DOM. 30ms lets SAPI settle after prime/cancel.
   // Guard with activeCardIdx: if the user advances before the timeout fires, skip stale speak.
@@ -919,7 +919,7 @@ function showStudyMC(i, reverse, showPosHint){
     const posHintStr=showPosHint&&pos?'<br><span style="font-size:9px;opacity:.65;">'+pos.toUpperCase()+'</span>':'';
     $('studyMCPromptText').innerHTML='<span style="font-size:72px;line-height:1;text-decoration:none;'+CJKf+'">'+ch+'</span>'+posHintStr;
     const py=$('studyMCPinyin'); py.innerHTML='';
-    syls.forEach(([s,t])=>{ const sp=document.createElement('span'); sp.textContent=s; sp.style.color=toneColor(t,ink); py.appendChild(sp); });
+    renderSyls(py,syls,ink);
   } else {
     // Reverse mode: English prompt → progressively localized as meaning axis stage rises
     // Stage 0-1: English def + TTS speaks Mandarin answer (full scaffold)
@@ -1618,7 +1618,7 @@ function showStudyPOS(i){
 
   // Pinyin
   const py=$('studyPOSPinyin'); py.innerHTML='';
-  syls.forEach(([s,t])=>{ const sp=document.createElement('span'); sp.textContent=s+' '; sp.style.color=toneColor(t,fg); py.appendChild(sp); });
+  renderSyls(py,syls,fg);
 
   const m=masteryScore(i);
   const stage=posStage(m);

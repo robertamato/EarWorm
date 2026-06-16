@@ -194,44 +194,44 @@ let D_JA=[
 // Romanization is a working placeholder; owner to revise freely as course is built.
 let D_AR=[
   ["في",[["fi",0]],"in, at",[],"preposition"],
-  ["من",[["min",0]],"from, of",[],"preposition"],
+  ["من",[["mn",0]],"from, of",[],"preposition"],
   ["على",[["3la",0]],"on, upon",[],"preposition"],
-  ["مع",[["ma3",0]],"with, together",[],"preposition"],
-  ["ب",[["bi",0]],"in, with, by",[],"preposition"],
-  ["أنا",[["a",0],["na",0]],"I, me",[],"pronoun"],
-  ["أنت",[["in",0],["ta",0]],"you (m.sg.)",[],"pronoun"],
-  ["هو",[["huw",0],["we",0]],"he",[],"pronoun"],
-  ["هي",[["hiy",0],["ye",0]],"she",[],"pronoun"],
-  ["إحنا",[["ih",0],["na",0]],"we",[],"pronoun"],
+  ["مع",[["m3",0]],"with, together",[],"preposition"],
+  ["ب",[["b",0]],"in, with, by",[],"preposition"],
+  ["أنا",[["a",0],["na",0]],"I",[],"pronoun"],
+  ["أنت",[["int",0]],"you (m.sg.)",[],"pronoun"],
+  ["هو",[["hu",0]],"he",[],"pronoun"],
+  ["هي",[["hi",0]],"she",[],"pronoun"],
+  ["إحنا",[["i7",0],["na",0]],"we",[],"pronoun"],
   ["شو",[["shu",0]],"what",[],"pronoun"],
-  ["مين",[["min",0]],"who",[],"pronoun"],
-  ["وين",[["wen",0]],"where",[],"pronoun"],
+  ["مين",[["miin",0]],"who",[],"pronoun"],
+  ["وين",[["wiin",0]],"where",[],"pronoun"],
   ["كيف",[["kif",0]],"how",[],"adverb"],
   ["كتير",[["ktir",0]],"very, a lot",[],"adverb"],
-  ["شوي",[["shwey",0]],"a little, a bit",[],"adverb"],
+  ["شوي",[["shwi",0]],"a little, a bit",[],"adverb"],
   ["هلق",[["hal",0],["la2",0]],"now",[],"adverb"],
   ["هيك",[["hek",0]],"like this, thus",[],"adverb"],
   ["لا",[["la",0]],"no",[],"adverb"],
-  ["بس",[["bas",0]],"only, but, enough",[],"particle"],
+  ["بس",[["bs",0]],"only, but, enough",[],"particle"],
   ["يلا",[["ya",0],["la",0]],"let's go, come on",[],"interjection"],
-  ["يعني",[["ya3",0],["ni",0]],"means, like, you know",[],"particle"],
+  ["يعني",[["y3",0],["ni",0]],"means, like, you know",[],"particle"],
   // Batch 2 — negation · modals · demonstratives · pronouns · verbs · nouns
-  ["مش",[["mish",0]],"not, isn't",[],"particle"],
+  ["مش",[["msh",0]],"not, isn't",[],"particle"],
   ["ما",[["ma",0]],"not, didn't (negation)",[],"particle"],
   ["بدّي",[["bid",0],["di",0]],"I want",[],"modal"],
-  ["رح",[["ra7",0]],"going to (future)",[],"particle"],
-  ["لازم",[["laa",0],["zim",0]],"must, have to",[],"modal"],
+  ["رح",[["r7",0]],"going to (future)",[],"particle"],
+  ["لازم",[["laa",0],["zm",0]],"must, have to",[],"modal"],
   ["هاد",[["haad",0]],"this (m.)",[],"pronoun"],
   ["هاي",[["haay",0]],"this (f.)",[],"pronoun"],
   ["شي",[["shi",0]],"thing, something",[],"noun"],
   ["ناس",[["naas",0]],"people",[],"noun"],
   ["يوم",[["yoom",0]],"day",[],"noun"],
-  ["وقت",[["wa2t",0]],"time",[],"noun"],
+  ["وقت",[["w2t",0]],"time",[],"noun"],
   ["أنتو",[["in",0],["to",0]],"you (pl.)",[],"pronoun"],
   ["هنّي",[["hun",0],["ni",0]],"they",[],"pronoun"],
-  ["حكى",[["7a",0],["ka",0]],"spoke, talked",[],"verb"],
+  ["حكى",[["7k",0],["a",0]],"spoke, talked",[],"verb"],
   ["شاف",[["shaaf",0]],"saw",[],"verb"],
-  ["أجا",[["2a",0],["ja",0]],"came",[],"verb"],
+  ["أجا",[["a",0],["ja",0]],"came",[],"verb"],
   ["راح",[["raa7",0]],"went",[],"verb"],
   ["بيت",[["bayt",0]],"house, home",[],"noun"],
 ];
@@ -737,7 +737,11 @@ function recordAxisResultNew(i, axis, isCorrect, responseMs){
 
   // Check if accuracy window threshold met for stage advancement
   const hist=ci.axisHistory[axis]||[];
-  const windowSize=(AXIS_ADVANCE_WINDOW[axis]&&AXIS_ADVANCE_WINDOW[axis][currentStage])||5;
+  const baseWindow=(AXIS_ADVANCE_WINDOW[axis]&&AXIS_ADVANCE_WINDOW[axis][currentStage])||5;
+  // Wager above default compresses the stage gate (max -3 from window)
+  const _wBonus=(typeof currentMultIdx!=='undefined'&&typeof defaultMultIdx!=='undefined')
+    ?Math.min(3,Math.max(0,currentMultIdx-defaultMultIdx)):0;
+  const windowSize=Math.max(1,baseWindow-_wBonus);
   if(hist.length>=windowSize){
     const acc=axisAccuracy(i,axis,windowSize);
     if(acc>=AXIS_ADVANCE_ACCURACY){
@@ -1167,9 +1171,21 @@ function _playStaticAudio(src, onDone){
   }catch(e){ return false; }
 }
 
+function renderSyls(el, syls, fg){
+  const rtl=activeCourse&&activeCourse().script==='rtl';
+  if(rtl){
+    const sp=document.createElement('span');
+    sp.textContent=syls.map(([s])=>s).join('-');
+    sp.style.color=fg;
+    el.appendChild(sp);
+  } else {
+    syls.forEach(([s,t])=>{ const sp=document.createElement('span'); sp.textContent=s; sp.style.color=toneColor(t,fg); el.appendChild(sp); });
+  }
+}
+
 function charFont(){
   const c=activeCourse?activeCourse():null;
-  if(c&&c.script==='rtl') return "font-family:'Noto Naskh Arabic','Arabic Typesetting','Arial Unicode MS',sans-serif";
+  if(c&&c.script==='rtl') return "font-family:'Aref Ruqaa','Noto Naskh Arabic','Arabic Typesetting','Arial Unicode MS',sans-serif;font-weight:700";
   return "font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 }
 
@@ -3289,7 +3305,7 @@ function showStudyFlash(i){
 
   // Pinyin
   const py=$('studyPinyin'); py.innerHTML='';
-  syls.forEach(([s,t])=>{ const sp=document.createElement('span'); sp.textContent=s; sp.style.color=toneColor(t,fg); py.appendChild(sp); });
+  renderSyls(py,syls,fg);
 
   // Fire TTS after hanzi+pinyin are in the DOM. 30ms lets SAPI settle after prime/cancel.
   // Guard with activeCardIdx: if the user advances before the timeout fires, skip stale speak.
@@ -3390,7 +3406,7 @@ function showStudyMC(i, reverse, showPosHint){
     const posHintStr=showPosHint&&pos?'<br><span style="font-size:9px;opacity:.65;">'+pos.toUpperCase()+'</span>':'';
     $('studyMCPromptText').innerHTML='<span style="font-size:72px;line-height:1;text-decoration:none;'+CJKf+'">'+ch+'</span>'+posHintStr;
     const py=$('studyMCPinyin'); py.innerHTML='';
-    syls.forEach(([s,t])=>{ const sp=document.createElement('span'); sp.textContent=s; sp.style.color=toneColor(t,ink); py.appendChild(sp); });
+    renderSyls(py,syls,ink);
   } else {
     // Reverse mode: English prompt → progressively localized as meaning axis stage rises
     // Stage 0-1: English def + TTS speaks Mandarin answer (full scaffold)
@@ -4089,7 +4105,7 @@ function showStudyPOS(i){
 
   // Pinyin
   const py=$('studyPOSPinyin'); py.innerHTML='';
-  syls.forEach(([s,t])=>{ const sp=document.createElement('span'); sp.textContent=s+' '; sp.style.color=toneColor(t,fg); py.appendChild(sp); });
+  renderSyls(py,syls,fg);
 
   const m=masteryScore(i);
   const stage=posStage(m);
@@ -5145,12 +5161,15 @@ function recordAxisResult(i, axis, isCorrect){
 
   if(isCorrect){
     ci.axisCorrect[axis]=(ci.axisCorrect[axis]||0)+1;
-    // Advance stage if gate met
-    if(ci.axisCorrect[axis]>=axisGate(axis, ci.axisStage[axis]||0)){
+    const baseGate=axisGate(axis, ci.axisStage[axis]||0);
+    const _wBonus2=(typeof currentMultIdx!=='undefined'&&typeof defaultMultIdx!=='undefined')
+      ?Math.min(2,Math.max(0,currentMultIdx-defaultMultIdx)):0;
+    const gate=Math.max(1,baseGate-_wBonus2);
+    if(ci.axisCorrect[axis]>=gate){
       const maxStage=AXIS_MAX[axis];
       if(ci.axisStage[axis]<maxStage){
         ci.axisStage[axis]++;
-        ci.axisCorrect[axis]=0; // reset streak for next stage
+        ci.axisCorrect[axis]=0;
       }
     }
   } else {
