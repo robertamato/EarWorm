@@ -625,6 +625,17 @@ function fatigueLevel(){  // DISABLED — v1 only; under policy, cadence via Sch
   return 2;
 }
 
+// ── INTRODUCTION GATE — acquisition literature basis ───────────────────────
+//   • Krashen, comprehensible input / i+1 — keep the learner at a frontier
+//     that is mostly known with one new thing; "recognition-stable, not
+//     mastered" maximizes how much usable vocabulary sits at that frontier.
+//   • Zipf's law — introductions advance along the frequency spine (the
+//     breadth axis; see frontier()/demand-pull).
+//   • Bjork, desirable difficulties — words consolidate THROUGH spaced
+//     retrieval in context, not by isolated over-drilling (the prior bug).
+// retentionHealth() is a first proxy for the per-learner capacity that should
+// eventually come from IRT/CAT-style ability estimation (product_vision_aptitude).
+//
 // Recognition-stable = the learner has shown provisional recognition on the
 // meaning axis (advanced past stage 0). This is the breadth-first "good enough
 // to carry in context" bar — deliberately FAR below mastery. A word that clears
@@ -731,6 +742,26 @@ function addMastery(i, delta){
 
 const DAY=86400000;
 
+// ── SRS SPACING — literature basis ─────────────────────────────────────────
+// The spacing model draws on the spaced-repetition lineage (NOT the corporate
+// gamification/XP playbook):
+//   • Ebbinghaus (1885) forgetting curve; the spacing effect & lag effect
+//     (expanding intervals) — why intervals grow per successful rep below.
+//   • SM-2 (Wozniak/SuperMemo) — the heuristic ease/interval ancestor this
+//     tiered per-axis scheduler most resembles today.
+//   • HLR (Half-Life Regression, Settles & Meeder 2016 / Duolingo) —
+//     memory half-life as p = 2^(-Δ/h); the target model for the future
+//     time-between-session scheduler fit from .reviewLog.
+//   • FSRS / DSR model (Difficulty, Stability, Retrievability; open-spaced-
+//     repetition) — stability convergence and difficulty mean-reversion
+//     ("ease hell"); the direction axisDue should evolve toward.
+//   • Bjork, desirable difficulties / "edge of forgetting" — schedule review
+//     near ~85–90% retrievability; retrieval when R is low yields the largest
+//     stability gain (motivates scheduling at the edge, not over-drilling).
+// NOTE: this is count-based (S.totalSeen ordinal) WITHIN a session by design;
+// real wall-clock retrievability is a BETWEEN-session/rebuild concern. See
+// project_context_pivot (two-timescale model). Wager calibration layered on top.
+//
 // Axis-specific stability multipliers
 // POS axis: conceptual — longer intervals once learned
 // Meaning axis: higher frequency repetition early, then extends
@@ -823,6 +854,10 @@ function recordAxisHistory(i, axis, isCorrect){
 // cannot be retrofitted — it is the substrate for the future time-between-session
 // scheduler and forgetting-curve / latent-ability fitting. Persistence is handled
 // by the caller (recordAxisResultNew → setAxisDue calls save() on every path).
+// Literature: HLR (Settles & Meeder 2016) and FSRS/DSR fit memory half-life /
+// stability from exactly this (interval, outcome) history; latency is a retrieval-
+// fluency signal. Aggregated over users this is the IRT/CAT measurement channel
+// (product_vision_aptitude) — none of which can be fit from untimestamped data.
 const REVIEW_LOG_MAX=30; // per-axis cap on .reviewLog (bounds localStorage growth)
 function logAxisReview(i, axis, isCorrect, responseMs){
   const ci=card(i);
