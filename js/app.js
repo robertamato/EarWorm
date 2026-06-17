@@ -609,6 +609,34 @@ function fatigueLevel(){  // DISABLED — v1 only; under policy, cadence via Sch
   return 2;
 }
 
+// Recognition-stable = the learner has shown provisional recognition on the
+// meaning axis (advanced past stage 0). This is the breadth-first "good enough
+// to carry in context" bar — deliberately FAR below mastery. A word that clears
+// it stops blocking new introductions but keeps consolidating via spaced review.
+function isRecognitionStable(i){
+  return (getAxisStage(i,'meaning')||0)>=1;
+}
+
+// Retention health: mean recent recall accuracy across the active (introduced)
+// set, 0..1. Drives how wide a frontier of still-unrecognized words we allow in
+// flight. Neutral default until there's enough data to be meaningful.
+function retentionHealth(){
+  let sum=0,n=0;
+  for(let i=0;i<D.length;i++){
+    if(!isUnlocked(i)) continue;
+    const acc=axisAccuracy(i,'meaning',6);
+    if(acc===null) continue;
+    sum+=acc; n++;
+  }
+  return n<3?0.6:sum/n;
+}
+
+// In-flight cap on words still BELOW recognition (the comprehensibility floor:
+// too many un-recognized words at once turns context into noise), flexed by
+// retention health between MIN (struggling → throttle) and MAX (holding → widen).
+const ACQUIRING_CAP_MIN=6;
+const ACQUIRING_CAP_MAX=14;
+
 function shouldIntroduceNewWord(){
   // === LEGACY v1 — under policy, Scheduler.next decides introduces
   // brandNew: introduced (exp>0) but never answered in any axis
@@ -622,9 +650,14 @@ function shouldIntroduceNewWord(){
     return !hasAxisAnswer&&!hasLegacyAnswer;
   }).length;
   if(brandNew>=8) return false; // allow up to 8 words pending first answer
-  // Active rotation cap: introduced but not yet mastered (mastery is the real "done")
-  const inRotation=D.filter((_,i)=>isUnlocked(i)&&!isMastered(i)).length;
-  return inRotation<30;
+  // Breadth-first pivot: REPLACES the old "<30 below mastery" cap, which held a
+  // small batch and ground each word to mastery — the overdrill anti-pattern.
+  // A word leaves the blocking count once recognition-stable (not mastered); it
+  // then keeps consolidating via spaced review/context without blocking intros.
+  // We cap only the words still below recognition, flexed by retention health.
+  const acquiring=D.filter((_,i)=>isUnlocked(i)&&!isRecognitionStable(i)).length;
+  const cap=Math.round(ACQUIRING_CAP_MIN+(ACQUIRING_CAP_MAX-ACQUIRING_CAP_MIN)*retentionHealth());
+  return acquiring<cap;
 }
 
 // ── MASTERY SCORING — PER-MODALITY GAIN/LOSS TABLE ─────────────────────────
@@ -662,7 +695,8 @@ function shouldIntroduceNewWord(){
 // gain is applied from a higher mastery baseline (typically 2+).
 //
 // DO NOT change gain values without playtesting — the tone drill stage gates and
-// the active-rotation cap (max 30 words in rotation) are calibrated to these rates.
+// the breadth-first introduction cap (retention-flexed, counts words below
+// recognition; see shouldIntroduceNewWord) interact with these rates.
 // ─────────────────────────────────────────────────────────────────────────────
 function addMastery(i, delta){
   const c=card(i);
