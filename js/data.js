@@ -482,9 +482,25 @@ function isUnlocked(i){
 // Uses .seen (set in showStudyFlash) rather than .exp, which can be >0 from
 // migration artifacts without the user having actually seen the flashcard.
 function sentenceAllIntroduced(zh){
+  // Two conditions, both required:
+  //  (1) No UNSEEN D-atom appears in the sentence (original guard).
+  //  (2) Every CJK character belongs to a SEEN D-atom that appears in the
+  //      sentence. This closes the gap where a character in NO D-atom at all
+  //      (content not in the deck) would render as untaught context — the core
+  //      invariant must never expose a character the learner hasn't been taught.
+  // Non-CJK (punctuation/latin) is ignored. Literal CJK range is the house style
+  // (matches hasPhoneticContent); safe because the build is bash `cat`, never
+  // PowerShell (see CLAUDE.md build rule).
+  const CJK=/[一-鿿㐀-䶿]/; // CJK Unified Ideographs + Ext A
+  const covered=new Set();
   for(let j=0;j<D.length;j++){
-    if(S.cards[j]&&S.cards[j].seen) continue;
-    if(zh.includes(D[j][0])) return false;
+    const w=D[j][0];
+    if(zh.indexOf(w)<0) continue;
+    if(!(S.cards[j]&&S.cards[j].seen)) return false; // (1) unseen atom present
+    for(const c of w) covered.add(c);                // accumulate seen coverage
+  }
+  for(const ch of zh){                               // (2) every CJK char covered
+    if(CJK.test(ch)&&!covered.has(ch)) return false;
   }
   return true;
 }
