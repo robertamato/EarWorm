@@ -158,11 +158,87 @@ const EXAMPLE_SENTENCES={
 // Harder than MC forward — context dependency means choices can be similar words.
 // Unlocks at meaning axis stage >= 2.
 
-// Puzzle-source seam. Static bank today; a generation backend can implement
-// the same signature later (per-course, unique, language-agnostic). Returns an
-// array of [target, pinyin, gloss] sentences for word i.
+// ── LLM sentence generation ───────────────────────────────────────────────
+var _sentenceCache=(function(){
+  try{ return JSON.parse(localStorage.getItem('earworm-sentences-v1'))||{}; }
+  catch(e){ return {}; }
+})();
+
+function _saveSentenceCache(){
+  try{ localStorage.setItem('earworm-sentences-v1',JSON.stringify(_sentenceCache)); }catch(e){}
+}
+
+function getAnthropicKey(){
+  try{ return localStorage.getItem('earworm-api-key')||''; }catch(e){ return ''; }
+}
+
+function setAnthropicKey(k){
+  try{ if(k) localStorage.setItem('earworm-api-key',k); else localStorage.removeItem('earworm-api-key'); }catch(e){}
+}
+
+function generateSentencesForWord(i, onDone){
+  var key=getAnthropicKey();
+  if(!key){ if(onDone) onDone({ok:false,error:'no key'}); return; }
+  var ci=D[i];
+  var ch=ci[0];
+  if(_sentenceCache[ch]&&_sentenceCache[ch].length){
+    if(onDone) onDone({ok:true,cached:true,count:_sentenceCache[ch].length}); return;
+  }
+  // Build covered character set (sentenceAllIntroduced validates at char level)
+  var coveredSet={}, coveredArr=[];
+  for(var j=0;j<D.length;j++){
+    if(S.cards[j]&&S.cards[j].seen){
+      var dch=D[j][0];
+      for(var k=0;k<dch.length;k++){
+        var c=dch[k]; if(!coveredSet[c]){ coveredSet[c]=1; coveredArr.push(c); }
+      }
+    }
+  }
+  var pinyinStr=ci[1].map(function(s){return s[0];}).join(' ');
+  var prompt='Generate 3 short Mandarin example sentences (5–10 characters each) for:\n'
+    +ch+' ('+pinyinStr+') — "'+ci[2]+'"\n\n'
+    +'HARD CONSTRAINT: use ONLY these CJK characters (none other): '+coveredArr.join('')+'\n\n'
+    +'Reply with ONLY a JSON array, no markdown, no explanation:\n'
+    +'[["Chinese","pinyin with tone marks","English gloss"],["...","...","..."],["...","...","..."]]';
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'content-type':'application/json',
+      'x-api-key':key,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({
+      model:'claude-haiku-4-5-20251001',
+      max_tokens:400,
+      messages:[{role:'user',content:prompt}]
+    })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.error) throw new Error(data.error.message||JSON.stringify(data.error));
+    var text=(data.content&&data.content[0]&&data.content[0].text)||'';
+    var stripped=text.replace(/```[a-z]*\n?/gi,'').replace(/```/g,'').trim();
+    var sents=JSON.parse(stripped);
+    if(!Array.isArray(sents)||!sents.length) throw new Error('bad response');
+    _sentenceCache[ch]=sents;
+    _saveSentenceCache();
+    if(onDone) onDone({ok:true,count:sents.length});
+  })
+  .catch(function(e){ if(onDone) onDone({ok:false,error:String(e)}); });
+}
+
+try{ window.generateSentencesForWord=generateSentencesForWord; }catch(e){}
+
+// Puzzle-source seam. Returns [target, pinyin, gloss] sentences for word i.
+// Static bank merged with LLM-generated cache; callers are generation-agnostic.
 function getPuzzleSentences(i){
-  try{ return EXAMPLE_SENTENCES[D[i][0]]||[]; }catch(e){ return []; }
+  try{
+    var ch=D[i][0];
+    var stat=EXAMPLE_SENTENCES[ch]||[];
+    var gen=(_sentenceCache&&_sentenceCache[ch])||[];
+    return stat.concat(gen);
+  }catch(e){ return []; }
 }
 
 function clozeUnlocked(i){

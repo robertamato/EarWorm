@@ -254,6 +254,50 @@ if($('debugImport')) $('debugImport').onclick=()=>{
   inp.click();
 };
 if($('debugElig')) $('debugElig').onclick=()=>{ showEligibilityBrowser(); };
+// API key management
+(function(){
+  var inp=$('debugApiKey'), status=$('debugKeyStatus');
+  if(inp){ var k=getAnthropicKey(); if(k) inp.placeholder='sk-ant-…'+k.slice(-4)+' (set)'; }
+  if($('debugKeySave')) $('debugKeySave').onclick=function(){
+    var v=inp&&inp.value.trim();
+    if(!v) return;
+    setAnthropicKey(v);
+    if(inp){ inp.value=''; inp.placeholder='sk-ant-…'+v.slice(-4)+' (saved)'; }
+    if(status) status.textContent='key saved';
+  };
+  if($('debugKeyClear')) $('debugKeyClear').onclick=function(){
+    setAnthropicKey('');
+    if(inp){ inp.value=''; inp.placeholder='sk-ant-api03-…'; }
+    if(status) status.textContent='key cleared';
+  };
+})();
+if($('debugGenerate')) $('debugGenerate').onclick=function(){
+  var btn=$('debugGenerate');
+  if(!getAnthropicKey()){ btn.textContent='⚡ NO KEY SET'; setTimeout(function(){ btn.textContent='⚡ GENERATE SENTENCES'; },2000); return; }
+  var words=[];
+  for(var i=0;i<D.length;i++){
+    if(!isUnlocked(i)) continue;
+    if(!(S.cards[i]&&S.cards[i].seen)) continue;
+    if(getPuzzleSentences(i).length>0) continue;
+    words.push(i);
+  }
+  if(!words.length){ btn.textContent='⚡ ALL COVERED'; setTimeout(function(){ btn.textContent='⚡ GENERATE SENTENCES'; },2000); return; }
+  btn.disabled=true;
+  var idx=0, done=0, errors=0;
+  (function next(){
+    if(idx>=words.length){
+      btn.disabled=false;
+      btn.textContent='⚡ '+done+' generated'+(errors?' ('+errors+' err)':'');
+      setTimeout(function(){ btn.textContent='⚡ GENERATE SENTENCES'; },3000);
+      return;
+    }
+    btn.textContent='⚡ '+idx+'/'+words.length+'…';
+    generateSentencesForWord(words[idx++],function(r){
+      if(r.ok&&!r.cached) done++; else if(!r.ok) errors++;
+      setTimeout(next,400);
+    });
+  })();
+};
 if($('eligClose')) $('eligClose').onclick=()=>{ var el=document.getElementById('eligBrowser'); if(el) el.style.display='none'; };
 if($('eligFilterAll')) $('eligFilterAll').onclick=()=>{ _eligFilter='all'; renderEligibilityBrowser(); };
 if($('eligFilterRipe')) $('eligFilterRipe').onclick=()=>{ _eligFilter='ripe'; renderEligibilityBrowser(); };
