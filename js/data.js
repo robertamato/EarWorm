@@ -370,6 +370,17 @@ function applyAnswer(i, isCorrect, modality, latencyMs){
 //
 //  .axisCorrect {object} Consecutive correct answers per axis. Used for stage promotion.
 //
+//  .lastReviewAt {object} Wall-clock ms (Date.now()) of the last review per axis
+//                        {meaning, pos, tone}. DURABLE real-time substrate — NOT read by
+//                        the count-based scheduler (axisDue is authoritative for spacing).
+//                        Captured for the future time-between-session scheduler.
+//
+//  .reviewLog {object}   Per-axis capped history of [ts, correct(1|0), latencyMs] triples
+//                        {meaning, pos, tone}, newest last, ≤REVIEW_LOG_MAX per axis.
+//                        DURABLE measurement substrate for forgetting-curve / ability
+//                        fitting. Write-only today — nothing consumes it yet, but review
+//                        timing/outcome cannot be retrofitted, so it is logged now.
+//
 //  .flipMs    {number}   EMA of time spent on flashcard (front+back). Used to calibrate
 //                        SRS intervals (fast flips → learner is confident → longer interval).
 //
@@ -756,6 +767,25 @@ function recordAxisHistory(i, axis, isCorrect){
   if(ci.axisHistory[axis].length>20) ci.axisHistory[axis].shift();
 }
 
+// Durable real-time review instrumentation. ADDITIVE measurement substrate: the
+// count-based scheduler (axisDue) does NOT read these fields, so this changes no
+// behavior. We log wall-clock timing + outcome + latency now because that data
+// cannot be retrofitted — it is the substrate for the future time-between-session
+// scheduler and forgetting-curve / latent-ability fitting. Persistence is handled
+// by the caller (recordAxisResultNew → setAxisDue calls save() on every path).
+const REVIEW_LOG_MAX=30; // per-axis cap on .reviewLog (bounds localStorage growth)
+function logAxisReview(i, axis, isCorrect, responseMs){
+  const ci=card(i);
+  const now=Date.now();
+  if(!ci.lastReviewAt) ci.lastReviewAt={};
+  ci.lastReviewAt[axis]=now;
+  if(!ci.reviewLog) ci.reviewLog={};
+  if(!ci.reviewLog[axis]) ci.reviewLog[axis]=[];
+  const ms=(typeof responseMs==='number'&&responseMs>0&&responseMs<120000)?Math.round(responseMs):null;
+  ci.reviewLog[axis].push([now, isCorrect?1:0, ms]);
+  if(ci.reviewLog[axis].length>REVIEW_LOG_MAX) ci.reviewLog[axis].shift();
+}
+
 // Axis stage gate: use accuracy window instead of consecutive-correct
 // Advance stage when accuracy >= threshold over last N attempts
 const AXIS_ADVANCE_ACCURACY=0.80; // 80% accuracy over window
@@ -765,6 +795,7 @@ const AXIS_ADVANCE_WINDOW={
 };
 
 function recordAxisResultNew(i, axis, isCorrect, responseMs){
+  logAxisReview(i, axis, isCorrect, responseMs);
   recordAxisHistory(i, axis, isCorrect);
   setAxisDue(i, axis, isCorrect, responseMs||3000);
 
