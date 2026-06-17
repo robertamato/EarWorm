@@ -1253,7 +1253,7 @@ function speak(text,lang,onDone,opts){
       if(typeof speechSynthesis!=='undefined'&&(speechSynthesis.speaking||speechSynthesis.pending)) try{ speechSynthesis.cancel(); }catch(e){}
       const cardCtx=(typeof activeCardIdx==='number'&&activeCardIdx>=0)?activeCardIdx:null;
       if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:text&&text.slice(0,16),lang:lang,card:cardCtx,gen:gen,modality:'static'});
-      if(window.WaveViz&&!/^en/i.test(lang)) try{ WaveViz.startHeartbeat(); }catch(e){}
+      if(window.WaveViz&&!/^en/i.test(lang)&&!(activeCourse&&activeCourse().hasTone)) try{ WaveViz.startHeartbeat(); }catch(e){}
       const ok=_playStaticAudio(course.audioMap[text],function(){
         if(gen!==_ttsGen) return;
         if(onDone) onDone();
@@ -1286,7 +1286,7 @@ function speak(text,lang,onDone,opts){
     if(v) u.voice=v;
     if(v&&window.EW&&EW.obs) EW.obs.logEvent('tts:voice',{card:cardCtx,name:(v&&v.name)||null,local:!!(v&&v.localService),lang:lang});
     if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:text&&text.slice(0,16),lang:lang,card:cardCtx,gen:gen});
-    if(window.WaveViz&&!/^en/i.test(lang)) try{ WaveViz.startHeartbeat(); }catch(e){}
+    if(window.WaveViz&&!/^en/i.test(lang)&&!(activeCourse&&activeCourse().hasTone)) try{ WaveViz.startHeartbeat(); }catch(e){}
     let fired=false;
     const finish=(cancelled)=>{
       if(fired||gen!==_ttsGen) return;
@@ -3398,6 +3398,7 @@ function showStudyFlash(i){
   // Pinyin
   const py=$('studyPinyin'); py.innerHTML='';
   renderSyls(py,syls,fg);
+  if(window.WaveViz){const _wvc=activeCourse?activeCourse():null;WaveViz.setWord(syls,!!(_wvc&&_wvc.hasTone));}
 
   // Fire TTS after hanzi+pinyin are in the DOM. 30ms lets SAPI settle after prime/cancel.
   // Guard with activeCardIdx: if the user advances before the timeout fires, skip stale speak.
@@ -8561,14 +8562,23 @@ const State = {
 })();
 
 // ── Waveform Visualizer ──────────────────────────────────────────────────────
-// Real Web Audio waveform deferred — createMediaElementSource intercepts the
-// Audio element and requires the AudioContext to be running (async resume),
-// which breaks the TTS onended contract. Revisit when audioMap is larger.
-// Both static and synthesis paths use the heartbeat animation for now.
+// Each language family gets a visualization for its most perceptually opaque
+// feature for an English speaker.
+//
+// Mandarin (tonal family): schematic pitch contour drawn from tone numbers in
+// syls[]. Platonic/canonical shapes — not extracted from audio — so the learner
+// sees the ideal tone, not a contextually reduced realization. The visual pairs
+// with TTS on every card and trains the pitch channel that beginners filter out.
+//
+// Arabic / non-tonal: ambient heartbeat bars during playback (decorative
+// placeholder until phoneme data exists for pharyngeal/emphatic encoding).
+//
+// Real-time Web Audio waveform deferred; see ROADMAP §WaveViz.
 (function(){
   var _raf=null;
-  var _mode=null; // 'heart' | null
-  var BARS=24, GAP=2;
+  var _setupRaf=null;
+  var _mode=null;
+  var _restingFn=null; // function that draws the at-rest state for the current card
 
   function el(){ return document.getElementById('waveform'); }
 
@@ -8588,24 +8598,104 @@ const State = {
     return {w:w,h:h,dpr:dpr};
   }
 
-  function clear(){
-    if(_raf){ cancelAnimationFrame(_raf); _raf=null; }
-    _mode=null;
-    var c=el(); if(!c) return;
-    var d=drawDims(c); if(!d) return;
-    var ctx=c.getContext('2d'); if(!ctx) return;
+  // Canonical pitch contour control points per Mandarin tone.
+  // t = time within syllable (0–1), p = pitch height (0=low, 1=high).
+  function tonePoints(tone){
+    switch(tone){
+      case 1: return [{t:0.05,p:0.84},{t:0.95,p:0.84}];                      // high flat
+      case 2: return [{t:0.05,p:0.28},{t:0.95,p:0.84}];                      // rising
+      case 3: return [{t:0.05,p:0.68},{t:0.45,p:0.10},{t:0.95,p:0.50}];     // dip-rise
+      case 4: return [{t:0.05,p:0.84},{t:0.95,p:0.08}];                      // falling
+      default: return [{t:0.10,p:0.22},{t:0.90,p:0.22}];                     // neutral
+    }
+  }
+
+  function drawContour(syls){
+    var c=el(); if(!c) return false;
+    var d=drawDims(c); if(!d) return false;
+    var ctx=c.getContext('2d'); if(!ctx) return false;
+
+    var n=syls.length;
+    var interGap=n>1?8:0;
+    var segW=(d.w-(n-1)*interGap)/n;
+    var vPad=d.h*0.13;
+    var drawH=d.h-2*vPad;
+    var color=fg();
+
+    ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
+    ctx.clearRect(0,0,d.w,d.h);
+    ctx.strokeStyle=color;
+    ctx.lineWidth=2.2;
+    ctx.lineCap='round';
+    ctx.lineJoin='round';
+    ctx.globalAlpha=0.72;
+
+    for(var i=0;i<n;i++){
+      var tone=syls[i][1];
+      var pts=tonePoints(tone);
+      var xOff=i*(segW+interGap);
+
+      ctx.beginPath();
+      if(pts.length===2){
+        var x0=xOff+pts[0].t*segW, y0=vPad+(1-pts[0].p)*drawH;
+        var x1=xOff+pts[1].t*segW, y1=vPad+(1-pts[1].p)*drawH;
+        var dx=x1-x0;
+        ctx.moveTo(x0,y0);
+        ctx.bezierCurveTo(x0+dx*0.35,y0, x1-dx*0.35,y1, x1,y1);
+      } else {
+        // Tone 3: two cubic segments through the dip point
+        var xa=xOff+pts[0].t*segW, ya=vPad+(1-pts[0].p)*drawH;
+        var xb=xOff+pts[1].t*segW, yb=vPad+(1-pts[1].p)*drawH;
+        var xc=xOff+pts[2].t*segW, yc=vPad+(1-pts[2].p)*drawH;
+        ctx.moveTo(xa,ya);
+        ctx.bezierCurveTo(xa+(xb-xa)*0.35,ya, xb-(xb-xa)*0.12,yb, xb,yb);
+        ctx.bezierCurveTo(xb+(xc-xb)*0.12,yb, xc-(xc-xb)*0.35,yc, xc,yc);
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    return true;
+  }
+
+  function drawFlatLine(){
+    var c=el(); if(!c) return false;
+    var d=drawDims(c); if(!d) return false;
+    var ctx=c.getContext('2d'); if(!ctx) return false;
     ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
     ctx.clearRect(0,0,d.w,d.h);
     ctx.fillStyle=fg();
-    ctx.globalAlpha=0.2;
+    ctx.globalAlpha=0.20;
     ctx.fillRect(0,Math.floor(d.h/2)-1,d.w,2);
     ctx.globalAlpha=1;
+    return true;
   }
 
+  // Called from showStudyFlash when a card is shown.
+  // Sets the at-rest visual for this card; draws immediately (with rAF fallback
+  // if the canvas hasn't been laid out yet after show()).
+  function setWord(syls,hasTone){
+    if(_raf){ cancelAnimationFrame(_raf); _raf=null; }
+    if(_setupRaf){ cancelAnimationFrame(_setupRaf); _setupRaf=null; }
+    _mode=null;
+    _restingFn=(hasTone&&syls&&syls.length)?function(){ return drawContour(syls); }:drawFlatLine;
+    var drew=_restingFn();
+    if(!drew) _setupRaf=requestAnimationFrame(function(){ _setupRaf=null; if(_restingFn) _restingFn(); });
+  }
+
+  // Restores the at-rest visual (tone contour or flat line). Called after audio
+  // ends and on goHome(). Does not reset _restingFn — next setWord() does that.
+  function clear(){
+    if(_raf){ cancelAnimationFrame(_raf); _raf=null; }
+    _mode=null;
+    if(_restingFn) _restingFn(); else drawFlatLine();
+  }
+
+  // Ambient heartbeat for non-tonal languages during TTS playback.
   function startHeartbeat(){
     if(_raf){ cancelAnimationFrame(_raf); _raf=null; }
     _mode='heart';
     var c=el(); if(!c) return;
+    var BARS=24, GAP=2;
     var color=fg();
     var t0=performance.now();
     function draw(now){
@@ -8635,5 +8725,5 @@ const State = {
     _raf=requestAnimationFrame(draw);
   }
 
-  window.WaveViz={startHeartbeat:startHeartbeat,clear:clear};
+  window.WaveViz={setWord:setWord,startHeartbeat:startHeartbeat,clear:clear};
 })();

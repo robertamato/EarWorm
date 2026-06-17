@@ -1253,7 +1253,7 @@ function speak(text,lang,onDone,opts){
       if(typeof speechSynthesis!=='undefined'&&(speechSynthesis.speaking||speechSynthesis.pending)) try{ speechSynthesis.cancel(); }catch(e){}
       const cardCtx=(typeof activeCardIdx==='number'&&activeCardIdx>=0)?activeCardIdx:null;
       if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:text&&text.slice(0,16),lang:lang,card:cardCtx,gen:gen,modality:'static'});
-      if(window.WaveViz&&!/^en/i.test(lang)) try{ WaveViz.startHeartbeat(); }catch(e){}
+      if(window.WaveViz&&!/^en/i.test(lang)&&!(activeCourse&&activeCourse().hasTone)) try{ WaveViz.startHeartbeat(); }catch(e){}
       const ok=_playStaticAudio(course.audioMap[text],function(){
         if(gen!==_ttsGen) return;
         if(onDone) onDone();
@@ -1286,7 +1286,7 @@ function speak(text,lang,onDone,opts){
     if(v) u.voice=v;
     if(v&&window.EW&&EW.obs) EW.obs.logEvent('tts:voice',{card:cardCtx,name:(v&&v.name)||null,local:!!(v&&v.localService),lang:lang});
     if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:text&&text.slice(0,16),lang:lang,card:cardCtx,gen:gen});
-    if(window.WaveViz&&!/^en/i.test(lang)) try{ WaveViz.startHeartbeat(); }catch(e){}
+    if(window.WaveViz&&!/^en/i.test(lang)&&!(activeCourse&&activeCourse().hasTone)) try{ WaveViz.startHeartbeat(); }catch(e){}
     let fired=false;
     const finish=(cancelled)=>{
       if(fired||gen!==_ttsGen) return;

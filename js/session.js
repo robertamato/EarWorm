@@ -841,6 +841,7 @@ function showStudyFlash(i){
   // Pinyin
   const py=$('studyPinyin'); py.innerHTML='';
   renderSyls(py,syls,fg);
+  if(window.WaveViz){const _wvc=activeCourse?activeCourse():null;WaveViz.setWord(syls,!!(_wvc&&_wvc.hasTone));}
 
   // Fire TTS after hanzi+pinyin are in the DOM. 30ms lets SAPI settle after prime/cancel.
   // Guard with activeCardIdx: if the user advances before the timeout fires, skip stale speak.
