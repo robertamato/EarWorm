@@ -7099,13 +7099,42 @@ function setProxyUrl(url){
   try{ if(url) localStorage.setItem('earworm-proxy-url',url); else localStorage.removeItem('earworm-proxy-url'); }catch(e){}
 }
 
+// Pending buffer: generated sentences awaiting curation before entering _sentenceCache.
+var _pendingSentences={};   // ch → [[zh,pinyin,gloss], ...]
+var _pendingRejected={};    // "ch::idx" → true
+
+function clearPendingState(){
+  _pendingSentences={};
+  _pendingRejected={};
+}
+
+// Move all non-rejected pending sentences into the cache. Returns count of words committed.
+function commitApprovedSentences(){
+  var count=0;
+  Object.keys(_pendingSentences).forEach(function(ch){
+    var approved=_pendingSentences[ch].filter(function(_,idx){
+      return !_pendingRejected[ch+'::'+idx];
+    });
+    if(approved.length){
+      _sentenceCache[ch]=(_sentenceCache[ch]||[]).concat(approved);
+      count++;
+    }
+  });
+  _saveSentenceCache();
+  clearPendingState();
+  return count;
+}
+
 function generateSentencesForWord(i, onDone){
   var url=getProxyUrl();
   if(!url){ if(onDone) onDone({ok:false,error:'no proxy url'}); return; }
   var ci=D[i];
   var ch=ci[0];
   if(_sentenceCache[ch]&&_sentenceCache[ch].length){
-    if(onDone) onDone({ok:true,cached:true,count:_sentenceCache[ch].length}); return;
+    if(onDone) onDone({ok:true,cached:true}); return;
+  }
+  if(_pendingSentences[ch]&&_pendingSentences[ch].length){
+    if(onDone) onDone({ok:true,pending:true}); return;
   }
   // Build covered character set (sentenceAllIntroduced validates at char level)
   var coveredSet={}, coveredArr=[];
@@ -7139,14 +7168,13 @@ function generateSentencesForWord(i, onDone){
     var stripped=text.replace(/```[a-z]*\n?/gi,'').replace(/```/g,'').trim();
     var sents=JSON.parse(stripped);
     if(!Array.isArray(sents)||!sents.length) throw new Error('bad response');
-    _sentenceCache[ch]=sents;
-    _saveSentenceCache();
+    _pendingSentences[ch]=sents;
     if(onDone) onDone({ok:true,count:sents.length});
   })
   .catch(function(e){ if(onDone) onDone({ok:false,error:String(e)}); });
 }
 
-try{ window.generateSentencesForWord=generateSentencesForWord; }catch(e){}
+try{ window.generateSentencesForWord=generateSentencesForWord; window.commitApprovedSentences=commitApprovedSentences; }catch(e){}
 
 // Puzzle-source seam. Returns [target, pinyin, gloss] sentences for word i.
 // Static bank merged with LLM-generated cache; callers are generation-agnostic.
@@ -7925,6 +7953,78 @@ function classifyDistractorError(targetIdx, chosenDef){
   return 'random';
 }
 
+// ── SENTENCE CURATOR ─────────────────────────────────────────────────────
+function showSentenceCurator(){
+  var el=document.getElementById('sentenceCurator');
+  if(!el) return;
+  renderSentenceCurator();
+  el.style.display='flex';
+}
+
+function renderSentenceCurator(){
+  var body=document.getElementById('curatorBody');
+  var countEl=document.getElementById('curatorCount');
+  if(!body) return;
+  var CJK="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  var words=Object.keys(_pendingSentences);
+
+  if(countEl) countEl.textContent=words.length+' word'+(words.length!==1?'s':'')+' pending';
+
+  if(!words.length){
+    body.innerHTML='<div style="padding:24px;opacity:.4;font-size:11px;letter-spacing:1px;">NO PENDING SENTENCES — run ⚡ GENERATE first.</div>';
+    return;
+  }
+
+  var html='<div style="font-size:9px;opacity:.4;margin-bottom:14px;letter-spacing:.5px;">Review generated sentences. ✗ DROP removes from the batch. SAVE APPROVED commits the rest to the drill cache.</div>';
+
+  words.forEach(function(ch){
+    var idx=D.findIndex(function(d){ return d[0]===ch; });
+    var def=idx>=0?D[idx][2]:'?';
+    var pinyinStr=idx>=0?D[idx][1].map(function(s){return s[0];}).join(' '):'';
+    var sents=_pendingSentences[ch];
+    var keptCount=sents.filter(function(_,i){ return !_pendingRejected[ch+'::'+i]; }).length;
+
+    html+='<div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid rgba(255,255,255,0.08);">';
+    html+='<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px;">';
+    html+='<span style="'+CJK+';font-size:26px;line-height:1;">'+ch+'</span>';
+    html+='<span style="font-size:10px;opacity:.5;">'+pinyinStr+'</span>';
+    html+='<span style="font-size:10px;opacity:.4;">"'+def+'"</span>';
+    html+='<span style="margin-left:auto;font-size:9px;opacity:.5;">'+keptCount+'/'+sents.length+' kept</span>';
+    html+='</div>';
+
+    sents.forEach(function(s,i){
+      var key=ch+'::'+i;
+      var rejected=!!_pendingRejected[key];
+      var passes=typeof sentenceAllIntroduced==='function'&&sentenceAllIntroduced(s[0]);
+      html+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:4px;'
+        +'background:'+(rejected?'rgba(255,60,60,0.07)':'rgba(255,255,255,0.03)')+';margin-bottom:6px;">';
+      html+='<div style="flex:1;'+(rejected?'opacity:.3;':'')+'transition:opacity .15s;">';
+      html+='<div style="'+CJK+';font-size:18px;line-height:1.3;">'+s[0]+'</div>';
+      html+='<div style="font-size:9px;opacity:.6;margin-top:2px;">'+(s[1]||'')+'</div>';
+      html+='<div style="font-size:9px;opacity:.7;margin-top:1px;">'+(s[2]||'')+'</div>';
+      html+='</div>';
+      html+='<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">';
+      html+='<span style="font-size:8px;color:'+(passes?'#4ade80':'#f87171')+';letter-spacing:.5px;">'+(passes?'✓ vocab':'✗ vocab')+'</span>';
+      html+='<button class="btn curator-toggle" data-key="'+key+'" style="font-size:8px;padding:2px 8px;'
+        +(rejected?'color:#4ade80;border-color:#4ade80;':'color:#f87171;border-color:#f87171;')+'">'+( rejected?'KEEP':'✗ DROP')+'</button>';
+      html+='</div>';
+      html+='</div>';
+    });
+
+    html+='</div>';
+  });
+
+  body.innerHTML=html;
+
+  body.querySelectorAll('.curator-toggle').forEach(function(btn){
+    btn.onclick=function(){
+      var key=this.getAttribute('data-key');
+      if(_pendingRejected[key]) delete _pendingRejected[key]; else _pendingRejected[key]=true;
+      renderSentenceCurator();
+    };
+  });
+}
+
 // ── ELIGIBILITY BROWSER ──────────────────────────────────────────────────
 var _eligFilter='all';
 
@@ -8140,16 +8240,27 @@ if($('debugGenerate')) $('debugGenerate').onclick=function(){
   (function next(){
     if(idx>=words.length){
       btn.disabled=false;
-      btn.textContent='⚡ '+done+' generated'+(errors?' ('+errors+' err)':'');
-      setTimeout(function(){ btn.textContent='⚡ GENERATE SENTENCES'; },3000);
+      var pending=Object.keys(_pendingSentences).length;
+      btn.textContent='⚡ '+done+' fetched'+(errors?' ('+errors+' err)':'')+(pending?' — '+pending+' to curate':'');
+      setTimeout(function(){ btn.textContent='⚡ GENERATE SENTENCES'; },4000);
+      if(pending>0) showSentenceCurator();
       return;
     }
     btn.textContent='⚡ '+idx+'/'+words.length+'…';
     generateSentencesForWord(words[idx++],function(r){
-      if(r.ok&&!r.cached) done++; else if(!r.ok) errors++;
+      if(r.ok&&!r.cached&&!r.pending) done++; else if(!r.ok) errors++;
       setTimeout(next,400);
     });
   })();
+};
+if($('debugCurate')) $('debugCurate').onclick=function(){ showSentenceCurator(); };
+if($('curatorClose')) $('curatorClose').onclick=function(){ var el=document.getElementById('sentenceCurator'); if(el) el.style.display='none'; };
+if($('curatorSave')) $('curatorSave').onclick=function(){
+  var count=commitApprovedSentences();
+  var el=document.getElementById('sentenceCurator');
+  if(el) el.style.display='none';
+  var btn=$('debugGenerate');
+  if(btn){ btn.textContent='⚡ '+count+' word'+(count!==1?'s':'')+' saved'; setTimeout(function(){ btn.textContent='⚡ GENERATE SENTENCES'; },2500); }
 };
 if($('eligClose')) $('eligClose').onclick=()=>{ var el=document.getElementById('eligBrowser'); if(el) el.style.display='none'; };
 if($('eligFilterAll')) $('eligFilterAll').onclick=()=>{ _eligFilter='all'; renderEligibilityBrowser(); };

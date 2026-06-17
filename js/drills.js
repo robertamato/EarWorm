@@ -176,13 +176,42 @@ function setProxyUrl(url){
   try{ if(url) localStorage.setItem('earworm-proxy-url',url); else localStorage.removeItem('earworm-proxy-url'); }catch(e){}
 }
 
+// Pending buffer: generated sentences awaiting curation before entering _sentenceCache.
+var _pendingSentences={};   // ch → [[zh,pinyin,gloss], ...]
+var _pendingRejected={};    // "ch::idx" → true
+
+function clearPendingState(){
+  _pendingSentences={};
+  _pendingRejected={};
+}
+
+// Move all non-rejected pending sentences into the cache. Returns count of words committed.
+function commitApprovedSentences(){
+  var count=0;
+  Object.keys(_pendingSentences).forEach(function(ch){
+    var approved=_pendingSentences[ch].filter(function(_,idx){
+      return !_pendingRejected[ch+'::'+idx];
+    });
+    if(approved.length){
+      _sentenceCache[ch]=(_sentenceCache[ch]||[]).concat(approved);
+      count++;
+    }
+  });
+  _saveSentenceCache();
+  clearPendingState();
+  return count;
+}
+
 function generateSentencesForWord(i, onDone){
   var url=getProxyUrl();
   if(!url){ if(onDone) onDone({ok:false,error:'no proxy url'}); return; }
   var ci=D[i];
   var ch=ci[0];
   if(_sentenceCache[ch]&&_sentenceCache[ch].length){
-    if(onDone) onDone({ok:true,cached:true,count:_sentenceCache[ch].length}); return;
+    if(onDone) onDone({ok:true,cached:true}); return;
+  }
+  if(_pendingSentences[ch]&&_pendingSentences[ch].length){
+    if(onDone) onDone({ok:true,pending:true}); return;
   }
   // Build covered character set (sentenceAllIntroduced validates at char level)
   var coveredSet={}, coveredArr=[];
@@ -216,14 +245,13 @@ function generateSentencesForWord(i, onDone){
     var stripped=text.replace(/```[a-z]*\n?/gi,'').replace(/```/g,'').trim();
     var sents=JSON.parse(stripped);
     if(!Array.isArray(sents)||!sents.length) throw new Error('bad response');
-    _sentenceCache[ch]=sents;
-    _saveSentenceCache();
+    _pendingSentences[ch]=sents;
     if(onDone) onDone({ok:true,count:sents.length});
   })
   .catch(function(e){ if(onDone) onDone({ok:false,error:String(e)}); });
 }
 
-try{ window.generateSentencesForWord=generateSentencesForWord; }catch(e){}
+try{ window.generateSentencesForWord=generateSentencesForWord; window.commitApprovedSentences=commitApprovedSentences; }catch(e){}
 
 // Puzzle-source seam. Returns [target, pinyin, gloss] sentences for word i.
 // Static bank merged with LLM-generated cache; callers are generation-agnostic.
