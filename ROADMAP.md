@@ -14,6 +14,7 @@
 - TTS: prime-on-gesture + 30 ms first-target delays + local-first getBestVoice + _ttsGen + synthesis-failed recovery + experimental voice filter. First-card and pill cases addressed.
 - Proctor: full tts:* (request/end/fail/recovery/voice) + firstInSession tagging (fixed detection) + recovery success logging + session:firstFlash + enriched 'answer' events (policy, stage, frontier); PROCTOR button in #debugModes + proctorSummary() with targetTTS/recovered/firstFlash metrics. All target-lang study speaks (flash, MC-fwd, tone replays, etc.) now observable.
 - 2026-06-14 code review (REVIEW_ID 4308af58, local mode via review skill + reviewer persona): uncommitted renames (grid→map, langLabel→courseId etc., "STUDY"→"EXPLORE", course picker polish) clean + consistent across sources (no stale IDs, no app.js direct edits, sources in sync with generated). Pre-existing HIGH issues flagged in drills.js (speakWithBlank bypass of canonical wrapper + multiple missing activeCardIdx guards on deferred speak) matching CLAUDE.md contract + BUGS.md monitoring; must address before more modality work. .seen gate, proctor instrumentation, grammar-disabled, and other invariants healthy. Full artifacts: C:/tmp/grok-review-4308af58.md + summary. Rebuild rule (bash cat only) reinforced.
+- 2026-06-16 code review (REVIEW_ID 6cbdeb05): Recent major changes (SRS card-count migration + wager, grammar re-enable in main flow for hasGrammar courses incl. Arabic, Arabic-Levantine + romanization + hybrid static audio via audioMap/_playStaticAudio in speak(), totalSeen, RTL/picker). Diff ~57k (sources only; no direct app.js edits; current app.js sync for this diff). **Critical/HIGH blockers**: Grammar main-flow re-enable without metalanguage flashcards/.seen gates (direct CLAUDE.md + ROADMAP violation; AR hasGrammar:true); Scheduler purity violated (js/srs.js polluted with render code; dupe logic in events/data; breaks CLAUDE pure + bash cat); speakWithBlank still full bypass (direct speechSynthesis.speak + own gen/obs; pre-existing from 4308af58, exposed by AR cloze); static hybrid incomplete (entry via speak good but no full tts:end/gen/lastSpoken/prewarm/cardCtx/proctor firstSuccess; hybrid fallback silent); totalSeen skew (only ++ on vocab flash; grammar drills bypass) + .seen gate incomplete (legacy .exp + grammar metalang for AR violates "never test before first flash"). Proctor gaps for static/grammar/wager/AR first-card. Partial progress on guards (cloze/wo initial) + recency/"no-repeat" + romanization accuracy (display-only). Full artifacts: C:/tmp/grok-review-*-6cbdeb05.md (5 slices + unified + summary). Rebuild + fixes required before expansion. See unified for prioritized actions (revert grammar enable, fix bypass, restore srs purity, complete static parity, centralize totalSeen/.seen).
 - iOS: safe-area calc padding + aspect-ratio JS fallback in renderHome. No optional chaining. Verified scrollable + usable.
 - Deploy: clean SSH GitHub Pages pipeline, banner removed.
 - Architecture: L3 Scheduler (pure next/modality/recordAnswer) + L4 State (dispatch for ANSWER_*) + L5 thin bridge + policy flag (v1/v2). applyAnswer funnel + one 'answer' obs event already exist.
@@ -231,6 +232,16 @@ The flat 10×N mastery grid is a *flat inventory*: cells in frequency order, opa
 3. **The fog is aspirational.** `D[]` is one baked array; there is no chunked content backend yet. "Undownloaded territory" currently means "ranks past the deck size." The *visual* of chunked delivery can precede the actual CDN — but don't draw fog that can't later be filled.
 
 **Dependencies / sequencing:** prerequisite-graph design (Arabic forcing function) → `priority(i)` scalar → effective-priority radius. Chunked-content delivery model should be decided before the fog/locked bands carry real meaning. Until both exist, a raw-rank spiral is a valid visual scaffold that upgrades in place.
+
+## WaveViz — Revisit Later
+
+Current implementation: real Web Audio bars for static audio (Arabic audioMap), dual-sine heartbeat for TTS synthesis. Parent-language TTS (English definitions) does not fire WaveViz. Static audio path (`startReal`) is target-language-only by construction.
+
+**Revisit when:** audioMap coverage reaches meaningful density (target: ≥ 50 words). At that point the real waveform will have enough variety across words to be worth evaluating whether it carries a useful perceptual signal — or whether the bar shapes are too similar across short Arabic words to matter. Also revisit bar count, height, and opacity tuning with real user feedback.
+
+**Do not tune prematurely** — the heartbeat is decorative and the real waveform only has ~22 entries to differentiate. Wait for the audioMap to be substantive before spending time on visual calibration.
+
+---
 
 ## Out of Scope (for now)
 - Real build system (unless the manual concat pain becomes real)

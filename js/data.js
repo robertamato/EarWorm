@@ -1286,7 +1286,7 @@ function speak(text,lang,onDone,opts){
     if(v) u.voice=v;
     if(v&&window.EW&&EW.obs) EW.obs.logEvent('tts:voice',{card:cardCtx,name:(v&&v.name)||null,local:!!(v&&v.localService),lang:lang});
     if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:text&&text.slice(0,16),lang:lang,card:cardCtx,gen:gen});
-    if(window.WaveViz) try{ WaveViz.startHeartbeat(); }catch(e){}
+    if(window.WaveViz&&!/^en/i.test(lang)) try{ WaveViz.startHeartbeat(); }catch(e){}
     let fired=false;
     const finish=(cancelled)=>{
       if(fired||gen!==_ttsGen) return;
