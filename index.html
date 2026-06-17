@@ -645,17 +645,17 @@
     <div id="statsBody"></div>
   </div>
 </div>
-<div id="eligBrowser" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;flex-direction:column;overflow:hidden;font-family:inherit;">
-  <div style="display:flex;align-items:center;gap:6px;padding:10px;border-bottom:2px solid currentColor;flex-shrink:0;flex-wrap:wrap;">
-    <button class="btn" id="eligClose" style="font-size:8px;">◄ BACK</button>
-    <span style="font-size:7px;letter-spacing:2px;opacity:.6;">ELIGIBILITY BROWSER</span>
-    <div style="display:flex;gap:4px;margin-left:auto;">
-      <button class="btn" id="eligFilterAll" style="font-size:6px;padding:2px 6px;">ALL</button>
-      <button class="btn" id="eligFilterRipe" style="font-size:6px;padding:2px 6px;opacity:.5;">DUE+RIPE</button>
-      <button class="btn" id="eligFilterFresh" style="font-size:6px;padding:2px 6px;opacity:.5;">FRESH</button>
+<div id="eligBrowser" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;flex-direction:column;overflow:hidden;font-family:inherit;background:#111;color:#e0e0e0;">
+  <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.12);flex-shrink:0;flex-wrap:wrap;background:#1a1a1a;">
+    <button class="btn" id="eligClose" style="font-size:10px;padding:5px 12px;">◄ BACK</button>
+    <span style="font-size:9px;letter-spacing:3px;opacity:.45;">ELIGIBILITY BROWSER</span>
+    <div style="display:flex;gap:6px;margin-left:auto;">
+      <button class="btn" id="eligFilterAll" style="font-size:9px;padding:3px 10px;">ALL</button>
+      <button class="btn" id="eligFilterRipe" style="font-size:9px;padding:3px 10px;opacity:.45;">DUE+RIPE</button>
+      <button class="btn" id="eligFilterFresh" style="font-size:9px;padding:3px 10px;opacity:.45;">FRESH</button>
     </div>
   </div>
-  <div id="eligBody" style="flex:1;overflow-y:auto;padding:8px;font-size:7px;letter-spacing:.5px;"></div>
+  <div id="eligBody" style="flex:1;overflow-y:auto;padding:10px 14px;"></div>
 </div>
 <script src="js/obs.js"></script>
 <script src="js/app.js"></script>

@@ -78,8 +78,6 @@ var _eligFilter='all';
 function showEligibilityBrowser(){
   var el=document.getElementById('eligBrowser');
   if(!el) return;
-  el.style.background=getComputedStyle(document.body).backgroundColor;
-  el.style.color=getComputedStyle(document.body).color;
   _eligFilter='all';
   renderEligibilityBrowser();
   el.style.display='flex';
@@ -88,14 +86,16 @@ function showEligibilityBrowser(){
 function renderEligibilityBrowser(){
   var body=document.getElementById('eligBody');
   if(!body) return;
-  var fg=getComputedStyle(document.body).color;
   var CJK="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
   var course=typeof activeCourse==='function'&&activeCourse();
   var hasTone=course&&course.hasTone;
 
   ['All','Ripe','Fresh'].forEach(function(f){
     var b=document.getElementById('eligFilter'+f);
-    if(b) b.style.opacity=(_eligFilter===f.toLowerCase()?'1':'0.4');
+    if(!b) return;
+    var active=_eligFilter===f.toLowerCase();
+    b.style.opacity=active?'1':'0.4';
+    b.style.background=active?'rgba(255,255,255,0.14)':'transparent';
   });
 
   var nDue=0,nRipe=0,nFresh=0,nIdle=0;
@@ -108,20 +108,22 @@ function renderEligibilityBrowser(){
     else{ nIdle++; }
   }
 
-  var mkChip=function(ok,label){
-    return '<span style="font-size:6px;border:1px solid;border-radius:1px;padding:0 2px;margin-right:1px;'
-      +'opacity:'+(ok?'1':'0.2')+';border-color:'+(ok?fg:'rgba(128,128,128,0.5)')+';'
-      +'color:'+(ok?fg:'rgba(128,128,128,0.5)')+';">'+label+'</span>';
+  var mkChip=function(ok,label,okBg){
+    if(ok) return '<span style="display:inline-block;font-size:8px;font-weight:700;border-radius:2px;padding:2px 5px;margin-right:3px;background:'+okBg+';color:#111;">'+label+'</span>';
+    return '<span style="display:inline-block;font-size:8px;font-weight:700;border-radius:2px;padding:2px 5px;margin-right:3px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.2);">'+label+'</span>';
   };
 
+  var stageColor=function(s){ return s===0?'rgba(255,255,255,0.3)':s===1?'#60a5fa':s===2?'#86efac':'#4ade80'; };
+
   var html='';
-  html+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(128,128,128,0.3);font-size:7px;">'
-    +'<span>DUE <b>'+nDue+'</b></span>'
-    +'<span>RIPE <b>'+nRipe+'</b></span>'
-    +'<span>FRESH <b>'+nFresh+'</b></span>'
-    +'<span style="opacity:.5;">IDLE '+nIdle+'</span>'
+  html+='<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.1);font-size:10px;letter-spacing:.5px;">'
+    +'<span>DUE <b style="font-size:13px;color:#fb923c;">'+nDue+'</b></span>'
+    +'<span>RIPE <b style="font-size:13px;color:#f87171;">'+nRipe+'</b></span>'
+    +'<span>FRESH <b style="font-size:13px;color:#e0e0e0;">'+nFresh+'</b></span>'
+    +'<span style="opacity:.35;">IDLE '+nIdle+'</span>'
     +'</div>';
-  html+='<div style="display:grid;grid-template-columns:22px 36px 34px 44px 28px 1fr;gap:2px;padding:2px 0;font-size:6px;opacity:.5;letter-spacing:1px;border-bottom:1px solid rgba(128,128,128,0.4);">'
+
+  html+='<div style="display:grid;grid-template-columns:32px 52px 64px 70px 40px 1fr;gap:4px;padding:4px 0 6px;font-size:9px;opacity:.35;letter-spacing:1.5px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:2px;">'
     +'<span>#</span><span>WORD</span><span>STATUS</span><span>STAGES</span><span>R%</span><span>ELIGIBLE</span></div>';
 
   for(var i=0;i<D.length;i++){
@@ -142,18 +144,27 @@ function renderEligibilityBrowser(){
     var eligCloze=typeof clozeUnlocked==='function'&&clozeUnlocked(i);
     var eligTone=seen&&!!(hasTone);
 
-    var st=!seen?'NEW':mStage>=3?'MSTD':mStage>=1?'LRNG':'SEEN';
-    var stC=!seen?'rgba(255,200,50,0.9)':mStage>=3?'rgba(100,220,100,0.9)':mStage>=1?'rgba(100,180,255,0.9)':'rgba(160,160,160,0.7)';
-    var flags=(due?'<b style="color:rgba(255,160,0,1);font-size:6px;"> D</b>':'')
-             +(ripe?'<b style="color:rgba(255,100,100,1);font-size:6px;"> R</b>':'');
+    var stLabel,stBg,stFg;
+    if(!seen){      stLabel='NEW';  stBg='#ca8a04'; stFg='#fff'; }
+    else if(mStage>=3){ stLabel='MSTD'; stBg='#16a34a'; stFg='#fff'; }
+    else if(mStage>=1){ stLabel='LRNG'; stBg='#1d4ed8'; stFg='#fff'; }
+    else{               stLabel='SEEN'; stBg='rgba(255,255,255,0.1)'; stFg='rgba(255,255,255,0.6)'; }
 
-    html+='<div style="display:grid;grid-template-columns:22px 36px 34px 44px 28px 1fr;gap:2px;padding:3px 0;border-bottom:1px solid rgba(128,128,128,0.1);align-items:center;">'
-      +'<span style="font-size:6px;opacity:.35;">'+(i+1)+'</span>'
-      +'<span style="'+CJK+';font-size:15px;">'+D[i][0]+'</span>'
-      +'<span style="font-size:6px;color:'+stC+';">'+st+flags+'</span>'
-      +'<span style="font-size:6px;opacity:.8;">M:'+mStage+' P:'+pStage+'</span>'
-      +'<span style="font-size:6px;opacity:.7;">'+(R!==null?R+'%':'—')+'</span>'
-      +'<span style="display:flex;gap:2px;align-items:center;">'+mkChip(true,'FL')+mkChip(eligMC,'MC')+mkChip(eligCloze,'CL')+mkChip(eligTone,'TN')+'</span>'
+    var stChip='<span style="display:inline-block;font-size:8px;font-weight:700;letter-spacing:.5px;border-radius:2px;padding:2px 6px;background:'+stBg+';color:'+stFg+';">'+stLabel+'</span>';
+    var flags='';
+    if(due)  flags+=' <span style="font-size:8px;font-weight:700;color:#fb923c;">D</span>';
+    if(ripe) flags+=' <span style="font-size:8px;font-weight:700;color:#f87171;">R</span>';
+
+    var rowBg=i%2===0?'rgba(255,255,255,0.02)':'transparent';
+
+    html+='<div style="display:grid;grid-template-columns:32px 52px 64px 70px 40px 1fr;gap:4px;padding:6px 4px;border-radius:3px;background:'+rowBg+';align-items:center;min-height:36px;">'
+      +'<span style="font-size:9px;opacity:.25;text-align:right;padding-right:6px;">'+(i+1)+'</span>'
+      +'<span style="'+CJK+';font-size:22px;line-height:1;">'+D[i][0]+'</span>'
+      +'<span style="display:flex;align-items:center;gap:2px;">'+stChip+flags+'</span>'
+      +'<span style="font-size:9px;"><span style="color:'+stageColor(mStage)+';font-weight:700;">M:'+mStage+'</span>'
+        +' <span style="color:'+stageColor(pStage)+';opacity:.7;">P:'+pStage+'</span></span>'
+      +'<span style="font-size:9px;opacity:.6;text-align:right;padding-right:8px;">'+(R!==null?R+'%':'—')+'</span>'
+      +'<span style="display:flex;align-items:center;flex-wrap:wrap;">'+mkChip(true,'FL','#22d3ee')+mkChip(eligMC,'MC','#a78bfa')+mkChip(eligCloze,'CL','#fb923c')+mkChip(eligTone,'TN','#fbbf24')+'</span>'
       +'</div>';
   }
 
