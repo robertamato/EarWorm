@@ -3500,6 +3500,7 @@ function showStudyMC(i, reverse, showPosHint){
     $('studyMCPromptText').innerHTML='<span style="font-size:72px;line-height:1;text-decoration:none;'+CJKf+'">'+ch+'</span>'+posHintStr;
     const py=$('studyMCPinyin'); py.innerHTML='';
     renderSyls(py,syls,ink);
+    if(window.WaveViz){const _wvc=activeCourse?activeCourse():null;WaveViz.setWord(syls,!!(_wvc&&_wvc.hasTone));}
   } else {
     // Reverse mode: English prompt → progressively localized as meaning axis stage rises
     // Stage 0-1: English def + TTS speaks Mandarin answer (full scaffold)
@@ -3518,6 +3519,7 @@ function showStudyMC(i, reverse, showPosHint){
       '<span style="font-size:18px">'+displayDef+'</span>'+
       (posDisplay?'<br><span style="font-size:9px;opacity:.65;letter-spacing:1px;">'+posDisplay+'</span>':'');
     $('studyMCPinyin').innerHTML='';
+    if(window.WaveViz) WaveViz.setWord([],false);
   }
 
   // Choices — adaptive count based on mastery
@@ -8580,7 +8582,7 @@ const State = {
   var _mode=null;
   var _restingFn=null; // function that draws the at-rest state for the current card
 
-  function el(){ return document.getElementById('waveform'); }
+  function els(){ return ['waveform','waveformMC'].map(function(id){ return document.getElementById(id); }).filter(Boolean); }
 
   function fg(){
     try{ return getComputedStyle(document.documentElement).getPropertyValue('--fg').trim()||'#0d2e1f'; }
@@ -8611,63 +8613,68 @@ const State = {
   }
 
   function drawContour(syls){
-    var c=el(); if(!c) return false;
-    var d=drawDims(c); if(!d) return false;
-    var ctx=c.getContext('2d'); if(!ctx) return false;
-
+    var canvases=els(); if(!canvases.length) return false;
+    var drew=false;
     var n=syls.length;
     var interGap=n>1?8:0;
-    var segW=(d.w-(n-1)*interGap)/n;
-    var vPad=d.h*0.13;
-    var drawH=d.h-2*vPad;
     var color=fg();
-
-    ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
-    ctx.clearRect(0,0,d.w,d.h);
-    ctx.strokeStyle=color;
-    ctx.lineWidth=2.2;
-    ctx.lineCap='round';
-    ctx.lineJoin='round';
-    ctx.globalAlpha=0.72;
-
-    for(var i=0;i<n;i++){
-      var tone=syls[i][1];
-      var pts=tonePoints(tone);
-      var xOff=i*(segW+interGap);
-
-      ctx.beginPath();
-      if(pts.length===2){
-        var x0=xOff+pts[0].t*segW, y0=vPad+(1-pts[0].p)*drawH;
-        var x1=xOff+pts[1].t*segW, y1=vPad+(1-pts[1].p)*drawH;
-        var dx=x1-x0;
-        ctx.moveTo(x0,y0);
-        ctx.bezierCurveTo(x0+dx*0.35,y0, x1-dx*0.35,y1, x1,y1);
-      } else {
-        // Tone 3: two cubic segments through the dip point
-        var xa=xOff+pts[0].t*segW, ya=vPad+(1-pts[0].p)*drawH;
-        var xb=xOff+pts[1].t*segW, yb=vPad+(1-pts[1].p)*drawH;
-        var xc=xOff+pts[2].t*segW, yc=vPad+(1-pts[2].p)*drawH;
-        ctx.moveTo(xa,ya);
-        ctx.bezierCurveTo(xa+(xb-xa)*0.35,ya, xb-(xb-xa)*0.12,yb, xb,yb);
-        ctx.bezierCurveTo(xb+(xc-xb)*0.12,yb, xc-(xc-xb)*0.35,yc, xc,yc);
+    canvases.forEach(function(c){
+      var d=drawDims(c); if(!d) return;
+      var ctx=c.getContext('2d'); if(!ctx) return;
+      var segW=(d.w-(n-1)*interGap)/n;
+      var vPad=d.h*0.13;
+      var drawH=d.h-2*vPad;
+      ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
+      ctx.clearRect(0,0,d.w,d.h);
+      ctx.strokeStyle=color;
+      ctx.lineWidth=2.2;
+      ctx.lineCap='round';
+      ctx.lineJoin='round';
+      ctx.globalAlpha=0.72;
+      for(var i=0;i<n;i++){
+        var tone=syls[i][1];
+        var pts=tonePoints(tone);
+        var xOff=i*(segW+interGap);
+        ctx.beginPath();
+        if(pts.length===2){
+          var x0=xOff+pts[0].t*segW, y0=vPad+(1-pts[0].p)*drawH;
+          var x1=xOff+pts[1].t*segW, y1=vPad+(1-pts[1].p)*drawH;
+          var dx=x1-x0;
+          ctx.moveTo(x0,y0);
+          ctx.bezierCurveTo(x0+dx*0.35,y0, x1-dx*0.35,y1, x1,y1);
+        } else {
+          // Tone 3: two cubic segments through the dip point
+          var xa=xOff+pts[0].t*segW, ya=vPad+(1-pts[0].p)*drawH;
+          var xb=xOff+pts[1].t*segW, yb=vPad+(1-pts[1].p)*drawH;
+          var xc=xOff+pts[2].t*segW, yc=vPad+(1-pts[2].p)*drawH;
+          ctx.moveTo(xa,ya);
+          ctx.bezierCurveTo(xa+(xb-xa)*0.35,ya, xb-(xb-xa)*0.12,yb, xb,yb);
+          ctx.bezierCurveTo(xb+(xc-xb)*0.12,yb, xc-(xc-xb)*0.35,yc, xc,yc);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
-    }
-    ctx.globalAlpha=1;
-    return true;
+      ctx.globalAlpha=1;
+      drew=true;
+    });
+    return drew;
   }
 
   function drawFlatLine(){
-    var c=el(); if(!c) return false;
-    var d=drawDims(c); if(!d) return false;
-    var ctx=c.getContext('2d'); if(!ctx) return false;
-    ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
-    ctx.clearRect(0,0,d.w,d.h);
-    ctx.fillStyle=fg();
-    ctx.globalAlpha=0.20;
-    ctx.fillRect(0,Math.floor(d.h/2)-1,d.w,2);
-    ctx.globalAlpha=1;
-    return true;
+    var canvases=els(); if(!canvases.length) return false;
+    var drew=false;
+    var color=fg();
+    canvases.forEach(function(c){
+      var d=drawDims(c); if(!d) return;
+      var ctx=c.getContext('2d'); if(!ctx) return;
+      ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
+      ctx.clearRect(0,0,d.w,d.h);
+      ctx.fillStyle=color;
+      ctx.globalAlpha=0.20;
+      ctx.fillRect(0,Math.floor(d.h/2)-1,d.w,2);
+      ctx.globalAlpha=1;
+      drew=true;
+    });
+    return drew;
   }
 
   // Called from showStudyFlash when a card is shown.
@@ -8694,32 +8701,36 @@ const State = {
   function startHeartbeat(){
     if(_raf){ cancelAnimationFrame(_raf); _raf=null; }
     _mode='heart';
-    var c=el(); if(!c) return;
     var BARS=24, GAP=2;
     var color=fg();
     var t0=performance.now();
     function draw(now){
       if(_mode!=='heart') return;
-      var d=drawDims(c);
-      if(!d){ _raf=requestAnimationFrame(draw); return; }
+      var canvases=els();
+      if(!canvases.length){ _raf=requestAnimationFrame(draw); return; }
       var t=(now-t0)/1000;
-      var ctx=c.getContext('2d'); if(!ctx) return;
-      var barW=Math.max(2,Math.floor((d.w-(BARS-1)*GAP)/BARS));
-      ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
-      ctx.clearRect(0,0,d.w,d.h);
-      ctx.fillStyle=color;
-      for(var i=0;i<BARS;i++){
-        var phase=(i/BARS)*Math.PI*2;
-        var a1=0.5+0.5*Math.sin(t*3.8+phase);
-        var a2=0.5+0.5*Math.sin(t*5.1+phase*0.7);
-        var amp=0.15+0.7*(a1*a2);
-        var bh=Math.max(2,Math.round(amp*d.h));
-        var x=i*(barW+GAP);
-        var y=Math.round((d.h-bh)/2);
-        ctx.globalAlpha=0.3+amp*0.65;
-        ctx.fillRect(x,y,barW,bh);
-      }
-      ctx.globalAlpha=1;
+      var anyDrawn=false;
+      canvases.forEach(function(c){
+        var d=drawDims(c); if(!d) return;
+        var ctx=c.getContext('2d'); if(!ctx) return;
+        var barW=Math.max(2,Math.floor((d.w-(BARS-1)*GAP)/BARS));
+        ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
+        ctx.clearRect(0,0,d.w,d.h);
+        ctx.fillStyle=color;
+        for(var i=0;i<BARS;i++){
+          var phase=(i/BARS)*Math.PI*2;
+          var a1=0.5+0.5*Math.sin(t*3.8+phase);
+          var a2=0.5+0.5*Math.sin(t*5.1+phase*0.7);
+          var amp=0.15+0.7*(a1*a2);
+          var bh=Math.max(2,Math.round(amp*d.h));
+          var x=i*(barW+GAP);
+          var y=Math.round((d.h-bh)/2);
+          ctx.globalAlpha=0.3+amp*0.65;
+          ctx.fillRect(x,y,barW,bh);
+        }
+        ctx.globalAlpha=1;
+        anyDrawn=true;
+      });
       _raf=requestAnimationFrame(draw);
     }
     _raf=requestAnimationFrame(draw);

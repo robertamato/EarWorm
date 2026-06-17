@@ -305,7 +305,7 @@
     text-decoration: none !important;
   }
 
-  #waveform {
+  #waveform, #waveformMC {
     display: block;
     width: 100%;
     max-width: 260px;
@@ -545,6 +545,7 @@
           <div id="studyMCPromptText"></div>
           <div id="studyMCPinyin" class="phi-py" style="font-size:18px;"></div>
         </div>
+        <canvas id="waveformMC" width="260" height="34"></canvas>
       </div>
       <div id="studyMCChoices" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"></div>
       <div id="studyMCTapHint" style="min-height:14px;text-align:center;font-size:7px;opacity:.5;letter-spacing:1px;padding:2px 0;flex-shrink:0;"></div>

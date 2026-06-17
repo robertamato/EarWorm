@@ -943,6 +943,7 @@ function showStudyMC(i, reverse, showPosHint){
     $('studyMCPromptText').innerHTML='<span style="font-size:72px;line-height:1;text-decoration:none;'+CJKf+'">'+ch+'</span>'+posHintStr;
     const py=$('studyMCPinyin'); py.innerHTML='';
     renderSyls(py,syls,ink);
+    if(window.WaveViz){const _wvc=activeCourse?activeCourse():null;WaveViz.setWord(syls,!!(_wvc&&_wvc.hasTone));}
   } else {
     // Reverse mode: English prompt → progressively localized as meaning axis stage rises
     // Stage 0-1: English def + TTS speaks Mandarin answer (full scaffold)
@@ -961,6 +962,7 @@ function showStudyMC(i, reverse, showPosHint){
       '<span style="font-size:18px">'+displayDef+'</span>'+
       (posDisplay?'<br><span style="font-size:9px;opacity:.65;letter-spacing:1px;">'+posDisplay+'</span>':'');
     $('studyMCPinyin').innerHTML='';
+    if(window.WaveViz) WaveViz.setWord([],false);
   }
 
   // Choices — adaptive count based on mastery
