@@ -402,7 +402,7 @@ function buildStudyQueue(){
     if(!isUnlocked(i)) return;
     const ci=S.cards[i];
     if(!ci||!ci.exp) return;
-    if(isCardDue(i)) vocabDue.push(i);
+    if(isCardDue(i)||isWallClockRipe(i)) vocabDue.push(i);
     else vocabSeen.push(i);
   });
 

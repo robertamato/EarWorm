@@ -695,9 +695,15 @@ function retentionHealth(){
   let sum=0,n=0;
   for(let i=0;i<D.length;i++){
     if(!isUnlocked(i)) continue;
-    const acc=axisAccuracy(i,'meaning',6);
-    if(acc===null) continue;
-    sum+=acc; n++;
+    const ci=S.cards[i];
+    if(!ci||!ci.seen) continue;
+    if(ci.lastReviewAt&&ci.lastReviewAt.meaning){
+      sum+=retrievability(i,'meaning'); n++; // wall-clock signal
+    } else {
+      const acc=axisAccuracy(i,'meaning',6);
+      if(acc===null) continue;
+      sum+=acc; n++; // accuracy proxy until wall-clock data exists
+    }
   }
   return n<3?0.6:sum/n;
 }
@@ -914,6 +920,38 @@ function logAxisReview(i, axis, isCorrect, responseMs){
   ci.reviewLog[axis].push([now, isCorrect?1:0, ms]);
   if(ci.reviewLog[axis].length>REVIEW_LOG_MAX) ci.reviewLog[axis].shift();
 }
+
+// ── BETWEEN-SESSION RETRIEVABILITY ────────────────────────────────────────
+// Ebbinghaus/HLR model: R = 2^(-Δt/h), R ∈ (0,1].
+// Half-life defaults calibrated to SM-2 / Ebbinghaus replication; these will
+// be replaced by per-card MLE fits as reviewLog (interval, outcome) pairs
+// accumulate. Stage-indexed: early stages = short half-life (fragile trace);
+// late stages = longer (stable, only review when deeply decayed).
+const HALF_LIFE_DAYS={
+  meaning:[1,3,10,30],   // stages 0–3: 1 day → 30 days
+  pos:    [2,5,15,45],
+  tone:   [1,4,12,36],
+};
+const RIPE_THRESHOLD=0.85; // review when R drops below this (Bjork edge-of-forgetting)
+
+function retrievability(i, axis){
+  const ci=card(i);
+  if(!ci.lastReviewAt||!ci.lastReviewAt[axis]) return 0;
+  const deltaDays=(Date.now()-ci.lastReviewAt[axis])/86400000;
+  const stage=getAxisStage(i,axis)||0;
+  const h=(HALF_LIFE_DAYS[axis]||HALF_LIFE_DAYS.meaning)[Math.min(stage,3)];
+  return Math.pow(2,-deltaDays/h); // R = 2^(-Δt/h)
+}
+
+function isWallClockRipe(i){
+  const ci=card(i);
+  if(!ci||!ci.seen||!ci.lastReviewAt) return false;
+  return ['meaning','pos'].some(function(axis){
+    if(!ci.lastReviewAt[axis]) return false;
+    return retrievability(i,axis)<RIPE_THRESHOLD;
+  });
+}
+try{ window.retrievability=retrievability; }catch(e){}
 
 // Axis stage gate: use accuracy window instead of consecutive-correct
 // Advance stage when accuracy >= threshold over last N attempts
@@ -3119,7 +3157,7 @@ function buildStudyQueue(){
     if(!isUnlocked(i)) return;
     const ci=S.cards[i];
     if(!ci||!ci.exp) return;
-    if(isCardDue(i)) vocabDue.push(i);
+    if(isCardDue(i)||isWallClockRipe(i)) vocabDue.push(i);
     else vocabSeen.push(i);
   });
 
