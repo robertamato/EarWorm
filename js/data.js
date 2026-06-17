@@ -284,6 +284,7 @@ let D_AR=[
 /* ============ STATE ============ */
 // KEY is the ACTIVE course's localStorage key — reassigned by switchCourse().
 let KEY='earworm-mandarin-v1';
+const SCHEMA_VERSION=2;
 function defaultState(){
   return {cards:{},xp:0,lastDay:null,streak:0,sound:'auto',decks:{},activeDeck:'core',dailyCards:0,dailyDate:'',uniqueSeen:[],mult:1.0,multStreak:0,seenColls:[],grammarMastery:{},totalSeen:0,
     // Independent grammar track — multi-dimensional, per-category
@@ -296,34 +297,64 @@ function defaultState(){
 }
 let S=defaultState();
 let mem=true;
+function migrateState(obj){
+  if(!obj._v||obj._v<2){ obj._v=2; } // v1 (no _v) → v2: stamp only, no structural change
+  return obj;
+}
 function load(){
+  function _tryParse(key){
+    try{ const r=localStorage.getItem(key); return r?JSON.parse(r):null; }catch(e){ return null; }
+  }
   try{
-    const raw=localStorage.getItem(KEY);
-    if(raw){
-      const saved=JSON.parse(raw);
-      S=Object.assign({},S,saved);
-      // Ensure all fields have correct types
-      if(!Array.isArray(S.uniqueSeen)) S.uniqueSeen=[];
-      if(!Array.isArray(S.seenColls)) S.seenColls=[];
-      if(typeof S.mult!=='number') S.mult=1.0;
-      if(typeof S.multStreak!=='number') S.multStreak=0;
-      if(typeof S.xp!=='number') S.xp=0;
-      if(typeof S.streak!=='number') S.streak=0;
-      if(!S.cards||typeof S.cards!=='object') S.cards={};
-      if(!S.grammarMastery||typeof S.grammarMastery!=='object') S.grammarMastery={};
-      if(!S.stats||typeof S.stats!=='object') S.stats={days:{},totalAnswers:0,totalCorrect:0,byModality:{}};
-      if(!S.stats.days||typeof S.stats.days!=='object') S.stats.days={};
-      if(!S.stats.byModality||typeof S.stats.byModality!=='object') S.stats.byModality={};
-      // Ensure grammar track exists with all categories
-      if(!S.grammar||typeof S.grammar!=='object') S.grammar={};
-      if(!S.decks||typeof S.decks!=='object') S.decks={};
-      if(typeof S.totalSeen!=='number') S.totalSeen=0;
-    }
+    const saved=migrateState(_tryParse(KEY)||_tryParse(KEY+'.bak')||{});
+    S=Object.assign({},defaultState(),saved);
+    if(!Array.isArray(S.uniqueSeen)) S.uniqueSeen=[];
+    if(!Array.isArray(S.seenColls)) S.seenColls=[];
+    if(typeof S.mult!=='number') S.mult=1.0;
+    if(typeof S.multStreak!=='number') S.multStreak=0;
+    if(typeof S.xp!=='number') S.xp=0;
+    if(typeof S.streak!=='number') S.streak=0;
+    if(!S.cards||typeof S.cards!=='object') S.cards={};
+    if(!S.grammarMastery||typeof S.grammarMastery!=='object') S.grammarMastery={};
+    if(!S.stats||typeof S.stats!=='object') S.stats={days:{},totalAnswers:0,totalCorrect:0,byModality:{}};
+    if(!S.stats.days||typeof S.stats.days!=='object') S.stats.days={};
+    if(!S.stats.byModality||typeof S.stats.byModality!=='object') S.stats.byModality={};
+    if(!S.grammar||typeof S.grammar!=='object') S.grammar={};
+    if(!S.decks||typeof S.decks!=='object') S.decks={};
+    if(typeof S.totalSeen!=='number') S.totalSeen=0;
   }catch(e){ console.warn('Load failed, fresh start',e); }
 }
 function save(){
-  try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){}
+  try{
+    const prev=localStorage.getItem(KEY);
+    if(prev) try{ localStorage.setItem(KEY+'.bak',prev); }catch(e){}
+    S._v=SCHEMA_VERSION;
+    localStorage.setItem(KEY,JSON.stringify(S));
+  }catch(e){}
 }
+function exportState(){
+  try{
+    const payload=JSON.stringify({_export:{version:SCHEMA_VERSION,course:KEY,exportedAt:Date.now()},state:S},null,2);
+    const blob=new Blob([payload],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='earworm-state-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){ console.error('exportState failed',e); }
+}
+function importState(json){
+  try{
+    const parsed=JSON.parse(json);
+    let obj=parsed.state||parsed;
+    obj=migrateState(obj);
+    S=Object.assign({},defaultState(),obj);
+    save();
+    location.reload();
+    return {ok:true};
+  }catch(e){ console.error('importState failed',e); return {ok:false,error:String(e)}; }
+}
+try{ window.exportState=exportState; window.importState=importState; }catch(e){}
 
 // Single funnel for every graded answer. Accumulates durable per-course stats
 // (S.stats) for the "your learning" view and emits a telemetry event onto the

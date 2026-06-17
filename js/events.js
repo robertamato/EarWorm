@@ -142,6 +142,18 @@ if($('startGrammar')) $('startGrammar').onclick=()=>{ startGrammarOnlySession();
 if($('debugReset')) $('debugReset').onclick=()=>{ debugResetProgress(); };
 if($('debugTTS')) $('debugTTS').onclick=()=>{ showTTSDebug(); };
 if($('debugSetProficiency')) $('debugSetProficiency').onclick=()=>{ debugSetProficiency(); };
+if($('debugExport')) $('debugExport').onclick=()=>{ exportState(); };
+if($('debugImport')) $('debugImport').onclick=()=>{
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='.json,application/json';
+  inp.onchange=function(){
+    const f=inp.files&&inp.files[0]; if(!f) return;
+    const reader=new FileReader();
+    reader.onload=function(e){ importState(e.target.result); };
+    reader.readAsText(f);
+  };
+  inp.click();
+};
 $('debugToggle').onclick=()=>{
   const dm=$('debugModes');
   const open=dm.style.display==='flex';
