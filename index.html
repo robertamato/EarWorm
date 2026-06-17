@@ -401,6 +401,7 @@
       <button class="btn" id="debugSetProficiency" style="font-size:8px;opacity:.6;">◈ SET PROFICIENCY LEVEL</button>
       <button class="btn" id="debugExport" style="font-size:8px;opacity:.6;">↓ EXPORT STATE</button>
       <button class="btn" id="debugImport" style="font-size:8px;opacity:.6;">↑ IMPORT STATE</button>
+      <button class="btn" id="debugElig" style="font-size:8px;opacity:.6;">◈ ELIGIBILITY</button>
     </div>
   </div>
 
@@ -643,6 +644,18 @@
     </div>
     <div id="statsBody"></div>
   </div>
+</div>
+<div id="eligBrowser" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;flex-direction:column;overflow:hidden;font-family:inherit;">
+  <div style="display:flex;align-items:center;gap:6px;padding:10px;border-bottom:2px solid currentColor;flex-shrink:0;flex-wrap:wrap;">
+    <button class="btn" id="eligClose" style="font-size:8px;">◄ BACK</button>
+    <span style="font-size:7px;letter-spacing:2px;opacity:.6;">ELIGIBILITY BROWSER</span>
+    <div style="display:flex;gap:4px;margin-left:auto;">
+      <button class="btn" id="eligFilterAll" style="font-size:6px;padding:2px 6px;">ALL</button>
+      <button class="btn" id="eligFilterRipe" style="font-size:6px;padding:2px 6px;opacity:.5;">DUE+RIPE</button>
+      <button class="btn" id="eligFilterFresh" style="font-size:6px;padding:2px 6px;opacity:.5;">FRESH</button>
+    </div>
+  </div>
+  <div id="eligBody" style="flex:1;overflow-y:auto;padding:8px;font-size:7px;letter-spacing:.5px;"></div>
 </div>
 <script src="js/obs.js"></script>
 <script src="js/app.js"></script>

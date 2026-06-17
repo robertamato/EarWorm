@@ -72,6 +72,94 @@ function classifyDistractorError(targetIdx, chosenDef){
   return 'random';
 }
 
+// ── ELIGIBILITY BROWSER ──────────────────────────────────────────────────
+var _eligFilter='all';
+
+function showEligibilityBrowser(){
+  var el=document.getElementById('eligBrowser');
+  if(!el) return;
+  el.style.background=getComputedStyle(document.body).backgroundColor;
+  el.style.color=getComputedStyle(document.body).color;
+  _eligFilter='all';
+  renderEligibilityBrowser();
+  el.style.display='flex';
+}
+
+function renderEligibilityBrowser(){
+  var body=document.getElementById('eligBody');
+  if(!body) return;
+  var fg=getComputedStyle(document.body).color;
+  var CJK="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  var course=typeof activeCourse==='function'&&activeCourse();
+  var hasTone=course&&course.hasTone;
+
+  ['All','Ripe','Fresh'].forEach(function(f){
+    var b=document.getElementById('eligFilter'+f);
+    if(b) b.style.opacity=(_eligFilter===f.toLowerCase()?'1':'0.4');
+  });
+
+  var nDue=0,nRipe=0,nFresh=0,nIdle=0;
+  for(var j=0;j<D.length;j++){
+    if(!isUnlocked(j)) continue;
+    var cj=S.cards[j]||{};
+    if(!cj.exp){ nFresh++; }
+    else if(isCardDue(j)){ nDue++; }
+    else if(isWallClockRipe(j)){ nRipe++; }
+    else{ nIdle++; }
+  }
+
+  var mkChip=function(ok,label){
+    return '<span style="font-size:6px;border:1px solid;border-radius:1px;padding:0 2px;margin-right:1px;'
+      +'opacity:'+(ok?'1':'0.2')+';border-color:'+(ok?fg:'rgba(128,128,128,0.5)')+';'
+      +'color:'+(ok?fg:'rgba(128,128,128,0.5)')+';">'+label+'</span>';
+  };
+
+  var html='';
+  html+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(128,128,128,0.3);font-size:7px;">'
+    +'<span>DUE <b>'+nDue+'</b></span>'
+    +'<span>RIPE <b>'+nRipe+'</b></span>'
+    +'<span>FRESH <b>'+nFresh+'</b></span>'
+    +'<span style="opacity:.5;">IDLE '+nIdle+'</span>'
+    +'</div>';
+  html+='<div style="display:grid;grid-template-columns:22px 36px 34px 44px 28px 1fr;gap:2px;padding:2px 0;font-size:6px;opacity:.5;letter-spacing:1px;border-bottom:1px solid rgba(128,128,128,0.4);">'
+    +'<span>#</span><span>WORD</span><span>STATUS</span><span>STAGES</span><span>R%</span><span>ELIGIBLE</span></div>';
+
+  for(var i=0;i<D.length;i++){
+    if(!isUnlocked(i)) continue;
+    var ci=S.cards[i]||{};
+    var seen=!!(ci.seen);
+    var exp=ci.exp||0;
+    var mStage=getAxisStage(i,'meaning')||0;
+    var pStage=getAxisStage(i,'pos')||0;
+    var due=seen&&isCardDue(i);
+    var ripe=seen&&isWallClockRipe(i);
+    var R=(ci.lastReviewAt&&ci.lastReviewAt.meaning)?Math.round(retrievability(i,'meaning')*100):null;
+
+    if(_eligFilter==='ripe'&&!(due||ripe)) continue;
+    if(_eligFilter==='fresh'&&exp!==0) continue;
+
+    var eligMC=exp>=1;
+    var eligCloze=typeof clozeUnlocked==='function'&&clozeUnlocked(i);
+    var eligTone=seen&&!!(hasTone);
+
+    var st=!seen?'NEW':mStage>=3?'MSTD':mStage>=1?'LRNG':'SEEN';
+    var stC=!seen?'rgba(255,200,50,0.9)':mStage>=3?'rgba(100,220,100,0.9)':mStage>=1?'rgba(100,180,255,0.9)':'rgba(160,160,160,0.7)';
+    var flags=(due?'<b style="color:rgba(255,160,0,1);font-size:6px;"> D</b>':'')
+             +(ripe?'<b style="color:rgba(255,100,100,1);font-size:6px;"> R</b>':'');
+
+    html+='<div style="display:grid;grid-template-columns:22px 36px 34px 44px 28px 1fr;gap:2px;padding:3px 0;border-bottom:1px solid rgba(128,128,128,0.1);align-items:center;">'
+      +'<span style="font-size:6px;opacity:.35;">'+(i+1)+'</span>'
+      +'<span style="'+CJK+';font-size:15px;">'+D[i][0]+'</span>'
+      +'<span style="font-size:6px;color:'+stC+';">'+st+flags+'</span>'
+      +'<span style="font-size:6px;opacity:.8;">M:'+mStage+' P:'+pStage+'</span>'
+      +'<span style="font-size:6px;opacity:.7;">'+(R!==null?R+'%':'—')+'</span>'
+      +'<span style="display:flex;gap:2px;align-items:center;">'+mkChip(true,'FL')+mkChip(eligMC,'MC')+mkChip(eligCloze,'CL')+mkChip(eligTone,'TN')+'</span>'
+      +'</div>';
+  }
+
+  body.innerHTML=html;
+}
+
 /* ============ EVENTS ============ */
 // Tap the language label under the title to cycle courses.
 if($('courseId')) $('courseId').onclick=cycleCourse;
@@ -154,6 +242,11 @@ if($('debugImport')) $('debugImport').onclick=()=>{
   };
   inp.click();
 };
+if($('debugElig')) $('debugElig').onclick=()=>{ showEligibilityBrowser(); };
+if($('eligClose')) $('eligClose').onclick=()=>{ var el=document.getElementById('eligBrowser'); if(el) el.style.display='none'; };
+if($('eligFilterAll')) $('eligFilterAll').onclick=()=>{ _eligFilter='all'; renderEligibilityBrowser(); };
+if($('eligFilterRipe')) $('eligFilterRipe').onclick=()=>{ _eligFilter='ripe'; renderEligibilityBrowser(); };
+if($('eligFilterFresh')) $('eligFilterFresh').onclick=()=>{ _eligFilter='fresh'; renderEligibilityBrowser(); };
 $('debugToggle').onclick=()=>{
   const dm=$('debugModes');
   const open=dm.style.display==='flex';
