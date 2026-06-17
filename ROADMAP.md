@@ -233,13 +233,19 @@ The flat 10×N mastery grid is a *flat inventory*: cells in frequency order, opa
 
 **Dependencies / sequencing:** prerequisite-graph design (Arabic forcing function) → `priority(i)` scalar → effective-priority radius. Chunked-content delivery model should be decided before the fog/locked bands carry real meaning. Until both exist, a raw-rank spiral is a valid visual scaffold that upgrades in place.
 
-## WaveViz — Revisit Later
+## WaveViz — Shelved (revisit with a real audio database)
 
-Current implementation: real Web Audio bars for static audio (Arabic audioMap), dual-sine heartbeat for TTS synthesis. Parent-language TTS (English definitions) does not fire WaveViz. Static audio path (`startReal`) is target-language-only by construction.
+**Status: disabled.** Code remains in `events.js` (WaveViz IIFE) and the `#waveform` / `#waveformMC` canvases remain in the DOM, but `ENABLED=false` gates all rendering and the canvases are `display:none`. Re-enable by flipping the flag and the CSS — do not before reading the constraint below.
 
-**Revisit when:** audioMap coverage reaches meaningful density (target: ≥ 50 words). At that point the real waveform will have enough variety across words to be worth evaluating whether it carries a useful perceptual signal — or whether the bar shapes are too similar across short Arabic words to matter. Also revisit bar count, height, and opacity tuning with real user feedback.
+**Why shelved — the canonical contour is redundant with the pinyin diacritic.** The schematic tone curves we built are *isomorphic* to the tone marks already over the pinyin: the `\` over `bù`, the `ˇ` over `nǐ` **are** the canonical pitch shape. Drawing them as a larger curve adds no information a learner who can read the diacritic doesn't already have. It fails the bar the feature was justified on ("perceive a facet of the language they otherwise couldn't"). Animating or restyling the canonical glyph does not fix this — animating a redundant signal is still redundant.
 
-**Do not tune prematurely** — the heartbeat is decorative and the real waveform only has ~22 entries to differentiate. Wait for the audioMap to be substantive before spending time on visual calibration.
+**What would make it non-redundant: real F0 from real audio.** The diacritic shows the *citation* tone — it lies about what is actually spoken in context. The signal worth showing is the divergence from citation form that a beginner cannot hear: third-tone sandhi (你好 nǐ hǎo → ní hǎo), the 不/一 sandhi (不是 bù → bú shì), coarticulation, the speaker's real pitch range, timing. That information only exists in actual audio.
+
+**Live extraction is a dead end and not the plan.** The Web Speech API exposes no output samples (no AudioBuffer / MediaStream / AnalyserNode), so the Mandarin TTS path cannot be analyzed in-browser at all. The static-audio path can, but real-time F0 on short clips is noisy (octave jumps, unvoiced gaps) — worse than nothing pedagogically.
+
+**The actual plan — gate on a real target-language audio database.** When we have pre-generated or sampled audio *files* per word (the generation-backend seam; target density to make it worthwhile ≈ ≥ 50 words), the build is: extract F0 **offline**, clean it, store it as a per-word polyline alongside the entry, then render the real contour with a **playhead animated in sync with the clip duration**. That is the version where the contour stops being a redrawn tone mark and starts showing something no learner could otherwise perceive. Timing hooks for the animation already exist (`onstart`/`onend`/`onboundary`) even though samples do not.
+
+The Arabic heartbeat was always a decorative placeholder (Arabic is non-tonal; F0 contour is the wrong feature there — pharyngeals/emphatics are the opaque ones). It is shelved with the rest until a per-family visualization is designed against real audio data.
 
 ---
 

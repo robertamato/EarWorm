@@ -1039,6 +1039,15 @@ const State = {
 //
 // Real-time Web Audio waveform deferred; see ROADMAP §WaveViz.
 (function(){
+  // SHELVED. The canonical tone contour is isomorphic to the pinyin tone
+  // diacritic — same information, redrawn — so it carries no signal a learner
+  // who reads the diacritic doesn't already have. The feature only earns its
+  // place with real F0 extracted offline from a real audio database (sandhi,
+  // coarticulation, actual pitch range — the facets a beginner cannot hear).
+  // Disabled until that audio database exists. See ROADMAP §WaveViz.
+  // To re-enable: flip ENABLED and restore the #waveform/#waveformMC CSS display.
+  var ENABLED=false;
+
   var _raf=null;
   var _setupRaf=null;
   var _mode=null;
@@ -1143,6 +1152,7 @@ const State = {
   // Sets the at-rest visual for this card; draws immediately (with rAF fallback
   // if the canvas hasn't been laid out yet after show()).
   function setWord(syls,hasTone){
+    if(!ENABLED) return;
     if(_raf){ cancelAnimationFrame(_raf); _raf=null; }
     if(_setupRaf){ cancelAnimationFrame(_setupRaf); _setupRaf=null; }
     _mode=null;
@@ -1154,6 +1164,7 @@ const State = {
   // Restores the at-rest visual (tone contour or flat line). Called after audio
   // ends and on goHome(). Does not reset _restingFn — next setWord() does that.
   function clear(){
+    if(!ENABLED) return;
     if(_raf){ cancelAnimationFrame(_raf); _raf=null; }
     _mode=null;
     if(_restingFn) _restingFn(); else drawFlatLine();
@@ -1161,6 +1172,7 @@ const State = {
 
   // Ambient heartbeat for non-tonal languages during TTS playback.
   function startHeartbeat(){
+    if(!ENABLED) return;
     if(_raf){ cancelAnimationFrame(_raf); _raf=null; }
     _mode='heart';
     var BARS=24, GAP=2;
