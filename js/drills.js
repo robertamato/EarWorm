@@ -172,6 +172,52 @@ function clozeUnlocked(i){
   return (card(i).exp||0)>=1;
 }
 
+// ── Build/scan-time content validator ─────────────────────────────────────
+// Structural check (state-independent, ignores .seen): can each example
+// sentence EVER be fully covered by D[] atoms, and is each key a real atom?
+// Surfaces the design exceptions the runtime gate (sentenceAllIntroduced)
+// would otherwise filter silently — so untaught-context content gets FIXED,
+// not just suppressed. This is the first instance of the eligibility/"available
+// cards" idea run offline. Callable as window.auditExampleSentences();
+// auto-runs once in debug mode.
+function auditExampleSentences(){
+  const CJK=/[一-鿿㐀-䶿]/; // CJK Unified Ideographs + Ext A
+  const dHas={}; D.forEach(function(d){ dHas[d[0]]=true; });
+  const deadKeys=[];     // keyed under a non-D char → getPuzzleSentences never serves it
+  const uncoverable=[];  // a CJK char belongs to no D atom → would render untaught
+  let total=0;
+  Object.keys(EXAMPLE_SENTENCES).forEach(function(key){
+    if(!dHas[key]) deadKeys.push(key);
+    (EXAMPLE_SENTENCES[key]||[]).forEach(function(s){
+      total++;
+      const zh=s[0]||'';
+      const covered={};
+      for(let j=0;j<D.length;j++){ const w=D[j][0]; if(zh.indexOf(w)<0) continue; for(let x=0;x<w.length;x++) covered[w[x]]=true; }
+      const bad=[];
+      for(const ch of zh){ if(CJK.test(ch)&&!covered[ch]&&bad.indexOf(ch)<0) bad.push(ch); }
+      if(bad.length) uncoverable.push({key:key, sentence:zh, untaughtChars:bad});
+    });
+  });
+  const report={ totalKeys:Object.keys(EXAMPLE_SENTENCES).length, totalSentences:total,
+    deadKeys:deadKeys, uncoverableSentences:uncoverable,
+    clean:deadKeys.length===0&&uncoverable.length===0 };
+  try{ if(window.EW&&EW.obs) EW.obs.logEvent('content:audit',{deadKeys:deadKeys.length,uncoverable:uncoverable.length,clean:report.clean}); }catch(e){}
+  return report;
+}
+try{ window.auditExampleSentences=auditExampleSentences; }catch(e){}
+// Auto-run once in debug mode so design exceptions surface at scan time.
+try{
+  if(window.EW&&EW.obs&&EW.obs.isDebug&&EW.obs.isDebug()){
+    setTimeout(function(){
+      try{
+        const _a=auditExampleSentences();
+        if(_a.clean){ if(window.console) console.log('[content:audit] clean — every example sentence is coverable by D[] atoms'); }
+        else if(window.console) console.warn('[content:audit] '+_a.deadKeys.length+' dead key(s), '+_a.uncoverableSentences.length+' uncoverable sentence(s)', _a);
+      }catch(e){}
+    },0);
+  }
+}catch(e){}
+
 // Returns true if s has any character a TTS engine can actually pronounce.
 // Guards against speaking pure-punctuation segments (e.g. "。") that cause synthesis-failed.
 function hasPhoneticContent(s){
