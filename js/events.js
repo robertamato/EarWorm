@@ -1024,3 +1024,122 @@ const State = {
 
   console.log('[Earworm v2] Architecture layers loaded. Scheduler and State available.');
 })();
+
+// ── Waveform Visualizer ──────────────────────────────────────────────────────
+(function(){
+  var _actx=null;
+  var _raf=null;
+  var _mode=null; // 'real' | 'heart' | null
+  var BARS=24, GAP=2;
+
+  function el(){ return document.getElementById('waveform'); }
+
+  function fg(){
+    try{ return getComputedStyle(document.documentElement).getPropertyValue('--fg').trim()||'#0d2e1f'; }
+    catch(e){ return '#0d2e1f'; }
+  }
+
+  function drawDims(c){
+    var dpr=window.devicePixelRatio||1;
+    var w=c.offsetWidth, h=c.offsetHeight;
+    if(w<2||h<2) return null;
+    if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){
+      c.width=Math.round(w*dpr);
+      c.height=Math.round(h*dpr);
+    }
+    return {w:w,h:h,dpr:dpr};
+  }
+
+  function clear(){
+    if(_raf){ cancelAnimationFrame(_raf); _raf=null; }
+    _mode=null;
+    var c=el(); if(!c) return;
+    var d=drawDims(c); if(!d) return;
+    var ctx=c.getContext('2d'); if(!ctx) return;
+    ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
+    ctx.clearRect(0,0,d.w,d.h);
+    ctx.fillStyle=fg();
+    ctx.globalAlpha=0.2;
+    ctx.fillRect(0,Math.floor(d.h/2)-1,d.w,2);
+    ctx.globalAlpha=1;
+  }
+
+  function startReal(audioEl){
+    if(_raf){ cancelAnimationFrame(_raf); _raf=null; }
+    _mode='real';
+    var c=el(); if(!c) return;
+    if(!_actx){
+      try{ _actx=new (window.AudioContext||window.webkitAudioContext)(); }
+      catch(e){ _mode=null; return; }
+    }
+    if(_actx.state==='suspended') try{ _actx.resume(); }catch(e){}
+    var analyser;
+    try{
+      var src=_actx.createMediaElementSource(audioEl);
+      analyser=_actx.createAnalyser();
+      analyser.fftSize=64;
+      src.connect(analyser);
+      analyser.connect(_actx.destination);
+    }catch(e){ _mode=null; return; }
+    var buf=new Uint8Array(analyser.frequencyBinCount);
+    var color=fg();
+    function draw(){
+      if(_mode!=='real') return;
+      var d=drawDims(c);
+      if(!d){ _raf=requestAnimationFrame(draw); return; }
+      analyser.getByteFrequencyData(buf);
+      var ctx=c.getContext('2d'); if(!ctx) return;
+      var barW=Math.max(2,Math.floor((d.w-(BARS-1)*GAP)/BARS));
+      ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
+      ctx.clearRect(0,0,d.w,d.h);
+      ctx.fillStyle=color;
+      for(var i=0;i<BARS;i++){
+        var binIdx=Math.floor(i*buf.length/BARS);
+        var amp=buf[binIdx]/255;
+        var bh=Math.max(2,Math.round(amp*d.h));
+        var x=i*(barW+GAP);
+        var y=Math.round((d.h-bh)/2);
+        ctx.globalAlpha=0.4+amp*0.55;
+        ctx.fillRect(x,y,barW,bh);
+      }
+      ctx.globalAlpha=1;
+      _raf=requestAnimationFrame(draw);
+    }
+    _raf=requestAnimationFrame(draw);
+  }
+
+  function startHeartbeat(){
+    if(_raf){ cancelAnimationFrame(_raf); _raf=null; }
+    _mode='heart';
+    var c=el(); if(!c) return;
+    var color=fg();
+    var t0=performance.now();
+    function draw(now){
+      if(_mode!=='heart') return;
+      var d=drawDims(c);
+      if(!d){ _raf=requestAnimationFrame(draw); return; }
+      var t=(now-t0)/1000;
+      var ctx=c.getContext('2d'); if(!ctx) return;
+      var barW=Math.max(2,Math.floor((d.w-(BARS-1)*GAP)/BARS));
+      ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
+      ctx.clearRect(0,0,d.w,d.h);
+      ctx.fillStyle=color;
+      for(var i=0;i<BARS;i++){
+        var phase=(i/BARS)*Math.PI*2;
+        var a1=0.5+0.5*Math.sin(t*3.8+phase);
+        var a2=0.5+0.5*Math.sin(t*5.1+phase*0.7);
+        var amp=0.15+0.7*(a1*a2);
+        var bh=Math.max(2,Math.round(amp*d.h));
+        var x=i*(barW+GAP);
+        var y=Math.round((d.h-bh)/2);
+        ctx.globalAlpha=0.3+amp*0.65;
+        ctx.fillRect(x,y,barW,bh);
+      }
+      ctx.globalAlpha=1;
+      _raf=requestAnimationFrame(draw);
+    }
+    _raf=requestAnimationFrame(draw);
+  }
+
+  window.WaveViz={startReal:startReal,startHeartbeat:startHeartbeat,clear:clear};
+})();

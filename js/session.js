@@ -1881,6 +1881,7 @@ function clearCardState(){
 
 
 function goHome(){
+  if(window.WaveViz) try{ WaveViz.clear(); }catch(e){}
   studyFlashOnly=false;
   studyModalityFilter=null;
   resetSessionFatigue();

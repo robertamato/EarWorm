@@ -305,6 +305,14 @@
     text-decoration: none !important;
   }
 
+  #waveform {
+    display: block;
+    width: 100%;
+    max-width: 260px;
+    height: 34px;
+    flex-shrink: 0;
+  }
+
 </style>
 </head>
 <body>
@@ -519,6 +527,7 @@
             <div id="studyHanzi" class="cjk" style="font-size:72px;line-height:1;"></div>
             <div id="studyPinyin" class="phi-py" style="font-size:20px;"></div>
           </div>
+          <canvas id="waveform" width="260" height="34"></canvas>
           <div id="studyFlipHint" style="font-size:7px;opacity:.7;">TAP TO FLIP</div>
         </div>
         <div id="studyBackZone" style="display:none;flex-direction:column;align-items:center;gap:20px;width:100%;padding:24px 16px 16px;border-top:2px solid;">

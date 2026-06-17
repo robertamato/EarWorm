@@ -1215,6 +1215,7 @@ if(typeof document!=='undefined'){
 function _playStaticAudio(src, onDone){
   try{
     const a=new Audio(src);
+    if(window.WaveViz) try{ WaveViz.startReal(a); }catch(e){}
     a.onended=()=>{ if(onDone) onDone(); };
     a.onerror=()=>{ if(onDone) onDone(); }; // caller decides whether to fall back
     a.play().catch(()=>{ if(onDone) onDone(); });
@@ -1257,6 +1258,7 @@ function speak(text,lang,onDone,opts){
         if(gen!==_ttsGen) return;
         if(onDone) onDone();
         if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{card:cardCtx,gen:gen,modality:'static'});
+        if(window.WaveViz) setTimeout(WaveViz.clear,400);
         setTimeout(_doPrewarm,150);
       });
       if(ok) return;
@@ -1284,12 +1286,14 @@ function speak(text,lang,onDone,opts){
     if(v) u.voice=v;
     if(v&&window.EW&&EW.obs) EW.obs.logEvent('tts:voice',{card:cardCtx,name:(v&&v.name)||null,local:!!(v&&v.localService),lang:lang});
     if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:text&&text.slice(0,16),lang:lang,card:cardCtx,gen:gen});
+    if(window.WaveViz) try{ WaveViz.startHeartbeat(); }catch(e){}
     let fired=false;
     const finish=(cancelled)=>{
       if(fired||gen!==_ttsGen) return;
       fired=true;
       if(!cancelled&&onDone) onDone();
       if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{card:cardCtx,gen:gen});
+      if(!cancelled&&window.WaveViz) setTimeout(WaveViz.clear,400);
       // Kick off silent pre-warm for upcoming cards (noop if nothing queued)
       if(!cancelled) setTimeout(_doPrewarm,150);
     };
