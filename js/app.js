@@ -1241,7 +1241,7 @@ function charFont(){
   return "font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 }
 
-function speak(text,lang,onDone){
+function speak(text,lang,onDone,opts){
   if(!lang) lang=activeCourse?activeCourse().langCode:'zh-CN';
   if(S.sound==='mute'){ if(onDone) onDone(); return; }
   // Static pre-recorded audio takes priority over synthesis (better quality, dialect-accurate)
@@ -1283,7 +1283,10 @@ function speak(text,lang,onDone){
       if(!cancelled) setTimeout(_doPrewarm,150);
     };
     u.onend=()=>finish(false);
+    if(opts&&opts.onBoundary) u.onboundary=opts.onBoundary;
     u.onerror=(ev)=>{
+      // Expected cancellation from intentional boundary-cut (speakWithBlank) — suppress noise
+      if(opts&&opts.suppressInterrupted&&ev&&ev.error==='interrupted'){ finish(true); return; }
       if(window.console&&console.error) console.error('TTS error:',ev&&ev.error,'text:',text,'lang:',lang);
       if(window.EW&&EW.obs) EW.obs.logEvent('tts:fail',{card:cardCtx,error:(ev&&ev.error)||'unknown',gen:gen});
       finish(true);
@@ -6896,58 +6899,24 @@ function speakWithBlank(zh,ch,langCode){
   const idx=zh.indexOf(ch);
   if(idx<0){ speak(zh,langCode); return; }
   const after=zh.slice(idx+ch.length);
-
-  if(typeof speechSynthesis==='undefined') return;
-
-  const myGen=++_ttsGen;
-  const v=getBestVoice(langCode);
-  const u=new SpeechSynthesisUtterance(zh);
-  u.lang=langCode; u.rate=0.85;
-  if(v) u.voice=v;
-  if(v&&window.EW&&EW.obs) EW.obs.logEvent('tts:voice',{chosenName:v.name,localService:!!v.localService,lang:langCode});
-
   let cut=false;
-
-  u.onboundary=function(ev){
-    if(cut||ev.name!=='word'||ev.charIndex<idx) return;
-    cut=true;
-    try{ speechSynthesis.cancel(); }catch(e){}
-    if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{gen:myGen,modality:'cloze',cut:true});
-    if(_ttsGen!==myGen) return;
-    beepBlank(function(){
-      if(_ttsGen!==myGen) return;
-      if(hasPhoneticContent(after)) speak(after,langCode);
-    });
-  };
-
-  // onboundary not supported (iOS) or target was at the very end —
-  // full sentence already played; trailing beep marks the blank.
-  u.onend=function(){
-    if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{gen:myGen,modality:'cloze',cut:false});
-    if(!cut&&_ttsGen===myGen) beepBlank();
-  };
-
-  // We cancelled at the boundary — 'interrupted' is expected, ignore it.
-  // Any other error: degrade to speaking the full sentence without a bleep.
-  u.onerror=function(ev){
-    if(cut&&ev&&ev.error==='interrupted') return;
-    if(!cut&&_ttsGen===myGen) speak(zh,langCode);
-  };
-
-  if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:zh&&zh.slice(0,16),lang:langCode,gen:myGen,modality:'cloze'});
-  const wasSpeaking=speechSynthesis.speaking||speechSynthesis.pending;
-  if(wasSpeaking){
-    speechSynthesis.cancel();
-    const queueGen=myGen;
-    setTimeout(function(){
-      if(_ttsGen!==queueGen) return;
-      if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
-      speechSynthesis.speak(u);
-    },30);
-  }else{
-    if(speechSynthesis.paused) try{ speechSynthesis.resume(); }catch(e){}
-    speechSynthesis.speak(u);
-  }
+  speak(zh, langCode,
+    // onDone: iOS / no-onboundary fallback — full sentence already played; trailing beep marks blank
+    function(){ if(!cut) beepBlank(); },
+    {
+      suppressInterrupted:true,
+      onBoundary:function(ev){
+        if(cut||ev.name!=='word'||ev.charIndex<idx) return;
+        cut=true;
+        try{ speechSynthesis.cancel(); }catch(e){}
+        const capturedGen=_ttsGen;
+        beepBlank(function(){
+          if(_ttsGen!==capturedGen) return;
+          if(hasPhoneticContent(after)) speak(after,langCode);
+        });
+      }
+    }
+  );
 }
 
 function showStudyCloze(i){

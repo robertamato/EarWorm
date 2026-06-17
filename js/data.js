@@ -1241,7 +1241,7 @@ function charFont(){
   return "font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 }
 
-function speak(text,lang,onDone){
+function speak(text,lang,onDone,opts){
   if(!lang) lang=activeCourse?activeCourse().langCode:'zh-CN';
   if(S.sound==='mute'){ if(onDone) onDone(); return; }
   // Static pre-recorded audio takes priority over synthesis (better quality, dialect-accurate)
@@ -1283,7 +1283,10 @@ function speak(text,lang,onDone){
       if(!cancelled) setTimeout(_doPrewarm,150);
     };
     u.onend=()=>finish(false);
+    if(opts&&opts.onBoundary) u.onboundary=opts.onBoundary;
     u.onerror=(ev)=>{
+      // Expected cancellation from intentional boundary-cut (speakWithBlank) — suppress noise
+      if(opts&&opts.suppressInterrupted&&ev&&ev.error==='interrupted'){ finish(true); return; }
       if(window.console&&console.error) console.error('TTS error:',ev&&ev.error,'text:',text,'lang:',lang);
       if(window.EW&&EW.obs) EW.obs.logEvent('tts:fail',{card:cardCtx,error:(ev&&ev.error)||'unknown',gen:gen});
       finish(true);
