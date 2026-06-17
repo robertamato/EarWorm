@@ -7091,17 +7091,17 @@ function _saveSentenceCache(){
   try{ localStorage.setItem('earworm-sentences-v1',JSON.stringify(_sentenceCache)); }catch(e){}
 }
 
-function getAnthropicKey(){
-  try{ return localStorage.getItem('earworm-api-key')||''; }catch(e){ return ''; }
+function getProxyUrl(){
+  try{ return localStorage.getItem('earworm-proxy-url')||''; }catch(e){ return ''; }
 }
 
-function setAnthropicKey(k){
-  try{ if(k) localStorage.setItem('earworm-api-key',k); else localStorage.removeItem('earworm-api-key'); }catch(e){}
+function setProxyUrl(url){
+  try{ if(url) localStorage.setItem('earworm-proxy-url',url); else localStorage.removeItem('earworm-proxy-url'); }catch(e){}
 }
 
 function generateSentencesForWord(i, onDone){
-  var key=getAnthropicKey();
-  if(!key){ if(onDone) onDone({ok:false,error:'no key'}); return; }
+  var url=getProxyUrl();
+  if(!url){ if(onDone) onDone({ok:false,error:'no proxy url'}); return; }
   var ci=D[i];
   var ch=ci[0];
   if(_sentenceCache[ch]&&_sentenceCache[ch].length){
@@ -7123,14 +7123,9 @@ function generateSentencesForWord(i, onDone){
     +'HARD CONSTRAINT: use ONLY these CJK characters (none other): '+coveredArr.join('')+'\n\n'
     +'Reply with ONLY a JSON array, no markdown, no explanation:\n'
     +'[["Chinese","pinyin with tone marks","English gloss"],["...","...","..."],["...","...","..."]]';
-  fetch('https://api.anthropic.com/v1/messages',{
+  fetch(url,{
     method:'POST',
-    headers:{
-      'content-type':'application/json',
-      'x-api-key':key,
-      'anthropic-version':'2023-06-01',
-      'anthropic-dangerous-direct-browser-access':'true'
-    },
+    headers:{'content-type':'application/json'},
     body:JSON.stringify({
       model:'claude-haiku-4-5-20251001',
       max_tokens:400,
@@ -8112,26 +8107,26 @@ if($('debugImport')) $('debugImport').onclick=()=>{
   inp.click();
 };
 if($('debugElig')) $('debugElig').onclick=()=>{ showEligibilityBrowser(); };
-// API key management
+// Proxy URL management
 (function(){
-  var inp=$('debugApiKey'), status=$('debugKeyStatus');
-  if(inp){ var k=getAnthropicKey(); if(k) inp.placeholder='sk-ant-…'+k.slice(-4)+' (set)'; }
-  if($('debugKeySave')) $('debugKeySave').onclick=function(){
+  var inp=$('debugProxyUrl'), status=$('debugKeyStatus');
+  if(inp){ var u=getProxyUrl(); if(u) inp.placeholder=u; }
+  if($('debugProxySave')) $('debugProxySave').onclick=function(){
     var v=inp&&inp.value.trim();
     if(!v) return;
-    setAnthropicKey(v);
-    if(inp){ inp.value=''; inp.placeholder='sk-ant-…'+v.slice(-4)+' (saved)'; }
-    if(status) status.textContent='key saved';
+    setProxyUrl(v);
+    if(inp){ inp.value=''; inp.placeholder=v; }
+    if(status) status.textContent='proxy saved';
   };
-  if($('debugKeyClear')) $('debugKeyClear').onclick=function(){
-    setAnthropicKey('');
-    if(inp){ inp.value=''; inp.placeholder='sk-ant-api03-…'; }
-    if(status) status.textContent='key cleared';
+  if($('debugProxyClear')) $('debugProxyClear').onclick=function(){
+    setProxyUrl('');
+    if(inp){ inp.value=''; inp.placeholder='https://earworm-proxy.*.workers.dev'; }
+    if(status) status.textContent='cleared';
   };
 })();
 if($('debugGenerate')) $('debugGenerate').onclick=function(){
   var btn=$('debugGenerate');
-  if(!getAnthropicKey()){ btn.textContent='⚡ NO KEY SET'; setTimeout(function(){ btn.textContent='⚡ GENERATE SENTENCES'; },2000); return; }
+  if(!getProxyUrl()){ btn.textContent='⚡ NO PROXY URL'; setTimeout(function(){ btn.textContent='⚡ GENERATE SENTENCES'; },2000); return; }
   var words=[];
   for(var i=0;i<D.length;i++){
     if(!isUnlocked(i)) continue;

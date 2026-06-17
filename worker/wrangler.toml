@@ -1,0 +1,7 @@
+name = "earworm-proxy"
+main = "index.js"
+compatibility_date = "2024-11-01"
+
+# Deploy: wrangler deploy
+# Set key: wrangler secret put ANTHROPIC_KEY
+# Local dev: wrangler dev (add ANTHROPIC_KEY to .dev.vars)

@@ -168,17 +168,17 @@ function _saveSentenceCache(){
   try{ localStorage.setItem('earworm-sentences-v1',JSON.stringify(_sentenceCache)); }catch(e){}
 }
 
-function getAnthropicKey(){
-  try{ return localStorage.getItem('earworm-api-key')||''; }catch(e){ return ''; }
+function getProxyUrl(){
+  try{ return localStorage.getItem('earworm-proxy-url')||''; }catch(e){ return ''; }
 }
 
-function setAnthropicKey(k){
-  try{ if(k) localStorage.setItem('earworm-api-key',k); else localStorage.removeItem('earworm-api-key'); }catch(e){}
+function setProxyUrl(url){
+  try{ if(url) localStorage.setItem('earworm-proxy-url',url); else localStorage.removeItem('earworm-proxy-url'); }catch(e){}
 }
 
 function generateSentencesForWord(i, onDone){
-  var key=getAnthropicKey();
-  if(!key){ if(onDone) onDone({ok:false,error:'no key'}); return; }
+  var url=getProxyUrl();
+  if(!url){ if(onDone) onDone({ok:false,error:'no proxy url'}); return; }
   var ci=D[i];
   var ch=ci[0];
   if(_sentenceCache[ch]&&_sentenceCache[ch].length){
@@ -200,14 +200,9 @@ function generateSentencesForWord(i, onDone){
     +'HARD CONSTRAINT: use ONLY these CJK characters (none other): '+coveredArr.join('')+'\n\n'
     +'Reply with ONLY a JSON array, no markdown, no explanation:\n'
     +'[["Chinese","pinyin with tone marks","English gloss"],["...","...","..."],["...","...","..."]]';
-  fetch('https://api.anthropic.com/v1/messages',{
+  fetch(url,{
     method:'POST',
-    headers:{
-      'content-type':'application/json',
-      'x-api-key':key,
-      'anthropic-version':'2023-06-01',
-      'anthropic-dangerous-direct-browser-access':'true'
-    },
+    headers:{'content-type':'application/json'},
     body:JSON.stringify({
       model:'claude-haiku-4-5-20251001',
       max_tokens:400,

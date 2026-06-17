@@ -254,26 +254,26 @@ if($('debugImport')) $('debugImport').onclick=()=>{
   inp.click();
 };
 if($('debugElig')) $('debugElig').onclick=()=>{ showEligibilityBrowser(); };
-// API key management
+// Proxy URL management
 (function(){
-  var inp=$('debugApiKey'), status=$('debugKeyStatus');
-  if(inp){ var k=getAnthropicKey(); if(k) inp.placeholder='sk-ant-…'+k.slice(-4)+' (set)'; }
-  if($('debugKeySave')) $('debugKeySave').onclick=function(){
+  var inp=$('debugProxyUrl'), status=$('debugKeyStatus');
+  if(inp){ var u=getProxyUrl(); if(u) inp.placeholder=u; }
+  if($('debugProxySave')) $('debugProxySave').onclick=function(){
     var v=inp&&inp.value.trim();
     if(!v) return;
-    setAnthropicKey(v);
-    if(inp){ inp.value=''; inp.placeholder='sk-ant-…'+v.slice(-4)+' (saved)'; }
-    if(status) status.textContent='key saved';
+    setProxyUrl(v);
+    if(inp){ inp.value=''; inp.placeholder=v; }
+    if(status) status.textContent='proxy saved';
   };
-  if($('debugKeyClear')) $('debugKeyClear').onclick=function(){
-    setAnthropicKey('');
-    if(inp){ inp.value=''; inp.placeholder='sk-ant-api03-…'; }
-    if(status) status.textContent='key cleared';
+  if($('debugProxyClear')) $('debugProxyClear').onclick=function(){
+    setProxyUrl('');
+    if(inp){ inp.value=''; inp.placeholder='https://earworm-proxy.*.workers.dev'; }
+    if(status) status.textContent='cleared';
   };
 })();
 if($('debugGenerate')) $('debugGenerate').onclick=function(){
   var btn=$('debugGenerate');
-  if(!getAnthropicKey()){ btn.textContent='⚡ NO KEY SET'; setTimeout(function(){ btn.textContent='⚡ GENERATE SENTENCES'; },2000); return; }
+  if(!getProxyUrl()){ btn.textContent='⚡ NO PROXY URL'; setTimeout(function(){ btn.textContent='⚡ GENERATE SENTENCES'; },2000); return; }
   var words=[];
   for(var i=0;i<D.length;i++){
     if(!isUnlocked(i)) continue;
