@@ -1215,7 +1215,6 @@ if(typeof document!=='undefined'){
 function _playStaticAudio(src, onDone){
   try{
     const a=new Audio(src);
-    if(window.WaveViz) try{ WaveViz.startReal(a); }catch(e){}
     a.onended=()=>{ if(onDone) onDone(); };
     a.onerror=()=>{ if(onDone) onDone(); }; // caller decides whether to fall back
     a.play().catch(()=>{ if(onDone) onDone(); });
@@ -1254,6 +1253,7 @@ function speak(text,lang,onDone,opts){
       if(typeof speechSynthesis!=='undefined'&&(speechSynthesis.speaking||speechSynthesis.pending)) try{ speechSynthesis.cancel(); }catch(e){}
       const cardCtx=(typeof activeCardIdx==='number'&&activeCardIdx>=0)?activeCardIdx:null;
       if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:text&&text.slice(0,16),lang:lang,card:cardCtx,gen:gen,modality:'static'});
+      if(window.WaveViz&&!/^en/i.test(lang)) try{ WaveViz.startHeartbeat(); }catch(e){}
       const ok=_playStaticAudio(course.audioMap[text],function(){
         if(gen!==_ttsGen) return;
         if(onDone) onDone();

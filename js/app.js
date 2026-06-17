@@ -1215,7 +1215,6 @@ if(typeof document!=='undefined'){
 function _playStaticAudio(src, onDone){
   try{
     const a=new Audio(src);
-    if(window.WaveViz) try{ WaveViz.startReal(a); }catch(e){}
     a.onended=()=>{ if(onDone) onDone(); };
     a.onerror=()=>{ if(onDone) onDone(); }; // caller decides whether to fall back
     a.play().catch(()=>{ if(onDone) onDone(); });
@@ -1254,6 +1253,7 @@ function speak(text,lang,onDone,opts){
       if(typeof speechSynthesis!=='undefined'&&(speechSynthesis.speaking||speechSynthesis.pending)) try{ speechSynthesis.cancel(); }catch(e){}
       const cardCtx=(typeof activeCardIdx==='number'&&activeCardIdx>=0)?activeCardIdx:null;
       if(window.EW&&EW.obs) EW.obs.logEvent('tts:request',{text:text&&text.slice(0,16),lang:lang,card:cardCtx,gen:gen,modality:'static'});
+      if(window.WaveViz&&!/^en/i.test(lang)) try{ WaveViz.startHeartbeat(); }catch(e){}
       const ok=_playStaticAudio(course.audioMap[text],function(){
         if(gen!==_ttsGen) return;
         if(onDone) onDone();
@@ -8561,10 +8561,13 @@ const State = {
 })();
 
 // ── Waveform Visualizer ──────────────────────────────────────────────────────
+// Real Web Audio waveform deferred — createMediaElementSource intercepts the
+// Audio element and requires the AudioContext to be running (async resume),
+// which breaks the TTS onended contract. Revisit when audioMap is larger.
+// Both static and synthesis paths use the heartbeat animation for now.
 (function(){
-  var _actx=null;
   var _raf=null;
-  var _mode=null; // 'real' | 'heart' | null
+  var _mode=null; // 'heart' | null
   var BARS=24, GAP=2;
 
   function el(){ return document.getElementById('waveform'); }
@@ -8597,50 +8600,6 @@ const State = {
     ctx.globalAlpha=0.2;
     ctx.fillRect(0,Math.floor(d.h/2)-1,d.w,2);
     ctx.globalAlpha=1;
-  }
-
-  function startReal(audioEl){
-    if(_raf){ cancelAnimationFrame(_raf); _raf=null; }
-    _mode='real';
-    var c=el(); if(!c) return;
-    if(!_actx){
-      try{ _actx=new (window.AudioContext||window.webkitAudioContext)(); }
-      catch(e){ _mode=null; return; }
-    }
-    if(_actx.state==='suspended') try{ _actx.resume(); }catch(e){}
-    var analyser;
-    try{
-      var src=_actx.createMediaElementSource(audioEl);
-      analyser=_actx.createAnalyser();
-      analyser.fftSize=64;
-      src.connect(analyser);
-      analyser.connect(_actx.destination);
-    }catch(e){ _mode=null; return; }
-    var buf=new Uint8Array(analyser.frequencyBinCount);
-    var color=fg();
-    function draw(){
-      if(_mode!=='real') return;
-      var d=drawDims(c);
-      if(!d){ _raf=requestAnimationFrame(draw); return; }
-      analyser.getByteFrequencyData(buf);
-      var ctx=c.getContext('2d'); if(!ctx) return;
-      var barW=Math.max(2,Math.floor((d.w-(BARS-1)*GAP)/BARS));
-      ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
-      ctx.clearRect(0,0,d.w,d.h);
-      ctx.fillStyle=color;
-      for(var i=0;i<BARS;i++){
-        var binIdx=Math.floor(i*buf.length/BARS);
-        var amp=buf[binIdx]/255;
-        var bh=Math.max(2,Math.round(amp*d.h));
-        var x=i*(barW+GAP);
-        var y=Math.round((d.h-bh)/2);
-        ctx.globalAlpha=0.4+amp*0.55;
-        ctx.fillRect(x,y,barW,bh);
-      }
-      ctx.globalAlpha=1;
-      _raf=requestAnimationFrame(draw);
-    }
-    _raf=requestAnimationFrame(draw);
   }
 
   function startHeartbeat(){
@@ -8676,5 +8635,5 @@ const State = {
     _raf=requestAnimationFrame(draw);
   }
 
-  window.WaveViz={startReal:startReal,startHeartbeat:startHeartbeat,clear:clear};
+  window.WaveViz={startHeartbeat:startHeartbeat,clear:clear};
 })();
