@@ -3297,16 +3297,21 @@ function grammarAxisFromKey(k){
 // Prefers State._s._session when populated by the bridge (v2 path).
 // Falls back to legacy globals for v1 / early migration.
 function buildSessionState(){
-  const sess=(typeof State!=='undefined'&&State._s&&State._s._session)?State._s._session:null;
+  // Live module session globals are the SINGLE source of truth. They are pushed/
+  // cleared directly by startStudy / showStudyCard / the drill handlers. The
+  // State._s._session mirror is no longer read back into them (see dispatchStudyAction),
+  // so reading it here would only reintroduce staleness. Read module only — this also
+  // makes the earlier grammarAnswered non-iterable crash impossible (module Set is
+  // always iterable) and keeps the recency window live across answers.
   return {
     studyCardCount,
     studyFlashOnly,
     studyModalityFilter,
-    studyPending: sess&&Array.isArray(sess.studyPending)?[...sess.studyPending]:[...studyPending],
-    sessionGrammarAnswered: (sess&&sess.grammarAnswered&&typeof sess.grammarAnswered[Symbol.iterator]==='function')?new Set(sess.grammarAnswered):new Set(sessionGrammarAnswered),
-    studyEncounters: sess&&sess.studyEncounters?new Map(Object.entries(sess.studyEncounters).map(([k,v])=>[Number(k),v])):new Map(studyEncounters),
-    sessionRecentCards: [...sessionRecentCards], // live module global is authoritative (pushed every showStudyCard); the State._s._session copy is not kept in sync, which silently emptied the recency window
-    sessionAnswerRing: sess&&Array.isArray(sess.sessionAnswerRing)?[...sess.sessionAnswerRing]:[...sessionAnswerRing],
+    studyPending: [...studyPending],
+    sessionGrammarAnswered: new Set(sessionGrammarAnswered),
+    studyEncounters: new Map(studyEncounters),
+    sessionRecentCards: [...sessionRecentCards],
+    sessionAnswerRing: [...sessionAnswerRing],
     nextQueueRebuildAt
   };
 }
@@ -9429,25 +9434,19 @@ const State = {
   // Wire State.dispatch for new code paths
   window.dispatchStudyAction = function(action, payload) {
     State.dispatch(action, payload);
-    // Stronger bridge: keep legacy S and session globals in sync with State._session
+    // Sync durable card state (axisDue/axisStage/xp from Scheduler.recordAnswer) back
+    // onto legacy S. This is the one sync we keep.
     Object.assign(S, State._s);
 
-    const sess = State._s._session;
-    if (sess) {
-      if (Array.isArray(sess.studyPending)) {
-        studyPending = [...sess.studyPending];
-      }
-      if (sess.grammarAnswered) {
-        sessionGrammarAnswered.clear();
-        try { sess.grammarAnswered.forEach(k => sessionGrammarAnswered.add(k)); } catch(e){}
-      }
-      if (sess.studyEncounters) {
-        studyEncounters.clear();
-        Object.entries(sess.studyEncounters).forEach(([k,v]) => studyEncounters.set(Number(k), v));
-      }
-      if (Array.isArray(sess.sessionRecentCards)) sessionRecentCards = [...sess.sessionRecentCards];
-      if (Array.isArray(sess.sessionAnswerRing)) sessionAnswerRing = [...sess.sessionAnswerRing];
-    }
+    // NOTE: we deliberately do NOT sync the session-scoped globals (studyPending,
+    // grammarAnswered, studyEncounters, sessionRecentCards, sessionAnswerRing) back
+    // FROM State._s._session. The live module globals are authoritative — they are
+    // pushed/cleared directly by startStudy / showStudyCard / the drill handlers.
+    // Reading the (lagging) _session mirror into them clobbered live data: every
+    // answer wiped the recency push from showStudyCard, collapsing rotation so the
+    // scheduler re-served the lowest-index card. Same dual-state fragility as the
+    // buildSessionState bugs; the mirror-back below keeps _session current for any
+    // legacy reader, but it is never read back into the live globals.
 
     // Mirror back from legacy globals to _session after dispatch (for future Scheduler.next calls)
     if (State._s._session) {

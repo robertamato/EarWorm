@@ -1348,25 +1348,19 @@ const State = {
   // Wire State.dispatch for new code paths
   window.dispatchStudyAction = function(action, payload) {
     State.dispatch(action, payload);
-    // Stronger bridge: keep legacy S and session globals in sync with State._session
+    // Sync durable card state (axisDue/axisStage/xp from Scheduler.recordAnswer) back
+    // onto legacy S. This is the one sync we keep.
     Object.assign(S, State._s);
 
-    const sess = State._s._session;
-    if (sess) {
-      if (Array.isArray(sess.studyPending)) {
-        studyPending = [...sess.studyPending];
-      }
-      if (sess.grammarAnswered) {
-        sessionGrammarAnswered.clear();
-        try { sess.grammarAnswered.forEach(k => sessionGrammarAnswered.add(k)); } catch(e){}
-      }
-      if (sess.studyEncounters) {
-        studyEncounters.clear();
-        Object.entries(sess.studyEncounters).forEach(([k,v]) => studyEncounters.set(Number(k), v));
-      }
-      if (Array.isArray(sess.sessionRecentCards)) sessionRecentCards = [...sess.sessionRecentCards];
-      if (Array.isArray(sess.sessionAnswerRing)) sessionAnswerRing = [...sess.sessionAnswerRing];
-    }
+    // NOTE: we deliberately do NOT sync the session-scoped globals (studyPending,
+    // grammarAnswered, studyEncounters, sessionRecentCards, sessionAnswerRing) back
+    // FROM State._s._session. The live module globals are authoritative — they are
+    // pushed/cleared directly by startStudy / showStudyCard / the drill handlers.
+    // Reading the (lagging) _session mirror into them clobbered live data: every
+    // answer wiped the recency push from showStudyCard, collapsing rotation so the
+    // scheduler re-served the lowest-index card. Same dual-state fragility as the
+    // buildSessionState bugs; the mirror-back below keeps _session current for any
+    // legacy reader, but it is never read back into the live globals.
 
     // Mirror back from legacy globals to _session after dispatch (for future Scheduler.next calls)
     if (State._s._session) {

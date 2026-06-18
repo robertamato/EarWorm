@@ -363,16 +363,21 @@ function grammarAxisFromKey(k){
 // Prefers State._s._session when populated by the bridge (v2 path).
 // Falls back to legacy globals for v1 / early migration.
 function buildSessionState(){
-  const sess=(typeof State!=='undefined'&&State._s&&State._s._session)?State._s._session:null;
+  // Live module session globals are the SINGLE source of truth. They are pushed/
+  // cleared directly by startStudy / showStudyCard / the drill handlers. The
+  // State._s._session mirror is no longer read back into them (see dispatchStudyAction),
+  // so reading it here would only reintroduce staleness. Read module only — this also
+  // makes the earlier grammarAnswered non-iterable crash impossible (module Set is
+  // always iterable) and keeps the recency window live across answers.
   return {
     studyCardCount,
     studyFlashOnly,
     studyModalityFilter,
-    studyPending: sess&&Array.isArray(sess.studyPending)?[...sess.studyPending]:[...studyPending],
-    sessionGrammarAnswered: (sess&&sess.grammarAnswered&&typeof sess.grammarAnswered[Symbol.iterator]==='function')?new Set(sess.grammarAnswered):new Set(sessionGrammarAnswered),
-    studyEncounters: sess&&sess.studyEncounters?new Map(Object.entries(sess.studyEncounters).map(([k,v])=>[Number(k),v])):new Map(studyEncounters),
-    sessionRecentCards: [...sessionRecentCards], // live module global is authoritative (pushed every showStudyCard); the State._s._session copy is not kept in sync, which silently emptied the recency window
-    sessionAnswerRing: sess&&Array.isArray(sess.sessionAnswerRing)?[...sess.sessionAnswerRing]:[...sessionAnswerRing],
+    studyPending: [...studyPending],
+    sessionGrammarAnswered: new Set(sessionGrammarAnswered),
+    studyEncounters: new Map(studyEncounters),
+    sessionRecentCards: [...sessionRecentCards],
+    sessionAnswerRing: [...sessionAnswerRing],
     nextQueueRebuildAt
   };
 }
