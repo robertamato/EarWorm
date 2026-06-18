@@ -196,6 +196,36 @@ Grammar drills are **disabled in the main study flow** (`dueDrills=[]` in `build
 
 ---
 
+## Modality Audit & Context-First Inversion (design — audit is near-term)
+
+**The inversion (settled).** Mastery of an atom is interrogated **in context**, not in isolation. The flashcard is the *admission ticket* — minimal priming (form + meaning + sound) that satisfies "never test before first flash", which **stands, always**. The *exam* is the example sentence: comprehension of the whole, with mastery propagated to the constituent atoms (the §4b/§5 necessity-gated measurement, cold engine). Isolated single-atom drills (MC-on-meaning, tone, POS) are the **remedial** branch, fired by contextual-comprehension *failure* — not the default. We have been building the remedial modality and treating it as primary.
+
+**Pull scheduler.** The frontier is driven by *sentence demand*, not atom-push. To present a comprehensible sentence all its atoms must be flashed (`sentenceAllIntroduced` stands); the scheduler therefore **front-loads** the introductory flashcards a target sentence needs — possibly off strict `rank` order — to reach context fast. Bounded by the §8-bis acquisition-load ceiling; prefer sentences needing the fewest new flashes ("cheap unlocks"; zero-new = free context, present immediately). Off-`rank` deviation is concentrated in the **seed bootstrap** (ACQUISITION_MODEL §8-ter) and rare afterward.
+
+**Modality inventory & gaps** — map each to (evidence channel × isolated|context × axis):
+
+| Modality | Channel | Iso/Context | Role |
+|---|---|---|---|
+| Flashcard | — | — | introduction (admission) |
+| MC-on-meaning | recall | isolated | remedial |
+| Tone drill | recall/discrim | isolated (phon) | remedial / axis |
+| POS drill | recall | isolated (gramm) | remedial / axis |
+| Cloze | recall/production | context | production-side test |
+| Word-order | discrimination | context | syntax test |
+| **MISSING — whole-comprehension** | incidental/comprehension | context | **primary**: hear/read a sentence, demonstrate you understood its *meaning*; audio-first (fits glyphless/audio brand) |
+| **MISSING — discrimination-in-context** | discrimination | context | two near-identical sentences, pick correct/meaning — the channel the spec prizes; no context version exists |
+| **MISSING — incidental crediting** | incidental | context | not a screen — a cold-engine rule: target rides as comprehended scaffold of a *harder* card; the automatization signal |
+
+**Gap summary:** the *primary* modality the inversion requires — **whole-sentence comprehension, audio-first** — does not exist as a surface. Cloze tests "supply the missing part," not "comprehend the whole." The comprehension screen must **feel like a game, not a quiz** — test anxiety nullifies the retrieval-practice benefit that justifies test-as-learning-tool.
+
+**Dependencies (not a standalone screen build):**
+- **Cold-engine cutover** — so sentence comprehension *propagates* to atom mastery; else the new modality feeds a scheduler still scoring isolated recall. Gates the measurement half.
+- **Generation backend** — pull scheduling *consumes* comprehensible sentences (known scaffold + one target, Zipf-respecting). Canned `EXAMPLE_SENTENCES` starves the frontier; the LLM curator is load-bearing, not "Phase 2." Re-curate under the constraint **"target atom + maximally-frequent scaffold."**
+
+**Audit deliverable (near-term):** finalize the table against the actual code modalities, specify the audio-first whole-comprehension game screen, and sequence it behind the cutover + generation.
+
+---
+
 ## Language-Agnostic Engine — Program Arc (North Star)
 
 The long game. Mandarin is the first instrument, not the product. The product is a **language-agnostic acquisition engine**: a universal scheduler/structure with thin per-language modules (atomic unit, acquisition axes, prerequisite graph). The sequence below is how we earn that generalization rather than assuming it.

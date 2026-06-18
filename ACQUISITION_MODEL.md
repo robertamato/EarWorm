@@ -315,6 +315,127 @@ against `L` (§9), not designed here.
 
 ---
 
+## 8-ter. Seed sizing — the Phase-0 bootstrap [v2, NEW]
+
+§8-bis governs **steady-state** expansion (one atom at a time, load-governed). It
+presupposes a base rich enough that each new introduction can be **immediately
+interrogated in context** — the comprehension test is the real measurement (§6);
+the flashcard is only the admission ticket that satisfies I1. Below a critical
+mass that base does not exist: the most frequent atoms in isolation cannot form
+comprehensible wholes, so there is nothing to interrogate. The opening regime is
+therefore distinct from steady state.
+
+**Seed `Σ`** = the smallest frequency-prefix of the inventory that reaches
+*combinatorial generativity*: enough atoms that the generator (the curator/oracle)
+can build a large, varied set of comprehensible sentences using **only** `Σ`. The
+seed is flashed in strict `rank` order, front-loaded, accepting a flash-heavy
+opening because below `|Σ|` there is no context to give. After the seed, §8-bis
+takes over and expansion runs ≈ pure `rank`, because `Σ` already supplies almost
+all the scaffold any new atom needs. This is what makes off-`rank` front-loading
+(§ pull-scheduling, see ROADMAP) **a phase, not a constant** — the deviation is
+concentrated in the bootstrap and rare afterward.
+
+### The sizing algorithm (language-agnostic)
+
+Given language `L` with frequency-ranked, POS/role-tagged inventory `A = a_1,a_2,…`:
+
+- `Σ_N = {a_1,…,a_N}` — the top-`N` prefix.
+- **Role skeleton** `R(L)` — the minimal grammatical roles to form a clause in `L`
+  (predicate-bearer, argument-bearer, the obligatory functional markers; derived
+  from `L`'s typology — a per-language-module input). `roleComplete(Σ_N)` ⇔ `Σ_N`
+  fills every role in `R(L)`.
+- **Generativity** `G(N)` — count of distinct **valid** comprehensible sentences
+  expressible using only atoms in `Σ_N`, capped at `K`, optionally
+  diversity-weighted. *Valid* = closure (every atom ∈ `Σ_N`) ∧ grammatical ∧
+  coherent ∧ natural. `G` is computed by the **generative oracle** (the LLM
+  curator — the same engine that produces puzzle sentences); closure is checked
+  mechanically.
+
+```
+N* = min { N : roleComplete(Σ_N) ∧ G(N) ≥ θ }
+```
+
+equivalently the **knee** form: smallest `N` with marginal `G(N) − G(N−1) < ε`.
+`G` is monotone non-decreasing in `N`, so `N*` is found by **binary search** on the
+threshold — `O(log |A|)` oracle calls — or coarse-sweep-then-refine for the knee.
+`roleComplete` is a hard gate that can only *raise* `N*` (if an essential role's
+filler sits deep in the tail, `N` grows until it is included).
+
+**Nothing is hardcoded.** The procedure is identical across languages; only the
+inputs differ — the inventory `A`, the skeleton `R(L)`, and the oracle's
+per-language judgment of "comprehensible sentence." The seed is the constellation's
+central ring made principled: **ring size = `N*`**, derived from the language, not
+chosen by feel.
+
+### The capability ladder — the seed's internal structure
+
+`N*` is not a single switch; the seed is a **graded ramp** through a sequence of
+**grammatical-capability milestones**. Each milestone is a linguistic *universal*
+(every language has it; only the unlocking atoms differ — Mandarin particles,
+Arabic morphology, English word-order + auxiliaries), so `roleComplete` (§ above)
+is really just the **M1** gate generalized into a ladder. The single number `N*`
+becomes a **spectrum** `{N(M0), N(M1), …, N(M7)=N*}`, where `N(Mk)` = smallest `N`
+whose top-`N` can express capability `k`. Same oracle, same per-language inputs.
+
+| | Capability unlocked | What it lets the learner do |
+|---|---|---|
+| **M0** | Holophrasis | name / react (yes, no, hi) — complete utterance, **no syntax** ("resolution without sequence") |
+| **M1** | **Predication** | assert a state/event — the **minimal proposition** (referent + self-standing predicate; the minimal "sequence + resolution") |
+| **M2** | Polarity | deny / contrast — the first logical operator (truth-value) |
+| **M3** | Interrogation | *seek* resolution — polar-Q then wh-Q; first **dialogic** turn |
+| **M4** | Deixis / reference | point — situate the proposition in the shared world |
+| **M5** | Modality | the irrealis — want / can / will / maybe |
+| **M6** | Relation / possession | two-place predicates — "X has / is-at / 's Y" |
+| **M7** | **Saturation = the knee** | frames dense enough that *any* new atom slots in (`N*`) |
+
+**Floor note.** The minimal sequence-with-resolution (M1) is **2 atoms** in a
+zero-copula language (Mandarin 我好), **3** where a copula is obligatory (English
+"I am good"). The minimal-clause atom-count is per-language; the capability is
+universal. M0 (1 atom) sits below the bar — complete but not a *sequence*.
+
+**Why the ladder tracks `rank`.** Frequency reflects communicative load, and these
+capabilities *are* what language is for, so the atoms that unlock each rung are
+high-frequency by necessity. `rank` order ≈ capability order ≈ L1 child-acquisition
+order (name → two-word → "no" → questions → this/that → want → mine). The three-way
+convergence is the tell that the ladder carves a real joint.
+
+**The structural surprise (Mandarin instance), and its consequence.** Placing the
+rungs on actual ranks reveals two sub-regions of the bootstrap:
+- **Scaffold valley (≈ rank 1–16):** almost pure glue/reference (particles,
+  pronouns, negation, deixis, copula, possessive 的 at rank 1, 在/有) — but **no
+  complete proposition is possible**, because no self-standing predicate has
+  arrived. Hardest, least-rewarding stretch; pure deferred gratification.
+- **Capability cascade (≈ 17–30):** the first predicate (好/来/去, ~rank 17) lands
+  on the waiting scaffold and capabilities unlock in rapid succession; the knee
+  (~30) is where the cascade saturates.
+
+**Consequence — the seed bootstrap is milestone-driven, not strict-`rank`.** Strict
+frequency order forces the learner to grind all ~16 scaffold atoms before their
+first complete sentence — the worst motivation curve. Instead, **front-load a
+predicate to cross M1 early** (pull 好/来 forward a dozen ranks) so a true, complete
+sentence — the first real *win* — is reachable almost immediately; then let the
+cascade run. The seed's deviations off `rank` are driven by **capability
+thresholds**, the seed-phase form of the pull scheduler (pulled by milestones, not
+individual sentences). Two further hooks: the post-seed context-availability router
+(see ROADMAP, context-first inversion) reads the **milestone level** an atom sits
+in (which frames it can be interrogated in), not a binary yes/no; and the milestone
+ladder is the natural **learner-facing progression spine** ("you can now ask
+questions / negate / talk about wanting") — far more motivating than a word count,
+especially across the scaffold valley where the game layer must carry the most
+weight.
+
+### Open / fit
+- `θ` (or `ε`); whether `G` weights *diversity* of grammatical frames over raw
+  count (50 sentences all of frame "X 是 Y" are less generative than 20 across
+  frames).
+- Strict prefix vs. allowing a rank-adjacent swap to fill a missing skeleton role
+  (prefix keeps it Zipf-honest; `roleComplete` already handles the common case by
+  growing `N`).
+- Calibrating the oracle's producible-count against held-out corpus short-sentence
+  coverage.
+
+---
+
 ## 9. Deliberately deferred (fit, don't design)
 
 Committed structure above; these are parameters/functions fit against `L`:
