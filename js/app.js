@@ -2117,7 +2117,7 @@ function renderConstellation(){
   }
   cv.addEventListener('pointerup',endPtr);
   cv.addEventListener('pointercancel',endPtr);
-  cv.addEventListener('wheel',e=>{ e.preventDefault(); hideHint(); zoom=clampZoom(zoom*(1-e.deltaY*0.0012)); },{passive:false});
+  cv.addEventListener('wheel',e=>{ e.preventDefault(); hideHint(); zoom=clampZoom(zoom*(1-e.deltaY*0.0030)); },{passive:false});
   // POS legend
   const leg=document.createElement('div');
   leg.style.cssText='position:absolute;top:6px;left:8px;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';
