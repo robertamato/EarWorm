@@ -2,9 +2,8 @@
   const mastN=D.filter((_,i)=>isMastered(i)).length;
   const frVal=frontier();
   $('due').textContent=`DUE ${dueN}  NEW ${newN}`;
-  $('frontier').textContent=frVal;
   const course=activeCourse&&activeCourse();
-  $('mapLabel').textContent=activeDeckName().toUpperCase()+' · '+frVal+' / '+D.length+' WORDS ▸';
+  $('mapLabel').textContent='FRONTIER '+frVal+'  ·  '+activeDeckName().toUpperCase()+' ▸';
   const ll=$('courseId');
   if(ll&&course){ ll.textContent=course.langName.toUpperCase()+'  ▾'; ll.style.cursor='pointer'; }
 

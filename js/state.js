@@ -142,32 +142,180 @@ const $=id=>document.getElementById(id);
 let queue=[],cur=-1,flipped=false,combo=0;
 let activeCardIdx=-1; // always tracks current card regardless of modality
 
+// ── CONSTELLATION HOME MAP (3D orbit) ───────────────────────────
+// Replaces the frequency grid. Object-space layout: ANGLE = part-of-
+// speech sector (wedge width ∝ member count), RADIUS = Zipf rank (sqrt
+// for even density), Z = depth-for-space + gentle mastery-forward bias
+// (un-committed; promote to a real variable later with no layout move).
+// BRIGHTNESS = mastery (state). The frontier is a glowing radius.
+// FIBERS = sentence co-occurrence (the morphism graph from
+// ACQUISITION_MODEL.md). Camera: turntable orbit (yaw) about the
+// vertical axis ⟂ the disc, viewed from a fixed elevation — no pan, no
+// roll. The lift dimension is genuinely vertical (terrain, not toward-
+// camera). Glyphless + audible: tap a star to hear
+// it. Rendered to canvas; the animation loop is generation-guarded so
+// re-renders never stack, and pauses when home is not visible.
+const POS_SECTORS=['NOUN','VERB','PRON','ADV','ADJ','PART','CONJ','MISC'];
+const POS_COLOR={NOUN:[255,184,77],VERB:[77,255,160],PRON:[77,216,255],ADV:[255,111,181],ADJ:[198,255,82],PART:[185,160,255],CONJ:[111,140,255],MISC:[255,122,77]};
+function posRGB(s){const c=POS_COLOR[s]||[160,180,170]; return 'rgb('+c[0]+','+c[1]+','+c[2]+')';}
+function macroPOS(p){
+  p=(p||'').toLowerCase();
+  if(p.indexOf('pronoun')>=0) return 'PRON';
+  if(p.indexOf('adverb')>=0) return 'ADV';
+  if(p.indexOf('verb')>=0||p.indexOf('modal')>=0) return 'VERB';
+  if(p.indexOf('noun')>=0) return 'NOUN';
+  if(p.indexOf('particle')>=0||p.indexOf('suffix')>=0) return 'PART';
+  if(p.indexOf('adjective')>=0) return 'ADJ';
+  if(p.indexOf('conjunction')>=0) return 'CONJ';
+  return 'MISC';
+}
+// Co-occurrence edges, derived once from EXAMPLE_SENTENCES. Two atoms
+// share a fiber if they appear together in any example sentence.
+let _fiberCache=null,_fiberCacheN=-1;
+function constellationFibers(){
+  if(_fiberCache&&_fiberCacheN===D.length) return _fiberCache;
+  const sents=(typeof EXAMPLE_SENTENCES!=='undefined')?EXAMPLE_SENTENCES:{};
+  const seen={},pairs=[];
+  for(const key in sents){
+    (sents[key]||[]).forEach(function(s){
+      const text=(s&&s[0])||'',present=[];
+      for(let i=0;i<D.length;i++){ if(text.indexOf(D[i][0])>=0) present.push(i); }
+      for(let a=0;a<present.length;a++)for(let b=a+1;b<present.length;b++){
+        const pk=present[a]+'-'+present[b];
+        if(!seen[pk]){seen[pk]=1;pairs.push([present[a],present[b]]);}
+      }
+    });
+  }
+  _fiberCache=pairs;_fiberCacheN=D.length;return pairs;
+}
+let _cnGen=0;
+function renderConstellation(){
+  const host=$('map'); if(!host) return;
+  _cnGen++; const gen=_cnGen;                 // invalidate any prior animation loop
+  host.innerHTML='';
+  host.style.display='block';
+  host.style.position='relative';
+  host.style.padding='0';
+  host.style.border='none';
+  host.style.background='transparent';            // bleed with the dark home field
+  const N=D.length; if(!N) return;
+  // canvas sized to the hero region (responsive, full-bleed)
+  const cv=document.createElement('canvas');
+  cv.style.cssText='display:block;width:100%;height:46vh;max-height:540px;min-height:300px;cursor:grab;touch-action:none;';
+  host.appendChild(cv);
+  const ctx=cv.getContext('2d');
+  const dpr=Math.max(1,Math.min(2,window.devicePixelRatio||1));
+  const Wc=Math.max(280,cv.clientWidth||host.clientWidth||window.innerWidth||360);
+  const Hc=Math.max(280,cv.clientHeight||360);
+  cv.width=Wc*dpr; cv.height=Hc*dpr; ctx.scale(dpr,dpr);
+  const CX=Wc/2,CY=Hc/2,Rmax=Math.min(Wc,Hc)*0.46,Rmin=Rmax*0.18,FOC=Rmax*2.6,CAM=Rmax*2.6,EL=0.60;
+  // sectors
+  const counts={}; POS_SECTORS.forEach(s=>counts[s]=0);
+  const posOf=new Array(N);
+  for(let i=0;i<N;i++){ const s=macroPOS(D[i][4]); posOf[i]=s; counts[s]++; }
+  const active=POS_SECTORS.filter(s=>counts[s]>0);
+  let ang=-Math.PI/2; const wedge={};
+  active.forEach(s=>{ const w=(counts[s]/N)*2*Math.PI; wedge[s]=[ang,ang+w]; ang+=w; });
+  // node geometry in object-space, centered at origin
+  const seenK={},node=new Array(N);
+  function hash(n){const x=Math.sin(n*99.13)*43758.5453; return x-Math.floor(x);}
+  for(let i=0;i<N;i++){
+    const s=posOf[i],wd=wedge[s],k=(seenK[s]=(seenK[s]||0)); seenK[s]++;
+    const frac=(k*0.6180339)%1, a=wd[0]+0.10*(wd[1]-wd[0])+frac*0.80*(wd[1]-wd[0]);
+    const r=(k===0)?Rmin:Rmin+(Rmax-Rmin)*Math.sqrt(i/N);
+    const seen=S.cards[i]&&S.cards[i].seen, st=state(i);
+    const fwd=!seen?-Rmax*0.30:(st-1)*Rmax*0.19, z=fwd+(hash(i+1)-0.5)*Rmax*0.62;
+    node[i]={i:i,pos:s,seen:seen,st:st,x:r*Math.cos(a),y:r*Math.sin(a),z:z,_sx:null,_sy:null};
+  }
+  // fibers between introduced atoms
+  const fibers=constellationFibers(),edges=[];
+  for(let f=0;f<fibers.length;f++){const a=fibers[f][0],b=fibers[f][1]; if(node[a].seen&&node[b].seen) edges.push([node[a],node[b]]);}
+  const frR=Rmin+(Rmax-Rmin)*Math.sqrt(Math.min(frontier(),N)/N);
+  let yaw=0,dragging=false,lastX=0,moved=0;
+  function proj(o){
+    // disc lies on the ground plane (o.x,o.y); o.z is vertical lift.
+    // Turntable: spin about the vertical axis (yaw), then view from a
+    // fixed elevation. Yaw axis ⟂ disc → constant ellipse, no sliver.
+    const gx=o.x,gz=o.y,gy=o.z;
+    const cf=Math.cos(yaw),sf=Math.sin(yaw);
+    const x1=gx*cf+gz*sf, z1=-gx*sf+gz*cf;
+    const ca=Math.cos(EL),sa=Math.sin(EL);
+    const y2=gy*ca+z1*sa, z2=-gy*sa+z1*ca;
+    const sc=FOC/(FOC+CAM+z2);
+    return {sx:CX+x1*sc,sy:CY-y2*sc,sc:sc,depth:z2};
+  }
+  function draw(){
+    ctx.clearRect(0,0,Wc,Hc);
+    ctx.strokeStyle='rgba(77,255,160,0.22)'; ctx.setLineDash([2,7]); ctx.lineWidth=1; ctx.beginPath();
+    for(let t=0;t<=64;t++){const aa=t/64*2*Math.PI,p=proj({x:frR*Math.cos(aa),y:frR*Math.sin(aa),z:0}); if(t===0)ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);} ctx.stroke(); ctx.setLineDash([]);
+    for(let e=0;e<edges.length;e++){const a=proj(edges[e][0]),b=proj(edges[e][1]); ctx.strokeStyle='rgba(125,255,192,0.15)'; ctx.lineWidth=0.7; ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();}
+    const ps=node.map(o=>{const p=proj(o); p.o=o; o._sx=null; return p;}).sort((a,b)=>b.depth-a.depth);
+    for(let q=0;q<ps.length;q++){
+      const p=ps[q],o=p.o,c=POS_COLOR[o.pos];
+      if(!o.seen){ ctx.fillStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.12)'; ctx.beginPath(); ctx.arc(p.sx,p.sy,1.5*p.sc,0,7); ctx.fill(); continue; }
+      const halo=(o.st>=3?13:o.st>=2?10:8)*p.sc, ha=(o.st>=3?0.34:o.st>=2?0.22:0.15);
+      const g=ctx.createRadialGradient(p.sx,p.sy,0,p.sx,p.sy,halo);
+      g.addColorStop(0,'rgba('+c[0]+','+c[1]+','+c[2]+','+ha+')'); g.addColorStop(1,'rgba('+c[0]+','+c[1]+','+c[2]+',0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.sx,p.sy,halo,0,7); ctx.fill();
+      const core=(o.st>=3?4:o.st>=2?3.2:2.6)*p.sc;
+      ctx.fillStyle=o.st>=3?'#ffffff':'rgb('+c[0]+','+c[1]+','+c[2]+')';
+      ctx.beginPath(); ctx.arc(p.sx,p.sy,core,0,7); ctx.fill();
+      if(o.st>=3){ ctx.strokeStyle='rgb('+c[0]+','+c[1]+','+c[2]+')'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(p.sx,p.sy,core+2,0,7); ctx.stroke(); }
+      o._sx=p.sx; o._sy=p.sy;
+    }
+  }
+  function visible(){ return !document.hidden && $('home') && $('home').style.display!=='none'; }
+  function loop(){
+    if(gen!==_cnGen) return;                  // a newer render replaced us — stop
+    if(visible()){ if(!dragging) yaw+=0.0030; draw(); }
+    requestAnimationFrame(loop);
+  }
+  function px(e){const r=cv.getBoundingClientRect(); return (e.clientX-r.left)/r.width*Wc;}
+  function py(e){const r=cv.getBoundingClientRect(); return (e.clientY-r.top)/r.height*Hc;}
+  cv.addEventListener('pointerdown',e=>{dragging=true;moved=0;lastX=px(e);cv.style.cursor='grabbing';try{cv.setPointerCapture(e.pointerId);}catch(_){}});
+  cv.addEventListener('pointermove',e=>{if(!dragging)return;const x=px(e),dx=x-lastX;lastX=x;moved+=Math.abs(dx);yaw+=dx*0.006;});
+  cv.addEventListener('pointerup',e=>{
+    cv.style.cursor='grab';
+    if(moved<6){
+      const mx=px(e),my=py(e); let best=null,bd=1e9;
+      for(let i=0;i<N;i++){const o=node[i]; if(!o.seen||o._sx==null)continue; const d=(o._sx-mx)*(o._sx-mx)+(o._sy-my)*(o._sy-my); if(d<bd){bd=d;best=o;}}
+      if(best&&bd<420){
+        if(S.sound!=='mute') speak(D[best.i][0],activeCourse().langCode);
+        const rd=document.getElementById('mapReadout'),c=POS_COLOR[best.pos];
+        if(rd) rd.innerHTML='<span style="color:rgb('+c[0]+','+c[1]+','+c[2]+')">●</span> <span style="color:#eafff4">'+D[best.i][2]+'</span> <span style="opacity:.45">· '+best.pos.toLowerCase()+' · #'+(best.i+1)+'</span>';
+      }
+    }
+    dragging=false;
+  });
+  // POS legend
+  const leg=document.createElement('div');
+  leg.style.cssText='position:absolute;top:6px;left:8px;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';
+  active.forEach(function(s){
+    const sp=document.createElement('span'); sp.style.color='#9ab';
+    sp.innerHTML='<span style="color:'+posRGB(s)+'">●</span>'+s.toLowerCase();
+    leg.appendChild(sp);
+  });
+  host.appendChild(leg);
+  // readout HUD
+  const rd=document.createElement('div'); rd.id='mapReadout';
+  rd.style.cssText='position:absolute;left:8px;bottom:6px;font-size:10px;letter-spacing:1px;color:#cfe;';
+  rd.innerHTML='<span style="opacity:.4">drag to orbit · tap a star to hear it</span>';
+  host.appendChild(rd);
+  loop();
+}
 function renderHome(){
   applyBilingualUI();
   // Always destroy fatigue overlay on home screen
   const overlay=document.getElementById('fatigueOverlay');
   if(overlay) overlay.remove();
-  const g=$('map'); g.innerHTML='';
-  const fg=hsl(bgHue+GA,80,24);
-  const stCol=[ 'transparent', hsl(bgHue,60,30), hsl(bgHue,60,20), hsl(bgHue,60,12) ];
-  const fr=frontier();
-  for(let i=0;i<D.length;i++){
-    const c=document.createElement('div');
-    c.className='cell';
-    const locked=i>=fr;
-    c.style.borderColor=locked?'transparent':fg;
-    c.style.backgroundColor=locked?'rgba(0,0,0,0.15)':stCol[state(i)];
-    c.style.opacity=locked?'0.3':'1';
-    // Tap a cell to hear it — but only words already introduced as flashcards.
-    // Glyphless by design; seen territory is audible, the fog is silent.
-    const _idx=i;
-    if(S.cards[i]&&S.cards[i].seen){
-      c.style.cursor='pointer';
-      c.onclick=()=>{ if(S.sound!=='mute') speak(D[_idx][0],activeCourse().langCode); };
-    }
-    g.appendChild(c);
-  }
-  ['sw0','sw1','sw2','sw3'].forEach((id,k)=>{$(id).style.backgroundColor=stCol[k];});
+  // Dark map-mode home: light, theme-tinted chrome over the constellation field.
+  const fg=hsl(bgHue+GA,75,65);
+  const homeText=hsl(bgHue,55,82);
+  const homeEl=$('home'); if(homeEl){ homeEl.style.background='#070b08'; homeEl.style.color=homeText; }
+  // rollBg() runs just before renderHome and paints every .btn with the dark
+  // theme fg (inline). Re-light the home's controls so they read on the dark field.
+  document.querySelectorAll('#home .btn, #home #debugToggle').forEach(function(b){ b.style.color=homeText; b.style.borderColor=fg; });
+  renderConstellation();
   const lvl=Math.floor(S.xp/100)+1;
   $('lvl').textContent=lvl; $('xp').textContent=S.xp;
   $('streak').textContent=S.streak;

@@ -49,7 +49,7 @@ function rollBg(){
   document.body.style.backgroundColor=bg;
   document.body.style.color=fg;
   document.querySelectorAll('.panel,.btn,#card,#topbar button,.cell,.sw,#mc-prompt,#mc-topbar button,.choice,#mc-dontknow,#mc-submode button,#debugToggle')
-    .forEach(e=>{e.style.borderColor=fg; e.style.color=fg;});
+    .forEach(e=>{if(e.closest('#home,#eligBrowser,#exceptionCatcher,#sentenceCurator'))return; e.style.borderColor=fg; e.style.color=fg;});
   return {fg};
 }
 
