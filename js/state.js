@@ -308,13 +308,11 @@ function renderHome(){
   // Always destroy fatigue overlay on home screen
   const overlay=document.getElementById('fatigueOverlay');
   if(overlay) overlay.remove();
-  // Dark map-mode home: light, theme-tinted chrome over the constellation field.
+  // Dark map-mode home: set the field dark and the ink light once. Buttons,
+  // borders and labels inherit it through the cascade (currentColor) — no
+  // per-element stamping, so new chrome is legible here by default.
   const fg=hsl(bgHue+GA,75,65);
-  const homeText=hsl(bgHue,55,82);
-  const homeEl=$('home'); if(homeEl){ homeEl.style.background='#070b08'; homeEl.style.color=homeText; }
-  // rollBg() runs just before renderHome and paints every .btn with the dark
-  // theme fg (inline). Re-light the home's controls so they read on the dark field.
-  document.querySelectorAll('#home .btn, #home #debugToggle').forEach(function(b){ b.style.color=homeText; b.style.borderColor=fg; });
+  const homeEl=$('home'); if(homeEl){ homeEl.style.background='#070b08'; homeEl.style.color=hsl(bgHue,55,82); }
   renderConstellation();
   const lvl=Math.floor(S.xp/100)+1;
   $('lvl').textContent=lvl; $('xp').textContent=S.xp;
