@@ -2024,7 +2024,9 @@ function renderConstellation(){
   const fibers=constellationFibers(),edges=[];
   for(let f=0;f<fibers.length;f++){const a=fibers[f][0],b=fibers[f][1]; if(node[a].seen&&node[b].seen) edges.push([node[a],node[b]]);}
   const frR=Rmin+(Rmax-Rmin)*Math.sqrt(Math.min(frontier(),N)/N);
-  let yaw=0,dragging=false,lastX=0,moved=0;
+  let yaw=0,zoom=1,dragging=false,lastX=0,moved=0,tapFx=null;
+  const pts=new Map(); let pinchD0=0,zoom0=1;
+  const CJK="'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
   function proj(o){
     // disc lies on the ground plane (o.x,o.y); o.z is vertical lift.
     // Turntable: spin about the vertical axis (yaw), then view from a
@@ -2034,15 +2036,17 @@ function renderConstellation(){
     const x1=gx*cf+gz*sf, z1=-gx*sf+gz*cf;
     const ca=Math.cos(EL),sa=Math.sin(EL);
     const y2=gy*ca+z1*sa, z2=-gy*sa+z1*ca;
-    const sc=FOC/(FOC+CAM+z2);
+    const sc=FOC/(FOC+CAM+z2)*zoom;
     return {sx:CX+x1*sc,sy:CY-y2*sc,sc:sc,depth:z2};
   }
   function draw(){
+    const now=performance.now();
     ctx.clearRect(0,0,Wc,Hc);
     ctx.strokeStyle='rgba(77,255,160,0.22)'; ctx.setLineDash([2,7]); ctx.lineWidth=1; ctx.beginPath();
     for(let t=0;t<=64;t++){const aa=t/64*2*Math.PI,p=proj({x:frR*Math.cos(aa),y:frR*Math.sin(aa),z:0}); if(t===0)ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);} ctx.stroke(); ctx.setLineDash([]);
     for(let e=0;e<edges.length;e++){const a=proj(edges[e][0]),b=proj(edges[e][1]); ctx.strokeStyle='rgba(125,255,192,0.15)'; ctx.lineWidth=0.7; ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();}
     const ps=node.map(o=>{const p=proj(o); p.o=o; o._sx=null; return p;}).sort((a,b)=>b.depth-a.depth);
+    const labels=[];
     for(let q=0;q<ps.length;q++){
       const p=ps[q],o=p.o,c=POS_COLOR[o.pos];
       if(!o.seen){ ctx.fillStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.12)'; ctx.beginPath(); ctx.arc(p.sx,p.sy,1.5*p.sc,0,7); ctx.fill(); continue; }
@@ -2055,31 +2059,65 @@ function renderConstellation(){
       ctx.beginPath(); ctx.arc(p.sx,p.sy,core,0,7); ctx.fill();
       if(o.st>=3){ ctx.strokeStyle='rgb('+c[0]+','+c[1]+','+c[2]+')'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(p.sx,p.sy,core+2,0,7); ctx.stroke(); }
       o._sx=p.sx; o._sy=p.sy;
+      // detail-on-demand: once zoomed in, on-screen seen stars earn a label
+      if(zoom>=2.0 && p.sx>-30&&p.sx<Wc+30&&p.sy>-30&&p.sy<Hc+50) labels.push({p:p,o:o,c:c,core:core});
+    }
+    // label pass on top: glyph (target language), then gloss (parent) when closer
+    for(let l=0;l<labels.length;l++){
+      const L=labels[l],p=L.p,o=L.o,c=L.c, gs=Math.max(12,Math.min(40,8+L.core*1.6));
+      ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.font='600 '+gs+'px '+CJK;
+      ctx.fillStyle='rgba(255,255,255,0.94)';
+      ctx.fillText(D[o.i][0], p.sx, p.sy+L.core+3);
+      if(zoom>=3.4){
+        const ds=Math.max(9,gs*0.4);
+        ctx.font=ds+'px ui-monospace,monospace';
+        ctx.fillStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.9)';
+        ctx.fillText(D[o.i][2], p.sx, p.sy+L.core+3+gs+2);
+      }
+    }
+    if(tapFx){
+      const dt=now-tapFx.t0;
+      if(dt>520) tapFx=null;
+      else{ const o=node[tapFx.i]; if(o&&o._sx!=null){ const k=dt/520; ctx.strokeStyle='rgba(255,255,255,'+(0.6*(1-k))+')'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(o._sx,o._sy,5+k*28,0,7); ctx.stroke(); } }
     }
   }
   function visible(){ return !document.hidden && $('home') && $('home').style.display!=='none'; }
   function loop(){
     if(gen!==_cnGen) return;                  // a newer render replaced us — stop
-    if(visible()){ if(!dragging) yaw+=0.0030; draw(); }
+    if(visible()){ if(!dragging && pts.size===0) yaw+=0.0030; draw(); }
     requestAnimationFrame(loop);
   }
   function px(e){const r=cv.getBoundingClientRect(); return (e.clientX-r.left)/r.width*Wc;}
   function py(e){const r=cv.getBoundingClientRect(); return (e.clientY-r.top)/r.height*Hc;}
-  cv.addEventListener('pointerdown',e=>{dragging=true;moved=0;lastX=px(e);cv.style.cursor='grabbing';try{cv.setPointerCapture(e.pointerId);}catch(_){}});
-  cv.addEventListener('pointermove',e=>{if(!dragging)return;const x=px(e),dx=x-lastX;lastX=x;moved+=Math.abs(dx);yaw+=dx*0.006;});
-  cv.addEventListener('pointerup',e=>{
-    cv.style.cursor='grab';
-    if(moved<6){
-      const mx=px(e),my=py(e); let best=null,bd=1e9;
-      for(let i=0;i<N;i++){const o=node[i]; if(!o.seen||o._sx==null)continue; const d=(o._sx-mx)*(o._sx-mx)+(o._sy-my)*(o._sy-my); if(d<bd){bd=d;best=o;}}
-      if(best&&bd<420){
-        if(S.sound!=='mute') speak(D[best.i][0],activeCourse().langCode);
-        const rd=document.getElementById('mapReadout'),c=POS_COLOR[best.pos];
-        if(rd) rd.innerHTML='<span style="color:rgb('+c[0]+','+c[1]+','+c[2]+')">●</span> <span style="color:#eafff4">'+D[best.i][2]+'</span> <span style="opacity:.45">· '+best.pos.toLowerCase()+' · #'+(best.i+1)+'</span>';
-      }
-    }
-    dragging=false;
+  function clampZoom(z){return Math.max(0.7,Math.min(8,z));}
+  function hideHint(){const h=document.getElementById('mapHint'); if(h) h.style.opacity='0';}
+  function handleTap(e){
+    const mx=px(e),my=py(e); let best=null,bd=1e9;
+    for(let i=0;i<N;i++){const o=node[i]; if(!o.seen||o._sx==null)continue; const d=(o._sx-mx)*(o._sx-mx)+(o._sy-my)*(o._sy-my); if(d<bd){bd=d;best=o;}}
+    if(best&&bd<420){ if(S.sound!=='mute') speak(D[best.i][0],activeCourse().langCode); tapFx={i:best.i,t0:performance.now()}; }
+  }
+  cv.addEventListener('pointerdown',e=>{
+    try{cv.setPointerCapture(e.pointerId);}catch(_){}
+    pts.set(e.pointerId,{x:px(e),y:py(e)}); hideHint();
+    if(pts.size===1){ dragging=true; moved=0; lastX=px(e); cv.style.cursor='grabbing'; }
+    else if(pts.size===2){ dragging=false; const a=[...pts.values()]; pinchD0=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1; zoom0=zoom; }
   });
+  cv.addEventListener('pointermove',e=>{
+    if(!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId,{x:px(e),y:py(e)});
+    if(pts.size>=2){ const a=[...pts.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y); zoom=clampZoom(zoom0*(d/(pinchD0||1))); }
+    else if(dragging){ const x=px(e),dx=x-lastX; lastX=x; moved+=Math.abs(dx); yaw+=dx*0.006; }
+  });
+  function endPtr(e){
+    const wasTap=(pts.size===1 && dragging && moved<6);
+    pts.delete(e.pointerId);
+    if(pts.size===0){ cv.style.cursor='grab'; if(wasTap) handleTap(e); dragging=false; }
+    else if(pts.size===1){ const a=[...pts.values()][0]; dragging=true; lastX=a.x; moved=99; }  // resume orbit after pinch (suppress tap)
+  }
+  cv.addEventListener('pointerup',endPtr);
+  cv.addEventListener('pointercancel',endPtr);
+  cv.addEventListener('wheel',e=>{ e.preventDefault(); hideHint(); zoom=clampZoom(zoom*(1-e.deltaY*0.0012)); },{passive:false});
   // POS legend
   const leg=document.createElement('div');
   leg.style.cssText='position:absolute;top:6px;left:8px;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';
@@ -2089,11 +2127,11 @@ function renderConstellation(){
     leg.appendChild(sp);
   });
   host.appendChild(leg);
-  // readout HUD
-  const rd=document.createElement('div'); rd.id='mapReadout';
-  rd.style.cssText='position:absolute;left:8px;bottom:6px;font-size:10px;letter-spacing:1px;color:#cfe;';
-  rd.innerHTML='<span style="opacity:.4">drag to orbit · tap a star to hear it</span>';
-  host.appendChild(rd);
+  // faint control hint (fades on first interaction); word detail now lives on the stars
+  const hint=document.createElement('div'); hint.id='mapHint';
+  hint.style.cssText='position:absolute;left:8px;bottom:6px;font-size:9px;letter-spacing:1px;color:#9fd;opacity:.4;transition:opacity .5s;pointer-events:none;';
+  hint.textContent='drag · pinch or scroll to zoom · tap to hear';
+  host.appendChild(hint);
   loop();
 }
 function renderHome(){
