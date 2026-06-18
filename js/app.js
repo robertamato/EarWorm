@@ -3749,6 +3749,22 @@ function showStudyFlash(i){
 }
 
 /* --- Study MC --- */
+// Force-advance the frontier: show the next un-introduced word (user-queued first,
+// then Zipf order) as a flashcard, growing the seen-distractor pool. Used when a
+// test modality can't assemble an even choice grid. Returns true if it showed one.
+function introduceForDistractor(){
+  if(S.userWordQueue&&S.userWordQueue.length){
+    for(var q=0;q<S.userWordQueue.length;q++){
+      var wi=S.userWordQueue[q];
+      if(D[wi]&&!(S.cards[wi]&&S.cards[wi].seen)){ showStudyFlash(wi); return true; }
+    }
+  }
+  for(var j=0;j<D.length;j++){
+    if(!(S.cards[j]&&S.cards[j].seen)){ showStudyFlash(j); return true; }
+  }
+  return false;
+}
+
 function showStudyMC(i, reverse, showPosHint){
   activeCardIdx=i; mcCur=i; mcLocked=false; mcReverse=reverse;
   rollBg();
@@ -3810,12 +3826,17 @@ function showStudyMC(i, reverse, showPosHint){
   const [nC2, gridCols2]=reverse?adaptiveChoiceCountReverse(i):adaptiveChoiceCount(i,'mc-fwd');
   studyConfidence=null;
   const correct=reverse?ch:def;
-  const choices=reverse
-    ? shuffle([ch,...pickCharDistractors(i,nC2-1)])
-    : shuffle([def,...pickMeaningDistractors(i,nC2-1,mStage2)]);
+  // Pull distractors, then FORCE an even total (odd # of distractors) so the grid is
+  // never odd. If we can't form even a 2-choice grid, advance the frontier to grow the
+  // seen-distractor pool (introduce next Zipf / user-queued word) per the even-grid rule.
+  let _dists=reverse?pickCharDistractors(i,nC2-1):pickMeaningDistractors(i,nC2-1,mStage2);
+  if(_dists.length%2===0) _dists=_dists.slice(0,_dists.length-1);
+  if(_dists.length<1){ if(introduceForDistractor()) return; showStudyFlash(i); return; }
+  const choices=shuffle([correct,..._dists]);
+  const _total=choices.length; // even by construction
 
   const box=$('studyMCChoices'); box.innerHTML='';
-  box.style.gridTemplateColumns=gridCols2;
+  box.style.gridTemplateColumns=_total<=4?'1fr 1fr':'1fr 1fr 1fr';
 
   choices.forEach(choice=>{
     const b=document.createElement('button');
@@ -3839,7 +3860,7 @@ function showStudyMC(i, reverse, showPosHint){
         b.appendChild(pyWrap);
       }
     } else {
-      const fsize=nC2<=2?'12px':nC2<=4?'11px':'9px';
+      const fsize=_total<=2?'12px':_total<=4?'11px':'9px';
       b.style.cssText='font-size:'+fsize+';border-color:'+fg+';color:'+fg+';padding:8px 4px;';
       b.textContent=choice.toUpperCase();
     }
