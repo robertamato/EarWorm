@@ -369,7 +369,7 @@ function buildSessionState(){
     studyFlashOnly,
     studyModalityFilter,
     studyPending: sess&&Array.isArray(sess.studyPending)?[...sess.studyPending]:[...studyPending],
-    sessionGrammarAnswered: sess&&sess.grammarAnswered?new Set(sess.grammarAnswered):new Set(sessionGrammarAnswered),
+    sessionGrammarAnswered: (sess&&sess.grammarAnswered&&typeof sess.grammarAnswered[Symbol.iterator]==='function')?new Set(sess.grammarAnswered):new Set(sessionGrammarAnswered),
     studyEncounters: sess&&sess.studyEncounters?new Map(Object.entries(sess.studyEncounters).map(([k,v])=>[Number(k),v])):new Map(studyEncounters),
     sessionRecentCards: sess&&Array.isArray(sess.sessionRecentCards)?[...sess.sessionRecentCards]:[...sessionRecentCards],
     sessionAnswerRing: sess&&Array.isArray(sess.sessionAnswerRing)?[...sess.sessionAnswerRing]:[...sessionAnswerRing],

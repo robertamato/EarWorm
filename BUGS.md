@@ -5,7 +5,80 @@ Status: **OPEN** | **MONITORING** (fixed but watch for recurrence) | **CLOSED** 
 
 ---
 
+## OPEN
+
+Items below surfaced by external code reviews (Grok REVIEW_ID 3d19c9f3, also
+93972d6f) and triaged against committed ground truth. Several other "CRITICAL"
+items from those reviews were **already fixed** and are recorded under MONITORING
+(distractor `.seen` leak, curator commit gate) or were **stale/incorrect** at
+review time (build hygiene / `app.js` drift — tree is clean and byte-exact). Treat
+external-review severities as candidates, not verdicts.
+
+### Scheduler: v2 path ignores wall-clock ripe; lastReviewAt not written under v2
+**Symptom:** Cards that decay between sessions (retrievability `R < ~0.85`) are never resurfaced under the active (v2) scheduler; many cards never become "ripe."
+**Root cause:** `Scheduler._dueVocab`/`_pickFromPools`/`next`/`modality` are count-only (`axisDue`/`totalSeen`). `isWallClockRipe` is read only by legacy `buildStudyQueue`, not the v2 path. `lastReviewAt` is written by `recordAxisResultNew` (still runs) but not by `Scheduler.recordAnswer`, and selection never reads it.
+**Status:** OPEN — this is the **Slice 2b** cutover. `coldRecompute` built in shadow mode (`data.js`), not yet driving selection. Deeper resolution (hot-log / cold-infer, dissolves the dual-engine double-write) in `ACQUISITION_MODEL.md` §7-bis/§8.
+
+### State export/import: misses generated sentences + user words; import destructive
+**Symptom:** Export → import roundtrip loses LLM-generated sentences and user-added words; importing can corrupt across courses.
+**Root cause:** `exportState` snapshots `S` (card signals incl. `lastReviewAt`) but not `_sentenceCache`, `drills.js` `_pending*`, or the separate `earworm-user-words-v1` store. `importState` is destructive, ignores `_export.course`, no confirm/preview, silent errors.
+**Status:** OPEN. See `ACQUISITION_MODEL.md` §9-bis (scheduling vs fitting retention tiers; export is the durable seam).
+
+### Observability: no proctor visibility for generation/curator/ripe
+**Symptom:** PROCTOR summary + VIOLATIONS see only legacy `tts:`/`answer`/`firstFlash`/`violation` events. Sentence generation, curator approve/reject/commit, ripe rate/R, eligibility health, and LLM quality are invisible.
+**Root cause:** No `EW.obs.logEvent` on those paths. (Slice 1/2a added `observation` + `cold:recompute`; generation/curator/ripe still unlogged.)
+**Status:** OPEN (partial).
+
+### Multi-language: LLM/curator/eligibility/sentence paths hardcode Mandarin
+**Symptom:** On a non-Mandarin course (e.g. Arabic), sentence generation produces wrong/zero output; `sentenceAllIntroduced` is a no-op (CJK-only regex); curator/elig/exception UIs assume CJK fonts.
+**Root cause:** `generateSentencesForWord` prompt hardcodes Mandarin/CJK/pinyin; `sentenceAllIntroduced` CJK regex; no course/script awareness.
+**Status:** OPEN — deliberately deferred until the Arabic course is built (`ACQUISITION_MODEL.md` §9: per-language-module params).
+
+### LLM output not validated post-parse
+**Symptom:** A generated sentence could be committed that doesn't contain the target word, is out of length bounds, or has characters beyond the `.seen` set.
+**Root cause:** `commitApprovedSentences` now enforces `sentenceAllIntroduced` (the `.seen`/covered gate), but there is no check that the target word is present or length-bounded.
+**Status:** OPEN (minor hardening / defense-in-depth on LLM output).
+
+### State signal: `.exp` used as "introduced" proxy in non-test surfaces
+**Symptom:** Frontier counts, `isMCEligible`, `clozeUnlocked` (target `exp>=1`), and `grammar.js` use `.exp>0` as the introduced/unlocked signal instead of `.seen`.
+**Root cause:** Legacy convention; `.exp` and `.seen` normally co-occur but diverge on migration artifacts.
+**Status:** OPEN (latent — **not** an unseen-in-test leak; foreground cards are flash-gated by `showStudyCard`). Distractor/tile surfaces already migrated to `.seen` (see MONITORING). A full sweep of remaining `.exp`-as-introduced uses is pending. Relates to the "exp>0 without seen:true" item below and the CLAUDE.md state-signals table.
+
+### Security: LLM calls go direct to api.anthropic.com from the browser
+**Symptom:** Generation/analysis use raw `fetch` to the Anthropic API with the key from `localStorage` + `anthropic-dangerous-direct-browser-access`. A Cloudflare worker proxy exists but is never called.
+**Status:** OPEN — **accepted for the dev phase** (user decision; key lives in `localStorage`, never committed to the repo). Revisit at productization: route through the worker, drop the direct-browser header.
+
+### Architecture: Scheduler defined in events.js, not srs.js
+**Symptom:** `const Scheduler` (`next`/`modality`/`recordAnswer`) lives in `events.js` (DOM/UI layer); `srs.js` holds challenge/UI code — contradicts the CLAUDE.md "Key files" table.
+**Status:** OPEN (nit — code organization, not correctness).
+
+---
+
 ## MONITORING
+
+### Scheduler: EXPLORE bounces to home (v2 buildSessionState throws on corrupted _session)
+**Symptom:** Clicking EXPLORE only rolls the home background and stays home; no session starts. Console: `Scheduler.next error TypeError: object is not iterable (...Symbol.iterator)` at `new Set` in `buildSessionState`.
+**Root cause:** `buildSessionState` did `new Set(sess.grammarAnswered)` where `State._s._session.grammarAnswered` was a plain object — a `Set` that round-trips through JSON (persisted `_session`) becomes `{}`, which is truthy but **not iterable**, so `new Set({})` throws. The throw was caught by the v2 `Scheduler.next` try/catch → falls to `goHome()` (rolls bg, stays home). Latent for a long time because the v2 path was dormant (`newSchedulerPolicy` defaulted false); **exposed when `newSchedulerPolicy` was flipped to always-true.**
+**Fix:** `buildSessionState` checks `typeof x[Symbol.iterator]==='function'` before `new Set(sess.grammarAnswered)`, falling back to the module-global Set. `a054fae`+
+**Watch for:** Deeper cause — `State._s._session` is persisted to localStorage despite being commented "(not persisted)"; its Sets/Maps corrupt to `{}` on reload. The coercion makes this harmless (falls back to clean module session state, which `startStudy` clears anyway), but `_session` should be excluded from persistence or nulled on load — fold into the Slice 2b state work. Other `new Set`/spreads in `buildSessionState` are already guarded (`Array.isArray` / `Object.entries`).
+
+---
+
+### Invariant: unseen words appearing as distractors (cloze/MC/word-order)
+**Symptom:** An unintroduced word (user-reported: 一, never flashed) appeared as a cloze distractor option.
+**Root cause:** Distractor pickers (`pickCharDistractors`, `pickDistractors`, standalone `pickMeaningDistractors`, and `Scheduler.pickMeaningDistractors`) gated candidates on `isUnlocked`/`.exp>0`, not `.seen`. `isUnlocked` also has a custom-deck branch that returns true with no flash at all. So a word with `seen:false` (incl. `exp>0` migration artifacts) could surface as a distractor — violating "never test before first flash."
+**Fix:** All distractor/tile pickers now require `S.cards[i] && S.cards[i].seen`; `wordOrderUnlocked` count too. Verified in-browser: with only 3 cards seen, pickers return only those 3. `a054fae`
+**Watch for:** Any new distractor / tile / sentence-component source must gate on `.seen`, never `.exp`/`isUnlocked`. Same root family as "exp>0 without seen:true" below. Non-test surfaces still use `.exp` (see OPEN: "State signal").
+
+---
+
+### Curator: advisory-only commit could cache un-introduced sentences
+**Symptom:** `commitApprovedSentences` could move LLM-generated sentences into `_sentenceCache` even when they failed `sentenceAllIntroduced` (the on-screen "✗ vocab" badge was advisory only).
+**Root cause:** Commit dropped only `_pendingRejected` and concatenated the rest without re-checking the gate.
+**Fix:** `commitApprovedSentences` now filters by `sentenceAllIntroduced(s[0])` — a hard gate at commit time (drills.js). `162bd04`
+**Watch for:** This is the enforcement point for LLM-sourced sentences. Post-parse validation (target word present / length bounds) is still missing — see OPEN: "LLM output not validated post-parse."
+
+---
 
 ### TTS: Stale deferred speak() overrides tone reveal
 **Symptom:** Tone drill card shows silently; tap-to-replay works fine.
