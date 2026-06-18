@@ -56,6 +56,14 @@ external-review severities as candidates, not verdicts.
 
 ## MONITORING
 
+### Scheduler: same card + modality drilled back-to-back (stale recency window)
+**Symptom:** EXPLORE repeatedly showed the same atom with the same modality/difficulty one after another (no rotation).
+**Root cause:** `buildSessionState` read `sessionRecentCards` from `State._s._session` (preferred when it is an array) — but that copy is an empty array that is **never kept in sync** with the live module `sessionRecentCards` (which `showStudyCard` pushes to on every card). So the recency window the v2 scheduler saw was always empty → `_pickFromPools` always picked the lowest-index card with no rotation → atom 0 forever. **Same root pattern as the EXPLORE-crash bug below** — `buildSessionState` trusting an unsynced `State._s._session` copy.
+**Fix:** `buildSessionState` now uses the live module `sessionRecentCards`. Verified: selection rotates `0,1,2,3,4` with zero consecutive repeats; frontier still advances (introduce every 6th). `b9fd0a5`+
+**Watch for:** Other `buildSessionState` fields (`studyPending`, `studyEncounters`, `sessionAnswerRing`) still prefer the `State._s._session` copy; if those aren't synced they'll silently use stale data too. The dual-state bridge (`S` ↔ `State._s._session`) is the underlying fragility — folds into the Slice 2b state cleanup (and the hot-log/cold-infer split in ACQUISITION_MODEL.md, which removes this bridge entirely).
+
+---
+
 ### Scheduler: EXPLORE bounces to home (v2 buildSessionState throws on corrupted _session)
 **Symptom:** Clicking EXPLORE only rolls the home background and stays home; no session starts. Console: `Scheduler.next error TypeError: object is not iterable (...Symbol.iterator)` at `new Set` in `buildSessionState`.
 **Root cause:** `buildSessionState` did `new Set(sess.grammarAnswered)` where `State._s._session.grammarAnswered` was a plain object — a `Set` that round-trips through JSON (persisted `_session`) becomes `{}`, which is truthy but **not iterable**, so `new Set({})` throws. The throw was caught by the v2 `Scheduler.next` try/catch → falls to `goHome()` (rolls bg, stays home). Latent for a long time because the v2 path was dormant (`newSchedulerPolicy` defaulted false); **exposed when `newSchedulerPolicy` was flipped to always-true.**
