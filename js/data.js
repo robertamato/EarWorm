@@ -1054,6 +1054,83 @@ function recordObservation(opts){
 }
 try{ window.recordObservation=recordObservation; window.dumpObsLog=function(){return (typeof S!=='undefined'&&S.obsLog)||[];}; }catch(e){}
 
+// ── COLD INFERENCE ENGINE — ACQUISITION_MODEL.md §7-bis ────────────────────
+// Pure function of (obsLog, now). Attributes channels/background/necessity (§4b),
+// aggregates measurement σ (§5), evaluates graduation (§7). Equal to a full replay
+// of the log (purity-as-invariant). SHADOW MODE: writes S.coldState only — it does
+// NOT yet drive the live scheduler. That cutover (and removing the hot-path engines)
+// is Slice 2b. Run at the strategic interval (session end, goHome).
+var COLD_FLUENT_LATENCY_MS=2500; // decontaminated (t - tae) below this = fluent parse
+var COLD_ADJ_DIST=1;             // chars between fg/bg to count as structurally linked
+var COLD_DISCRIM_GATE=3;         // direct discrimination evidence needed to graduate
+var COLD_INCID_GATE=2;           // incidental (weighted) evidence needed to graduate
+
+// Necessity proxy (§5): the background atom is syntactically near the probed slot.
+function _coldStructuralLink(comp, fgChar, bgChar){
+  if(!comp||!fgChar||!bgChar) return false;
+  var fi=comp.indexOf(fgChar), bi=comp.indexOf(bgChar);
+  if(fi<0||bi<0) return false;
+  return Math.abs(fi-bi)<=(fgChar.length+COLD_ADJ_DIST);
+}
+
+function coldRecompute(now){
+  now=now||Date.now();
+  var log=(typeof S!=='undefined'&&S.obsLog)||[];
+  var ev={}; // ev[idx][axis] = {recall,discrim,incid,correct,total,last}
+  function bucket(idx,axis){
+    if(!ev[idx]) ev[idx]={};
+    if(!ev[idx][axis]) ev[idx][axis]={recall:0,discrim:0,incid:0,correct:0,total:0,last:0};
+    return ev[idx][axis];
+  }
+  log.forEach(function(o){
+    var fax=o.fax||'meaning';
+    // Direct foreground evidence. Isolated probe → recall; composite (chose right
+    // among distractors) → discrimination (§6). Approximate until δ is logged.
+    var fb=bucket(o.fg,fax);
+    fb.total++; if(o.ok){ fb.correct++; if(o.comp) fb.discrim++; else fb.recall++; }
+    if(o.t>fb.last) fb.last=o.t;
+    // Incidental → background atoms, composite + correct only (positive-only, I3).
+    if(o.comp && o.ok){
+      var fgChar=(D[o.fg]&&D[o.fg][0])||'';
+      var latency=(typeof o.tae==='number'&&o.tae<=o.t)?(o.t-o.tae):null;
+      var fluent=(latency!==null&&latency<COLD_FLUENT_LATENCY_MS);
+      (o.dec||[]).forEach(function(bgIdx){
+        if(bgIdx===o.fg) return;
+        var bgChar=(D[bgIdx]&&D[bgIdx][0])||'';
+        // Necessity gate (§5, REQUIRED): fluent parse OR structural link.
+        if(!(fluent||_coldStructuralLink(o.comp,fgChar,bgChar))) return;
+        // Mastery-gap weight (§5): credit only when scaffold ≥ probe (it was background).
+        var mBg=(o.mu&&o.mu[bgIdx]&&o.mu[bgIdx][0])||0;
+        var mFg=(o.mu&&o.mu[o.fg]&&o.mu[o.fg][0])||0;
+        var w=Math.max(0,mBg-mFg);
+        if(w<=0) return;
+        var bb=bucket(bgIdx,'meaning'); // incidental → meaning fiber (§5 minimal)
+        bb.incid+=w; if(o.t>bb.last) bb.last=o.t;
+      });
+    }
+  });
+  // Graduation (§7): direct discrimination + incidental, NOT recall volume. Requiring
+  // discrim>=GATE means graduation always includes recent DIRECT evidence (honors the
+  // §7 cap against incidental-only graduation).
+  var cold={ computedAt:now, atoms:{} };
+  Object.keys(ev).forEach(function(idx){
+    cold.atoms[idx]={};
+    Object.keys(ev[idx]).forEach(function(axis){
+      var e=ev[idx][axis];
+      var graduated=(e.discrim>=COLD_DISCRIM_GATE && e.incid>=COLD_INCID_GATE);
+      cold.atoms[idx][axis]={
+        n:e.total, acc:e.total?Math.round(e.correct/e.total*100)/100:0,
+        recall:e.recall, discrim:e.discrim, incid:Math.round(e.incid*100)/100,
+        graduated:graduated, regime:graduated?'maintenance':'acquisition', lastAt:e.last
+      };
+    });
+  });
+  if(typeof S!=='undefined') S.coldState=cold;
+  if(window.EW&&EW.obs) EW.obs.logEvent('cold:recompute',{nRecords:log.length,nAtoms:Object.keys(cold.atoms).length});
+  return cold;
+}
+try{ window.coldRecompute=coldRecompute; window.dumpColdState=function(){return (typeof S!=='undefined'&&S.coldState)||null;}; }catch(e){}
+
 // Axis stage gate: use accuracy window instead of consecutive-correct
 // Advance stage when accuracy >= threshold over last N attempts
 const AXIS_ADVANCE_ACCURACY=0.80; // 80% accuracy over window

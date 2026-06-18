@@ -571,7 +571,7 @@ function pickDistractors(targetIdx, n){
 
   const scored = D.map((_,i) => {
     if(i === targetIdx) return null;
-    if(!isUnlocked(i)) return null;          // only unlocked words
+    if(!(S.cards[i]&&S.cards[i].seen)) return null;  // introduced (flashed) only — never-test-before-flash invariant
     const def = D[i][2];
     if(usedDefs.has(def)) return null;       // no synonym collision
     return { i, def, score: scoreCandidate(targetIdx, i) };
@@ -594,7 +594,7 @@ function pickDistractors(targetIdx, n){
   // Fallback: fill from any unlocked word
   if(out.length < n){
     for(let i = 0; i < D.length && out.length < n; i++){
-      if(!isUnlocked(i)) continue;
+      if(!(S.cards[i]&&S.cards[i].seen)) continue;
       const def = D[i][2];
       if(!usedDefs.has(def)){ out.push(def); usedDefs.add(def); }
     }
@@ -609,7 +609,7 @@ function pickCharDistractors(targetIdx, n){
 
   const scored = D.map((_,i) => {
     if(i === targetIdx) return null;
-    if(!isUnlocked(i)) return null;
+    if(!(S.cards[i]&&S.cards[i].seen)) return null;  // introduced (flashed) only — never-test-before-flash invariant
     const ch = D[i][0];
     if(usedChars.has(ch)) return null;
     return { i, ch, score: scoreCandidate(targetIdx, i) };
@@ -632,7 +632,7 @@ function pickCharDistractors(targetIdx, n){
   // Fallback
   if(out.length < n){
     for(let i = 0; i < D.length && out.length < n; i++){
-      if(!isUnlocked(i)) continue;
+      if(!(S.cards[i]&&S.cards[i].seen)) continue;
       const ch = D[i][0];
       if(!usedChars.has(ch)){ out.push(ch); usedChars.add(ch); }
     }

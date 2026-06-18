@@ -1054,6 +1054,83 @@ function recordObservation(opts){
 }
 try{ window.recordObservation=recordObservation; window.dumpObsLog=function(){return (typeof S!=='undefined'&&S.obsLog)||[];}; }catch(e){}
 
+// ── COLD INFERENCE ENGINE — ACQUISITION_MODEL.md §7-bis ────────────────────
+// Pure function of (obsLog, now). Attributes channels/background/necessity (§4b),
+// aggregates measurement σ (§5), evaluates graduation (§7). Equal to a full replay
+// of the log (purity-as-invariant). SHADOW MODE: writes S.coldState only — it does
+// NOT yet drive the live scheduler. That cutover (and removing the hot-path engines)
+// is Slice 2b. Run at the strategic interval (session end, goHome).
+var COLD_FLUENT_LATENCY_MS=2500; // decontaminated (t - tae) below this = fluent parse
+var COLD_ADJ_DIST=1;             // chars between fg/bg to count as structurally linked
+var COLD_DISCRIM_GATE=3;         // direct discrimination evidence needed to graduate
+var COLD_INCID_GATE=2;           // incidental (weighted) evidence needed to graduate
+
+// Necessity proxy (§5): the background atom is syntactically near the probed slot.
+function _coldStructuralLink(comp, fgChar, bgChar){
+  if(!comp||!fgChar||!bgChar) return false;
+  var fi=comp.indexOf(fgChar), bi=comp.indexOf(bgChar);
+  if(fi<0||bi<0) return false;
+  return Math.abs(fi-bi)<=(fgChar.length+COLD_ADJ_DIST);
+}
+
+function coldRecompute(now){
+  now=now||Date.now();
+  var log=(typeof S!=='undefined'&&S.obsLog)||[];
+  var ev={}; // ev[idx][axis] = {recall,discrim,incid,correct,total,last}
+  function bucket(idx,axis){
+    if(!ev[idx]) ev[idx]={};
+    if(!ev[idx][axis]) ev[idx][axis]={recall:0,discrim:0,incid:0,correct:0,total:0,last:0};
+    return ev[idx][axis];
+  }
+  log.forEach(function(o){
+    var fax=o.fax||'meaning';
+    // Direct foreground evidence. Isolated probe → recall; composite (chose right
+    // among distractors) → discrimination (§6). Approximate until δ is logged.
+    var fb=bucket(o.fg,fax);
+    fb.total++; if(o.ok){ fb.correct++; if(o.comp) fb.discrim++; else fb.recall++; }
+    if(o.t>fb.last) fb.last=o.t;
+    // Incidental → background atoms, composite + correct only (positive-only, I3).
+    if(o.comp && o.ok){
+      var fgChar=(D[o.fg]&&D[o.fg][0])||'';
+      var latency=(typeof o.tae==='number'&&o.tae<=o.t)?(o.t-o.tae):null;
+      var fluent=(latency!==null&&latency<COLD_FLUENT_LATENCY_MS);
+      (o.dec||[]).forEach(function(bgIdx){
+        if(bgIdx===o.fg) return;
+        var bgChar=(D[bgIdx]&&D[bgIdx][0])||'';
+        // Necessity gate (§5, REQUIRED): fluent parse OR structural link.
+        if(!(fluent||_coldStructuralLink(o.comp,fgChar,bgChar))) return;
+        // Mastery-gap weight (§5): credit only when scaffold ≥ probe (it was background).
+        var mBg=(o.mu&&o.mu[bgIdx]&&o.mu[bgIdx][0])||0;
+        var mFg=(o.mu&&o.mu[o.fg]&&o.mu[o.fg][0])||0;
+        var w=Math.max(0,mBg-mFg);
+        if(w<=0) return;
+        var bb=bucket(bgIdx,'meaning'); // incidental → meaning fiber (§5 minimal)
+        bb.incid+=w; if(o.t>bb.last) bb.last=o.t;
+      });
+    }
+  });
+  // Graduation (§7): direct discrimination + incidental, NOT recall volume. Requiring
+  // discrim>=GATE means graduation always includes recent DIRECT evidence (honors the
+  // §7 cap against incidental-only graduation).
+  var cold={ computedAt:now, atoms:{} };
+  Object.keys(ev).forEach(function(idx){
+    cold.atoms[idx]={};
+    Object.keys(ev[idx]).forEach(function(axis){
+      var e=ev[idx][axis];
+      var graduated=(e.discrim>=COLD_DISCRIM_GATE && e.incid>=COLD_INCID_GATE);
+      cold.atoms[idx][axis]={
+        n:e.total, acc:e.total?Math.round(e.correct/e.total*100)/100:0,
+        recall:e.recall, discrim:e.discrim, incid:Math.round(e.incid*100)/100,
+        graduated:graduated, regime:graduated?'maintenance':'acquisition', lastAt:e.last
+      };
+    });
+  });
+  if(typeof S!=='undefined') S.coldState=cold;
+  if(window.EW&&EW.obs) EW.obs.logEvent('cold:recompute',{nRecords:log.length,nAtoms:Object.keys(cold.atoms).length});
+  return cold;
+}
+try{ window.coldRecompute=coldRecompute; window.dumpColdState=function(){return (typeof S!=='undefined'&&S.coldState)||null;}; }catch(e){}
+
 // Axis stage gate: use accuracy window instead of consecutive-correct
 // Advance stage when accuracy >= threshold over last N attempts
 const AXIS_ADVANCE_ACCURACY=0.80; // 80% accuracy over window
@@ -2482,7 +2559,7 @@ function pickDistractors(targetIdx, n){
 
   const scored = D.map((_,i) => {
     if(i === targetIdx) return null;
-    if(!isUnlocked(i)) return null;          // only unlocked words
+    if(!(S.cards[i]&&S.cards[i].seen)) return null;  // introduced (flashed) only — never-test-before-flash invariant
     const def = D[i][2];
     if(usedDefs.has(def)) return null;       // no synonym collision
     return { i, def, score: scoreCandidate(targetIdx, i) };
@@ -2505,7 +2582,7 @@ function pickDistractors(targetIdx, n){
   // Fallback: fill from any unlocked word
   if(out.length < n){
     for(let i = 0; i < D.length && out.length < n; i++){
-      if(!isUnlocked(i)) continue;
+      if(!(S.cards[i]&&S.cards[i].seen)) continue;
       const def = D[i][2];
       if(!usedDefs.has(def)){ out.push(def); usedDefs.add(def); }
     }
@@ -2520,7 +2597,7 @@ function pickCharDistractors(targetIdx, n){
 
   const scored = D.map((_,i) => {
     if(i === targetIdx) return null;
-    if(!isUnlocked(i)) return null;
+    if(!(S.cards[i]&&S.cards[i].seen)) return null;  // introduced (flashed) only — never-test-before-flash invariant
     const ch = D[i][0];
     if(usedChars.has(ch)) return null;
     return { i, ch, score: scoreCandidate(targetIdx, i) };
@@ -2543,7 +2620,7 @@ function pickCharDistractors(targetIdx, n){
   // Fallback
   if(out.length < n){
     for(let i = 0; i < D.length && out.length < n; i++){
-      if(!isUnlocked(i)) continue;
+      if(!(S.cards[i]&&S.cards[i].seen)) continue;
       const ch = D[i][0];
       if(!usedChars.has(ch)){ out.push(ch); usedChars.add(ch); }
     }
@@ -4650,6 +4727,8 @@ function clearCardState(){
 
 function goHome(){
   if(window.WaveViz) try{ WaveViz.clear(); }catch(e){}
+  // Strategic-interval cold recompute (ACQUISITION_MODEL §7-bis, shadow mode).
+  try{ if(typeof coldRecompute==='function'){ coldRecompute(); save(); } }catch(e){}
   studyFlashOnly=false;
   studyModalityFilter=null;
   resetSessionFatigue();
@@ -4690,7 +4769,7 @@ function pickMeaningDistractors(targetIdx, n, stage){
   const [ch,,correctDef,,targetPos]=D[targetIdx];
 
   // Get introduced characters for semantic lookup
-  const introChs=D.filter((_,i)=>isUnlocked(i)).map(d=>d[0]);
+  const introChs=D.filter((_,i)=>S.cards[i]&&S.cards[i].seen).map(d=>d[0]);
 
   // Try semantic distractors first — always preferred over random
   const semantic=getSemanticDistractors(targetIdx, n, introChs);
@@ -4703,7 +4782,7 @@ function pickMeaningDistractors(targetIdx, n, stage){
 
     // Fallback pool — scored by stage
     const pool=D.map((_,i)=>i).filter(i=>{
-      if(i===targetIdx||!isUnlocked(i)) return false;
+      if(i===targetIdx||!(S.cards[i]&&S.cards[i].seen)) return false;
       if(D[i][2]===correctDef||semSet.has(D[i][2])) return false;
       return true;
     });
@@ -7517,7 +7596,7 @@ function wordOrderUnlocked(i){
   // Legacy v1 gate; under policy, Scheduler.modality handles word-order eligibility
   if(getAxisStage(i,'meaning')<2) return false;
   // Need at least 2 other introduced words for a meaningful arrangement
-  const introduced=D.filter(function(_,idx){return S.cards[idx]&&S.cards[idx].exp>0;});
+  const introduced=D.filter(function(_,idx){return S.cards[idx]&&S.cards[idx].seen;});
   return introduced.length>=4;
 }
 
@@ -8742,7 +8821,7 @@ const Scheduler = {
 
   pickMeaningDistractors(S, D, targetIdx, n, stage) {
     const [ch,,correctDef,,targetPos] = D[targetIdx];
-    const introChs = D.filter((_, i) => S.cards[i] && S.cards[i].exp > 0).map(d => d[0]);
+    const introChs = D.filter((_, i) => S.cards[i] && S.cards[i].seen).map(d => d[0]);
 
     // Semantic distractors first
     const semantic = this._semanticDistractors(D, targetIdx, n, introChs);
@@ -8753,7 +8832,7 @@ const Scheduler = {
     const semSet = new Set(semantic);
     semSet.add(correctDef);
     const pool = D.map((_, i) => i).filter(i => {
-      if (i === targetIdx || !(S.cards[i] && S.cards[i].exp > 0)) return false;
+      if (i === targetIdx || !(S.cards[i] && S.cards[i].seen)) return false;
       if (D[i][2] === correctDef || semSet.has(D[i][2])) return false;
       return true;
     });

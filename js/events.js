@@ -761,7 +761,7 @@ const Scheduler = {
 
   pickMeaningDistractors(S, D, targetIdx, n, stage) {
     const [ch,,correctDef,,targetPos] = D[targetIdx];
-    const introChs = D.filter((_, i) => S.cards[i] && S.cards[i].exp > 0).map(d => d[0]);
+    const introChs = D.filter((_, i) => S.cards[i] && S.cards[i].seen).map(d => d[0]);
 
     // Semantic distractors first
     const semantic = this._semanticDistractors(D, targetIdx, n, introChs);
@@ -772,7 +772,7 @@ const Scheduler = {
     const semSet = new Set(semantic);
     semSet.add(correctDef);
     const pool = D.map((_, i) => i).filter(i => {
-      if (i === targetIdx || !(S.cards[i] && S.cards[i].exp > 0)) return false;
+      if (i === targetIdx || !(S.cards[i] && S.cards[i].seen)) return false;
       if (D[i][2] === correctDef || semSet.has(D[i][2])) return false;
       return true;
     });

@@ -584,7 +584,7 @@ function wordOrderUnlocked(i){
   // Legacy v1 gate; under policy, Scheduler.modality handles word-order eligibility
   if(getAxisStage(i,'meaning')<2) return false;
   // Need at least 2 other introduced words for a meaningful arrangement
-  const introduced=D.filter(function(_,idx){return S.cards[idx]&&S.cards[idx].exp>0;});
+  const introduced=D.filter(function(_,idx){return S.cards[idx]&&S.cards[idx].seen;});
   return introduced.length>=4;
 }
 

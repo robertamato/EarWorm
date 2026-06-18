@@ -1793,6 +1793,8 @@ function clearCardState(){
 
 function goHome(){
   if(window.WaveViz) try{ WaveViz.clear(); }catch(e){}
+  // Strategic-interval cold recompute (ACQUISITION_MODEL §7-bis, shadow mode).
+  try{ if(typeof coldRecompute==='function'){ coldRecompute(); save(); } }catch(e){}
   studyFlashOnly=false;
   studyModalityFilter=null;
   resetSessionFatigue();
@@ -1833,7 +1835,7 @@ function pickMeaningDistractors(targetIdx, n, stage){
   const [ch,,correctDef,,targetPos]=D[targetIdx];
 
   // Get introduced characters for semantic lookup
-  const introChs=D.filter((_,i)=>isUnlocked(i)).map(d=>d[0]);
+  const introChs=D.filter((_,i)=>S.cards[i]&&S.cards[i].seen).map(d=>d[0]);
 
   // Try semantic distractors first — always preferred over random
   const semantic=getSemanticDistractors(targetIdx, n, introChs);
@@ -1846,7 +1848,7 @@ function pickMeaningDistractors(targetIdx, n, stage){
 
     // Fallback pool — scored by stage
     const pool=D.map((_,i)=>i).filter(i=>{
-      if(i===targetIdx||!isUnlocked(i)) return false;
+      if(i===targetIdx||!(S.cards[i]&&S.cards[i].seen)) return false;
       if(D[i][2]===correctDef||semSet.has(D[i][2])) return false;
       return true;
     });
