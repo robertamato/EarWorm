@@ -1,5 +1,6 @@
 "# Earworm
 
+Linguistic Decompiler.
 A focused, retro-styled Mandarin Chinese vocabulary + grammar trainer.
 
 - 100 core high-frequency words (spoken/subtitle corpus order)
