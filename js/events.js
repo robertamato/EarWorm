@@ -669,49 +669,15 @@ const Scheduler = {
   // ─── SRS: record answer ──────────────────────────────────────────────────
 
   recordAnswer(S, i, axis, isCorrect, responseMs) {
+    // RETIRED (Slice 2b): recordAxisResultNew (data.js) is the SINGLE authoritative
+    // writer of axis state — axisDue / axisStage / axisReps / axisHistory plus the
+    // durable lastReviewAt / reviewLog substrate — and it runs in the drill handler
+    // before this dispatch fires. This function used to ALSO write those fields, which
+    // double-pushed axisHistory (corrupting the accuracy window that drives stage and
+    // graduation) and double-advanced stages. It is now a no-op for axis state: it only
+    // ensures the card exists and returns it so the ANSWER_VOCAB dispatch keeps xp/mult.
     if (!S.cards[i]) S.cards[i] = this._freshCard();
-    const ci = S.cards[i];
-    const seen = S.totalSeen || 0;
-
-    // History
-    if (!ci.axisHistory) ci.axisHistory = {};
-    if (!ci.axisHistory[axis]) ci.axisHistory[axis] = [];
-    ci.axisHistory[axis].push(isCorrect ? 1 : 0);
-    if (ci.axisHistory[axis].length > 30) ci.axisHistory[axis].shift();
-
-    // Reps
-    if (!ci.axisReps) ci.axisReps = {};
-    if (!ci.axisDue) ci.axisDue = {};
-    if (!ci.axisStage) ci.axisStage = { meaning: 0, pos: 0 };
-
-    const stage = ci.axisStage[axis] || 0;
-    const stability = AXIS_STABILITY[axis] || [3, 10, 30, 100];
-    const maxStage = AXIS_MAX[axis] || 5;
-
-    if (!isCorrect) {
-      ci.axisReps[axis] = 0;
-      const wrongCards = stage <= 1 ? 3 : stage === 2 ? 8 : 20;
-      ci.axisDue[axis] = seen + wrongCards;
-    } else {
-      ci.axisReps[axis] = (ci.axisReps[axis] || 0) + 1;
-      const speedFactor = responseMs < 2000 ? 1.2 : responseMs < 5000 ? 1.0 : 0.8;
-      const baseCards = stability[Math.min((ci.axisReps[axis] || 1) - 1, stability.length - 1)] || 3;
-      const intervalCards = Math.max(1, Math.round(baseCards * speedFactor));
-      ci.axisDue[axis] = seen + intervalCards;
-
-      // Stage advancement
-      const windowSize = (AXIS_ADVANCE_WINDOW[axis] && AXIS_ADVANCE_WINDOW[axis][stage]) || 5;
-      const hist = ci.axisHistory[axis] || [];
-      if (hist.length >= windowSize && stage < maxStage) {
-        const acc = hist.slice(-windowSize).reduce((s,v) => s+v, 0) / windowSize;
-        if (acc >= (stage === 0 ? 1.0 : 0.75)) {
-          ci.axisStage[axis] = stage + 1;
-          ci.axisReps[axis] = 0;
-        }
-      }
-    }
-
-    return ci;
+    return S.cards[i];
   },
 
   // ─── Grammar: record result ──────────────────────────────────────────────

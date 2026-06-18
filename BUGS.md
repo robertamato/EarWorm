@@ -56,6 +56,14 @@ external-review severities as candidates, not verdicts.
 
 ## MONITORING
 
+### Scheduler: dual recording engine double-wrote axis state (Slice 2b)
+**Symptom:** Every vocab answer pushed **two** entries to `axisHistory` and double-incremented `axisReps` / could double-advance `axisStage` — corrupting the accuracy window that drives stage advancement and graduation (and therefore the new introduction pacing).
+**Root cause:** Both `recordAxisResultNew` (v1, called directly in every drill handler) **and** `Scheduler.recordAnswer` (v2, via the `ANSWER_VOCAB` dispatch) wrote `axisDue`/`axisStage`/`axisReps`/`axisHistory` on the same card object every answer. Latent while the v2 path was dormant; live once `newSchedulerPolicy` went always-on. Confirmed empirically: one answer → `axisHistory:[1,1]`, `axisReps:2`.
+**Fix (Slice 2b increment 2):** `Scheduler.recordAnswer` is now a **no-op for axis state** — it only ensures the card exists and returns it so the dispatch keeps its xp/mult. `recordAxisResultNew` is the single authoritative axis writer (it also owns the durable `lastReviewAt`/`reviewLog`). Verified: one answer → `axisHistory:[1]`, `axisReps:1`, `lastReviewAt`/`reviewLog` present, xp + card-state intact. `7c4ba9a`+
+**Watch for:** `Scheduler.recordGrammarAnswer` has the same dual-write with `recordAxisResultNew(i,'pos',…)`, but grammar is disabled from the main flow. xp/mult still flows through the dispatch (drill-side xp is clobbered by `Object.assign`, as before — not doubled). **Next 2b step:** make `coldState` drive selection + retire `recordAxisResultNew` in favor of pure cold inference — gated on validating the cold engine against real sessions.
+
+---
+
 ### Scheduler: same card + modality drilled back-to-back (stale recency window)
 **Symptom:** EXPLORE repeatedly showed the same atom with the same modality/difficulty one after another (no rotation).
 **Root cause:** `buildSessionState` read `sessionRecentCards` from `State._s._session` (preferred when it is an array) — but that copy is an empty array that is **never kept in sync** with the live module `sessionRecentCards` (which `showStudyCard` pushes to on every card). So the recency window the v2 scheduler saw was always empty → `_pickFromPools` always picked the lowest-index card with no rotation → atom 0 forever. **Same root pattern as the EXPLORE-crash bug below** — `buildSessionState` trusting an unsynced `State._s._session` copy.
