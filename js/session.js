@@ -549,7 +549,8 @@ function nextStudyCard(){
           // Hard invariant: never show same card twice in a row.
           const _v2LastShown=sessionRecentCards[sessionRecentCards.length-1];
           if(typeof reIdx==='number'&&!isGrammarKey(reIdx)&&reIdx===_v2LastShown){
-            // Defer this pending card — fall through to queue/intro logic below
+            studyCardCount++; // break modulo so pending re-queue skips next call
+            nextStudyCard(); return;
           } else {
             if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
               const reCat=grammarCatFromKey(reIdx);
@@ -583,107 +584,14 @@ function nextStudyCard(){
           showStudyCard(decision.idx); return;
         }
       }
+      goHome(); return;
     }catch(e){
-      console.error('Scheduler.next v2 delegation failed, falling back to legacy loop',e);
+      console.error('Scheduler.next error',e);
       if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'study-loop-v2'});
+      goHome(); return;
     }
   }
-
-  // === LEGACY v1 STUDY LOOP (only executed when policy is off or on v2 delegation fallback) ===
-  const forceIntro=studyCardCount===1;
-  if(!studyModalityFilter&&(forceIntro||studyCardCount%getIntroEvery()===0) && shouldIntroduceNewWord()){
-    const newIdx=introduceNextWord();
-    if(newIdx>=0){
-      // Rebuild queue to include the new word in rotation
-      studyQueue=buildStudyQueue();
-      studyIdx=0;
-      showStudyCard(newIdx); // shows as flashcard since exp===0, sets exp=1
-      return;
-    }
-    if(newIdx===-2) return; // compound shown, handled
-  }
-
-  // Inject pending re-queue cards every ~15 cards (was 4 — too soon)
-  if(studyPending.length && studyCardCount%15===14){
-    const pending=studyPending.shift();
-    const reIdx=typeof pending==='object'?pending.idx:pending;
-    const reMod=typeof pending==='object'?pending.mod:null;
-    // Hard invariant: never show same card twice in a row.
-    // If the pending card is the one just shown, defer it and fall through to queue.
-    const _lastShown=sessionRecentCards[sessionRecentCards.length-1];
-    if(typeof reIdx==='number'&&!isGrammarKey(reIdx)&&reIdx===_lastShown){
-      studyPending.push(pending);
-      // fall through to queue selection below
-    } else {
-      // Grammar re-queue — negative key means grammar drill
-      if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
-        const reCat=grammarCatFromKey(reIdx);
-        if(reCat) showGrammarDrill(reCat);
-        return;
-      }
-      if(reMod&&reMod!=='flash'){
-        lastModality.set(reIdx,reMod);
-        if(reMod==='convergence'){
-          showConvergenceQuestion(reIdx);
-        } else if(reMod==='cloze'){
-          showStudyCloze(reIdx);
-        } else if(reMod==='word-order'){
-          showWordOrderDrill(reIdx);
-        } else if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
-          const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
-          showStudyPOSStaged(reIdx,ps);
-        } else {
-          showStudyMC(reIdx, reMod==='mc-rev');
-        }
-        return;
-      }
-      showStudyCard(reIdx);
-      return;
-    }
-  }
-  if(studyIdx>=studyQueue.length){
-    studyQueue=buildStudyQueue();
-    studyIdx=0;
-    // If rebuilt queue is empty, session is done
-    if(!studyQueue.length){ goHome(); return; }
-  }
-  let i=studyQueue[studyIdx++];
-  if(i===undefined||i===null){ goHome(); return; }
-  // Recency filter: avoid repeating a vocab card within RECENCY_WINDOW cards.
-  // Scan ahead for a non-recent alternative and swap it into the current slot.
-  if(!isGrammarKey(i) && sessionRecentCards.includes(i)){
-    const limit=Math.min(studyIdx+RECENCY_WINDOW, studyQueue.length);
-    let _swapped=false;
-    for(let s=studyIdx; s<limit; s++){
-      const ni=studyQueue[s];
-      if(isGrammarKey(ni) || !sessionRecentCards.includes(ni)){
-        studyQueue[s]=i; // defer i to later
-        i=ni;
-        _swapped=true;
-        break;
-      }
-    }
-    // Hard invariant: if swap failed and i is still the card just shown, advance past it.
-    if(!_swapped && i===sessionRecentCards[sessionRecentCards.length-1] && studyIdx<studyQueue.length){
-      studyQueue[studyIdx-1]=i; // put it back at a later position
-      i=studyQueue[studyIdx++];
-      if(i===undefined||i===null){ goHome(); return; }
-    }
-  }
-  // Route grammar pool cards to grammar drill
-  if(isGrammarKey(i)){
-    if(studyFlashOnly||(studyModalityFilter&&studyModalityFilter!=='grammar')){
-      nextStudyCard(); return;
-    }
-    const cat=grammarCatFromKey(i);
-    const axis=grammarAxisFromKey(i);
-    if(sessionGrammarAnswered.has(cat+':'+axis)){
-      nextStudyCard(); return;
-    }
-    showGrammarDrill(cat, axis);
-    return;
-  }
-  showStudyCard(i);
+  goHome();
 }
 
 // Single place for session-level modality overrides (studyFlashOnly and studyModalityFilter).
@@ -767,8 +675,6 @@ function showStudyCard(i){
         console.error('Scheduler.modality fallback',e);
         try{ mod=wordModalityFromAxes(i); }catch(_){ mod='mc-fwd'; }
       }
-    } else {
-      try{ mod=wordModalityFromAxes(i); }catch(e){ document.title='MOD:'+e.message+' stk:'+e.stack.slice(0,80); console.error('wordModality error',e); mod='mc-fwd'; }
     }
   }
   // HARD INVARIANT: a word is NEVER presented in a test modality before it has
@@ -1035,6 +941,7 @@ function showStudyMC(i, reverse, showPosHint){
   // Wager bar — always present on MC
   studyDontKnowAction=()=>{
     if(mcLocked) return; mcLocked=true;
+    recordObservation({mod:reverse?'mc-rev':'mc-fwd',comp:null,fg:i,fax:'meaning',ok:false,opt:null});
     recordAxisResultNew(i,'meaning',false,Date.now()-cardShownAtMC);
     addMastery(i,-0.3);
     studyPending.push({idx:i,mod:reverse?'mc-rev':'mc-fwd'});
@@ -1093,6 +1000,7 @@ function pickStudyMC(btn,chosen,correct,i){
   const sConfident=betRatio2>=1.5;  // wagered above default = confident
   const sUnsure=betRatio2<0.7;      // wagered below default = uncertain
   recordWagerDecision(i, isCorrect, currentMultIdx, defaultMultIdx, responseMs);
+  recordObservation({mod:mcReverse?'mc-rev':'mc-fwd',comp:null,fg:i,fax:'meaning',ok:isCorrect,opt:chosen});
   recordAxisResultNew(i,'meaning',isCorrect,responseMs);
   recordAxisResult(i,'meaning',isCorrect); // legacy stage gate
   const lastMod=lastModality.get(i)||'mc-fwd';

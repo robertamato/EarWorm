@@ -141,6 +141,13 @@ let D=[
 ];
 // Capture the Mandarin array so switchCourse() can repoint D back to it.
 const D_MANDARIN=D;
+// Load persisted user-added words into the active deck at startup.
+(function(){
+  try{
+    var uw=JSON.parse(localStorage.getItem('earworm-user-words-v1'))||[];
+    uw.forEach(function(e){ D.push(e); });
+  }catch(e){}
+})();
 
 /* ============ JAPANESE — 50 core words ============ */
 // Subtitle/spoken-frequency ordering (OpenSubtitles-JP / SUBTLEX-JP basis).
@@ -521,6 +528,31 @@ function isUnlocked(i){
   return (S.cards[i]&&S.cards[i].exp>0)||false;
 }
 
+// Append a user-proposed word to D[], persist it, and queue it for immediate introduction.
+// entry format: [char, [[syllable,tone],...], meaning, [[radical,strokes],...], pos]
+function addUserWord(entry){
+  return addUserWords([entry]);
+}
+
+// Batch version — one localStorage read/write for N entries.
+function addUserWords(entries){
+  if(!entries||!entries.length) return -1;
+  var firstIdx=D.length;
+  if(!S.userWordQueue) S.userWordQueue=[];
+  entries.forEach(function(entry){
+    var idx=D.length;
+    D.push(entry);
+    S.userWordQueue.push(idx);
+  });
+  try{
+    var uw=JSON.parse(localStorage.getItem('earworm-user-words-v1'))||[];
+    entries.forEach(function(e){ uw.push(e); });
+    localStorage.setItem('earworm-user-words-v1',JSON.stringify(uw));
+  }catch(e){}
+  save();
+  return firstIdx;
+}
+
 // Returns true only if every D[] entry (single or multi-char) that appears
 // in the sentence has been properly introduced (seen as a flashcard).
 // Uses .seen (set in showStudyFlash) rather than .exp, which can be >0 from
@@ -570,7 +602,7 @@ function charSyl(char){
 // or the POLICY button in the debug panel. Gates every pivot branch so v1 and
 // v2 coexist and revert instantly.
 function newSchedulerPolicy(){
-  try{ return localStorage.getItem('earworm_policy')==='v2' || /[?&]earworm_policy=v2/.test(location.search); }catch(e){ return false; }
+  return true;
 }
 
 // Would introducing word w make sentence `zh` fully covered? (Every other
@@ -604,6 +636,12 @@ function demandPullNextWord(nextSpine){
 }
 
 function nextWordToIntroduce(){
+  // User-added words take immediate priority over the core frontier.
+  if(S.userWordQueue&&S.userWordQueue.length){
+    var pending=S.userWordQueue.filter(function(wi){ return D[wi]&&(!S.cards[wi]||!S.cards[wi].exp); });
+    if(pending.length!==S.userWordQueue.length){ S.userWordQueue=pending; save(); }
+    if(pending.length) return {type:'word',idx:pending[0]};
+  }
   // Next individual word
   let nextSpine=-1;
   for(let i=0;i<D.length;i++){
@@ -952,6 +990,69 @@ function isWallClockRipe(i){
   });
 }
 try{ window.retrievability=retrievability; }catch(e){}
+
+// ── OBSERVATION LOG — ACQUISITION_MODEL.md §4a ─────────────────────────────
+// Append-only ring of OBSERVED interaction records: the non-retrofittable
+// substrate the cold inference engine (Slice 2) will read. This is hot-path,
+// pure-observable capture only — NO inference, NO channel/necessity attribution
+// (I5). Channel typing, background-axis, and necessity are derived cold (§4b).
+// Scheduling tier (§9-bis): a bounded local ring. The fitting tier (full history
+// for MLE/IRT) is gated on the deferred durable backend.
+var OBS_LOG_MAX=500;     // scheduling-tier ring cap
+var _ewAudioEndAt=null;  // ms the last TTS clip finished — for latency decontam (§5)
+
+// Decompose a sentence into the D[] atom indices it contains (compounds atomic).
+// Mirrors the constituent scan in sentenceAllIntroduced.
+function decomposeSentence(zh){
+  var out=[];
+  if(!zh) return out;
+  for(var j=0;j<D.length;j++){
+    if(zh.indexOf(D[j][0])>=0) out.push(j);
+  }
+  return out;
+}
+
+// Snapshot per-atom mastery-at-time (§4a mu). MUST run before the answer mutates
+// state. Compact: { atomIdx: [meaningStage, posStage, toneStage] }. Retrievability-
+// at-time is intentionally omitted — the specified inference (necessity, graduation)
+// reads stages + decontaminated latency, not historical R.
+function snapshotMu(indices){
+  var mu={};
+  indices.forEach(function(j){
+    mu[j]=[getAxisStage(j,'meaning')||0, getAxisStage(j,'pos')||0, getAxisStage(j,'tone')||0];
+  });
+  return mu;
+}
+
+// Record one observed interaction (§4a). Pure observable capture.
+// opts: { mod, comp, fg, fax, ok, opt }. Call BEFORE recordAxisResultNew so mu is
+// the pre-answer snapshot. Persistence rides on the caller's existing save().
+function recordObservation(opts){
+  try{
+    var fg=(typeof opts.fg==='number')?opts.fg:-1;
+    var comp=opts.comp||null;
+    var dec=comp?decomposeSentence(comp):(fg>=0?[fg]:[]);
+    if(comp && fg>=0 && dec.indexOf(fg)<0) dec.push(fg); // foreground always present
+    var o={
+      t:Date.now(),
+      mod:opts.mod||'unknown',
+      course:(typeof ACTIVE_COURSE_KEY!=='undefined'?ACTIVE_COURSE_KEY:null),
+      comp:comp,
+      dec:dec,
+      fg:fg,
+      fax:opts.fax||'meaning',
+      ok:opts.ok?1:0,
+      tae:(typeof _ewAudioEndAt==='number'?_ewAudioEndAt:null),
+      opt:(opts.opt!==undefined?opts.opt:null),
+      mu:snapshotMu(dec)
+    };
+    if(!S.obsLog) S.obsLog=[];
+    S.obsLog.push(o);
+    if(S.obsLog.length>OBS_LOG_MAX) S.obsLog.shift();
+    if(window.EW&&EW.obs) EW.obs.logEvent('observation',{mod:o.mod,fg:o.fg,fax:o.fax,ok:o.ok,nDec:dec.length,hasComp:!!comp});
+  }catch(e){ try{ if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'recordObservation'}); }catch(_){} }
+}
+try{ window.recordObservation=recordObservation; window.dumpObsLog=function(){return (typeof S!=='undefined'&&S.obsLog)||[];}; }catch(e){}
 
 // Axis stage gate: use accuracy window instead of consecutive-correct
 // Advance stage when accuracy >= threshold over last N attempts
@@ -1489,6 +1590,7 @@ function speak(text,lang,onDone,opts){
     const finish=(cancelled)=>{
       if(fired||gen!==_ttsGen) return;
       fired=true;
+      if(!cancelled) _ewAudioEndAt=Date.now(); // observation-log latency decontam (§5)
       if(!cancelled&&onDone) onDone();
       if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{card:cardCtx,gen:gen});
       if(!cancelled&&window.WaveViz) setTimeout(WaveViz.clear,400);

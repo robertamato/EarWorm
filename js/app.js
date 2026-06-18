@@ -141,6 +141,13 @@ let D=[
 ];
 // Capture the Mandarin array so switchCourse() can repoint D back to it.
 const D_MANDARIN=D;
+// Load persisted user-added words into the active deck at startup.
+(function(){
+  try{
+    var uw=JSON.parse(localStorage.getItem('earworm-user-words-v1'))||[];
+    uw.forEach(function(e){ D.push(e); });
+  }catch(e){}
+})();
 
 /* ============ JAPANESE — 50 core words ============ */
 // Subtitle/spoken-frequency ordering (OpenSubtitles-JP / SUBTLEX-JP basis).
@@ -521,6 +528,31 @@ function isUnlocked(i){
   return (S.cards[i]&&S.cards[i].exp>0)||false;
 }
 
+// Append a user-proposed word to D[], persist it, and queue it for immediate introduction.
+// entry format: [char, [[syllable,tone],...], meaning, [[radical,strokes],...], pos]
+function addUserWord(entry){
+  return addUserWords([entry]);
+}
+
+// Batch version — one localStorage read/write for N entries.
+function addUserWords(entries){
+  if(!entries||!entries.length) return -1;
+  var firstIdx=D.length;
+  if(!S.userWordQueue) S.userWordQueue=[];
+  entries.forEach(function(entry){
+    var idx=D.length;
+    D.push(entry);
+    S.userWordQueue.push(idx);
+  });
+  try{
+    var uw=JSON.parse(localStorage.getItem('earworm-user-words-v1'))||[];
+    entries.forEach(function(e){ uw.push(e); });
+    localStorage.setItem('earworm-user-words-v1',JSON.stringify(uw));
+  }catch(e){}
+  save();
+  return firstIdx;
+}
+
 // Returns true only if every D[] entry (single or multi-char) that appears
 // in the sentence has been properly introduced (seen as a flashcard).
 // Uses .seen (set in showStudyFlash) rather than .exp, which can be >0 from
@@ -570,7 +602,7 @@ function charSyl(char){
 // or the POLICY button in the debug panel. Gates every pivot branch so v1 and
 // v2 coexist and revert instantly.
 function newSchedulerPolicy(){
-  try{ return localStorage.getItem('earworm_policy')==='v2' || /[?&]earworm_policy=v2/.test(location.search); }catch(e){ return false; }
+  return true;
 }
 
 // Would introducing word w make sentence `zh` fully covered? (Every other
@@ -604,6 +636,12 @@ function demandPullNextWord(nextSpine){
 }
 
 function nextWordToIntroduce(){
+  // User-added words take immediate priority over the core frontier.
+  if(S.userWordQueue&&S.userWordQueue.length){
+    var pending=S.userWordQueue.filter(function(wi){ return D[wi]&&(!S.cards[wi]||!S.cards[wi].exp); });
+    if(pending.length!==S.userWordQueue.length){ S.userWordQueue=pending; save(); }
+    if(pending.length) return {type:'word',idx:pending[0]};
+  }
   // Next individual word
   let nextSpine=-1;
   for(let i=0;i<D.length;i++){
@@ -952,6 +990,69 @@ function isWallClockRipe(i){
   });
 }
 try{ window.retrievability=retrievability; }catch(e){}
+
+// ── OBSERVATION LOG — ACQUISITION_MODEL.md §4a ─────────────────────────────
+// Append-only ring of OBSERVED interaction records: the non-retrofittable
+// substrate the cold inference engine (Slice 2) will read. This is hot-path,
+// pure-observable capture only — NO inference, NO channel/necessity attribution
+// (I5). Channel typing, background-axis, and necessity are derived cold (§4b).
+// Scheduling tier (§9-bis): a bounded local ring. The fitting tier (full history
+// for MLE/IRT) is gated on the deferred durable backend.
+var OBS_LOG_MAX=500;     // scheduling-tier ring cap
+var _ewAudioEndAt=null;  // ms the last TTS clip finished — for latency decontam (§5)
+
+// Decompose a sentence into the D[] atom indices it contains (compounds atomic).
+// Mirrors the constituent scan in sentenceAllIntroduced.
+function decomposeSentence(zh){
+  var out=[];
+  if(!zh) return out;
+  for(var j=0;j<D.length;j++){
+    if(zh.indexOf(D[j][0])>=0) out.push(j);
+  }
+  return out;
+}
+
+// Snapshot per-atom mastery-at-time (§4a mu). MUST run before the answer mutates
+// state. Compact: { atomIdx: [meaningStage, posStage, toneStage] }. Retrievability-
+// at-time is intentionally omitted — the specified inference (necessity, graduation)
+// reads stages + decontaminated latency, not historical R.
+function snapshotMu(indices){
+  var mu={};
+  indices.forEach(function(j){
+    mu[j]=[getAxisStage(j,'meaning')||0, getAxisStage(j,'pos')||0, getAxisStage(j,'tone')||0];
+  });
+  return mu;
+}
+
+// Record one observed interaction (§4a). Pure observable capture.
+// opts: { mod, comp, fg, fax, ok, opt }. Call BEFORE recordAxisResultNew so mu is
+// the pre-answer snapshot. Persistence rides on the caller's existing save().
+function recordObservation(opts){
+  try{
+    var fg=(typeof opts.fg==='number')?opts.fg:-1;
+    var comp=opts.comp||null;
+    var dec=comp?decomposeSentence(comp):(fg>=0?[fg]:[]);
+    if(comp && fg>=0 && dec.indexOf(fg)<0) dec.push(fg); // foreground always present
+    var o={
+      t:Date.now(),
+      mod:opts.mod||'unknown',
+      course:(typeof ACTIVE_COURSE_KEY!=='undefined'?ACTIVE_COURSE_KEY:null),
+      comp:comp,
+      dec:dec,
+      fg:fg,
+      fax:opts.fax||'meaning',
+      ok:opts.ok?1:0,
+      tae:(typeof _ewAudioEndAt==='number'?_ewAudioEndAt:null),
+      opt:(opts.opt!==undefined?opts.opt:null),
+      mu:snapshotMu(dec)
+    };
+    if(!S.obsLog) S.obsLog=[];
+    S.obsLog.push(o);
+    if(S.obsLog.length>OBS_LOG_MAX) S.obsLog.shift();
+    if(window.EW&&EW.obs) EW.obs.logEvent('observation',{mod:o.mod,fg:o.fg,fax:o.fax,ok:o.ok,nDec:dec.length,hasComp:!!comp});
+  }catch(e){ try{ if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'recordObservation'}); }catch(_){} }
+}
+try{ window.recordObservation=recordObservation; window.dumpObsLog=function(){return (typeof S!=='undefined'&&S.obsLog)||[];}; }catch(e){}
 
 // Axis stage gate: use accuracy window instead of consecutive-correct
 // Advance stage when accuracy >= threshold over last N attempts
@@ -1489,6 +1590,7 @@ function speak(text,lang,onDone,opts){
     const finish=(cancelled)=>{
       if(fired||gen!==_ttsGen) return;
       fired=true;
+      if(!cancelled) _ewAudioEndAt=Date.now(); // observation-log latency decontam (§5)
       if(!cancelled&&onDone) onDone();
       if(window.EW&&EW.obs) EW.obs.logEvent('tts:end',{card:cardCtx,gen:gen});
       if(!cancelled&&window.WaveViz) setTimeout(WaveViz.clear,400);
@@ -3304,7 +3406,8 @@ function nextStudyCard(){
           // Hard invariant: never show same card twice in a row.
           const _v2LastShown=sessionRecentCards[sessionRecentCards.length-1];
           if(typeof reIdx==='number'&&!isGrammarKey(reIdx)&&reIdx===_v2LastShown){
-            // Defer this pending card — fall through to queue/intro logic below
+            studyCardCount++; // break modulo so pending re-queue skips next call
+            nextStudyCard(); return;
           } else {
             if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
               const reCat=grammarCatFromKey(reIdx);
@@ -3338,107 +3441,14 @@ function nextStudyCard(){
           showStudyCard(decision.idx); return;
         }
       }
+      goHome(); return;
     }catch(e){
-      console.error('Scheduler.next v2 delegation failed, falling back to legacy loop',e);
+      console.error('Scheduler.next error',e);
       if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'study-loop-v2'});
+      goHome(); return;
     }
   }
-
-  // === LEGACY v1 STUDY LOOP (only executed when policy is off or on v2 delegation fallback) ===
-  const forceIntro=studyCardCount===1;
-  if(!studyModalityFilter&&(forceIntro||studyCardCount%getIntroEvery()===0) && shouldIntroduceNewWord()){
-    const newIdx=introduceNextWord();
-    if(newIdx>=0){
-      // Rebuild queue to include the new word in rotation
-      studyQueue=buildStudyQueue();
-      studyIdx=0;
-      showStudyCard(newIdx); // shows as flashcard since exp===0, sets exp=1
-      return;
-    }
-    if(newIdx===-2) return; // compound shown, handled
-  }
-
-  // Inject pending re-queue cards every ~15 cards (was 4 — too soon)
-  if(studyPending.length && studyCardCount%15===14){
-    const pending=studyPending.shift();
-    const reIdx=typeof pending==='object'?pending.idx:pending;
-    const reMod=typeof pending==='object'?pending.mod:null;
-    // Hard invariant: never show same card twice in a row.
-    // If the pending card is the one just shown, defer it and fall through to queue.
-    const _lastShown=sessionRecentCards[sessionRecentCards.length-1];
-    if(typeof reIdx==='number'&&!isGrammarKey(reIdx)&&reIdx===_lastShown){
-      studyPending.push(pending);
-      // fall through to queue selection below
-    } else {
-      // Grammar re-queue — negative key means grammar drill
-      if(typeof reIdx==='number'&&isGrammarKey(reIdx)){
-        const reCat=grammarCatFromKey(reIdx);
-        if(reCat) showGrammarDrill(reCat);
-        return;
-      }
-      if(reMod&&reMod!=='flash'){
-        lastModality.set(reIdx,reMod);
-        if(reMod==='convergence'){
-          showConvergenceQuestion(reIdx);
-        } else if(reMod==='cloze'){
-          showStudyCloze(reIdx);
-        } else if(reMod==='word-order'){
-          showWordOrderDrill(reIdx);
-        } else if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
-          const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
-          showStudyPOSStaged(reIdx,ps);
-        } else {
-          showStudyMC(reIdx, reMod==='mc-rev');
-        }
-        return;
-      }
-      showStudyCard(reIdx);
-      return;
-    }
-  }
-  if(studyIdx>=studyQueue.length){
-    studyQueue=buildStudyQueue();
-    studyIdx=0;
-    // If rebuilt queue is empty, session is done
-    if(!studyQueue.length){ goHome(); return; }
-  }
-  let i=studyQueue[studyIdx++];
-  if(i===undefined||i===null){ goHome(); return; }
-  // Recency filter: avoid repeating a vocab card within RECENCY_WINDOW cards.
-  // Scan ahead for a non-recent alternative and swap it into the current slot.
-  if(!isGrammarKey(i) && sessionRecentCards.includes(i)){
-    const limit=Math.min(studyIdx+RECENCY_WINDOW, studyQueue.length);
-    let _swapped=false;
-    for(let s=studyIdx; s<limit; s++){
-      const ni=studyQueue[s];
-      if(isGrammarKey(ni) || !sessionRecentCards.includes(ni)){
-        studyQueue[s]=i; // defer i to later
-        i=ni;
-        _swapped=true;
-        break;
-      }
-    }
-    // Hard invariant: if swap failed and i is still the card just shown, advance past it.
-    if(!_swapped && i===sessionRecentCards[sessionRecentCards.length-1] && studyIdx<studyQueue.length){
-      studyQueue[studyIdx-1]=i; // put it back at a later position
-      i=studyQueue[studyIdx++];
-      if(i===undefined||i===null){ goHome(); return; }
-    }
-  }
-  // Route grammar pool cards to grammar drill
-  if(isGrammarKey(i)){
-    if(studyFlashOnly||(studyModalityFilter&&studyModalityFilter!=='grammar')){
-      nextStudyCard(); return;
-    }
-    const cat=grammarCatFromKey(i);
-    const axis=grammarAxisFromKey(i);
-    if(sessionGrammarAnswered.has(cat+':'+axis)){
-      nextStudyCard(); return;
-    }
-    showGrammarDrill(cat, axis);
-    return;
-  }
-  showStudyCard(i);
+  goHome();
 }
 
 // Single place for session-level modality overrides (studyFlashOnly and studyModalityFilter).
@@ -3522,8 +3532,6 @@ function showStudyCard(i){
         console.error('Scheduler.modality fallback',e);
         try{ mod=wordModalityFromAxes(i); }catch(_){ mod='mc-fwd'; }
       }
-    } else {
-      try{ mod=wordModalityFromAxes(i); }catch(e){ document.title='MOD:'+e.message+' stk:'+e.stack.slice(0,80); console.error('wordModality error',e); mod='mc-fwd'; }
     }
   }
   // HARD INVARIANT: a word is NEVER presented in a test modality before it has
@@ -3790,6 +3798,7 @@ function showStudyMC(i, reverse, showPosHint){
   // Wager bar — always present on MC
   studyDontKnowAction=()=>{
     if(mcLocked) return; mcLocked=true;
+    recordObservation({mod:reverse?'mc-rev':'mc-fwd',comp:null,fg:i,fax:'meaning',ok:false,opt:null});
     recordAxisResultNew(i,'meaning',false,Date.now()-cardShownAtMC);
     addMastery(i,-0.3);
     studyPending.push({idx:i,mod:reverse?'mc-rev':'mc-fwd'});
@@ -3848,6 +3857,7 @@ function pickStudyMC(btn,chosen,correct,i){
   const sConfident=betRatio2>=1.5;  // wagered above default = confident
   const sUnsure=betRatio2<0.7;      // wagered below default = uncertain
   recordWagerDecision(i, isCorrect, currentMultIdx, defaultMultIdx, responseMs);
+  recordObservation({mod:mcReverse?'mc-rev':'mc-fwd',comp:null,fg:i,fax:'meaning',ok:isCorrect,opt:chosen});
   recordAxisResultNew(i,'meaning',isCorrect,responseMs);
   recordAxisResult(i,'meaning',isCorrect); // legacy stage gate
   const lastMod=lastModality.get(i)||'mc-fwd';
@@ -7112,8 +7122,11 @@ function clearPendingState(){
 function commitApprovedSentences(){
   var count=0;
   Object.keys(_pendingSentences).forEach(function(ch){
-    var approved=_pendingSentences[ch].filter(function(_,idx){
-      return !_pendingRejected[ch+'::'+idx];
+    var approved=_pendingSentences[ch].filter(function(s,idx){
+      if(_pendingRejected[ch+'::'+idx]) return false;
+      // Hard gate: never commit a sentence whose component words aren't all introduced.
+      // The curator badge is advisory; this is the enforcement point.
+      return sentenceAllIntroduced(s[0]);
     });
     if(approved.length){
       _sentenceCache[ch]=(_sentenceCache[ch]||[]).concat(approved);
@@ -7186,14 +7199,33 @@ try{ window.generateSentencesForWord=generateSentencesForWord; window.commitAppr
 function getPuzzleSentences(i){
   try{
     var ch=D[i][0];
-    var stat=EXAMPLE_SENTENCES[ch]||[];
-    var gen=(_sentenceCache&&_sentenceCache[ch])||[];
-    return stat.concat(gen);
+    var seen={};
+    var results=[];
+    // Scan every key, not just D[i][0]: a sentence belongs to every atom it can
+    // blank, not only the one it was seeded from. Multiplies the effective bank
+    // without generating new content.
+    Object.keys(EXAMPLE_SENTENCES).forEach(function(key){
+      (EXAMPLE_SENTENCES[key]||[]).forEach(function(s){
+        if(s[0].indexOf(ch)<0) return;
+        if(!seen[s[0]]){ seen[s[0]]=true; results.push(s); }
+      });
+    });
+    if(_sentenceCache){
+      Object.keys(_sentenceCache).forEach(function(key){
+        (_sentenceCache[key]||[]).forEach(function(s){
+          if(s[0].indexOf(ch)<0) return;
+          if(!seen[s[0]]){ seen[s[0]]=true; results.push(s); }
+        });
+      });
+    }
+    return results;
   }catch(e){ return []; }
 }
 
 function clozeUnlocked(i){
-  if(getPuzzleSentences(i).length===0) return false;
+  // Require at least one sentence that passes the runtime sentenceAllIntroduced gate.
+  // Raw .length is insufficient: LLM sentences can be in cache but blocked until vocab is introduced.
+  if(!getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); })) return false;
   // Permissive rule: one sighting unlocks cloze (depth accrues through context).
   // The strict stage>=2 v1 gate has been removed as v2 is now the active path.
   return (card(i).exp||0)>=1;
@@ -7253,37 +7285,34 @@ function hasPhoneticContent(s){
 
 // Speaks zh with the target word ch replaced by a beep.
 //
-// Strategy: speak the full sentence as one utterance so prosody is natural.
-// SpeechSynthesisEvent.onboundary fires just before the engine produces audio
-// for each word — when charIndex reaches the target word we cancel immediately.
-// The cut lands at the exact natural timing of the missing word with no timing math.
-// After the cancel we beep, then speak the remaining suffix.
-//
-// Degradation: if onboundary never fires (iOS Safari), onend fires after the full
-// sentence plays. A trailing beep signals the blank was tested.
-// Any unexpected error falls back to speaking the full sentence with no bleep.
+// Chain: speak(before) → beepBlank() → speak(after).
+// All three steps guard against card change — if the user advances
+// mid-chain the remaining steps are silently dropped.
+// Avoids speechSynthesis.cancel() and onBoundary entirely (iOS-safe).
+// Limitation: before/after fragments have independent prosody; pregenerated
+// audio with SSML muting is the correct long-term fix.
 function speakWithBlank(zh,ch,langCode){
   const idx=zh.indexOf(ch);
   if(idx<0){ speak(zh,langCode); return; }
+  const before=zh.slice(0,idx);
   const after=zh.slice(idx+ch.length);
-  let cut=false;
-  speak(zh, langCode,
-    // onDone: iOS / no-onboundary fallback — full sentence already played; trailing beep marks blank
-    function(){ if(!cut) beepBlank(); },
-    {
-      suppressInterrupted:true,
-      onBoundary:function(ev){
-        if(cut||ev.name!=='word'||ev.charIndex<idx) return;
-        cut=true;
-        try{ speechSynthesis.cancel(); }catch(e){}
-        const capturedGen=_ttsGen;
-        beepBlank(function(){
-          if(_ttsGen!==capturedGen) return;
-          if(hasPhoneticContent(after)) speak(after,langCode);
-        });
-      }
-    }
-  );
+  const _card=activeCardIdx;
+
+  const speakAfter=function(){
+    if(activeCardIdx!==_card) return;
+    if(hasPhoneticContent(after)) speak(after,langCode);
+  };
+
+  const playBeep=function(){
+    if(activeCardIdx!==_card) return;
+    beepBlank(speakAfter);
+  };
+
+  if(hasPhoneticContent(before)){
+    speak(before,langCode,playBeep,{suppressInterrupted:true});
+  } else {
+    playBeep();
+  }
 }
 
 function showStudyCloze(i){
@@ -7443,6 +7472,7 @@ function showStudyCloze(i){
         tb.style.pointerEvents='none';
       });
       recordChallengeResult(i,'cloze',isCorrect,respMs);
+      recordObservation({mod:'cloze',comp:zh,fg:i,fax:'meaning',ok:isCorrect,opt:opt});
       recordAxisResultNew(i,'meaning',isCorrect,respMs);
       recordWagerDecision(i,isCorrect,currentMultIdx,defaultMultIdx,respMs);
       logAnswer(i,isCorrect,'cloze',respMs);
@@ -7469,6 +7499,7 @@ function showStudyCloze(i){
   renderChallengeRings(i,'cloze',$('studyMCPrompt'));
   studyDontKnowAction=function(){
     if(locked) return; locked=true;
+    recordObservation({mod:'cloze',comp:zh,fg:i,fax:'meaning',ok:false,opt:null});
     recordAxisResultNew(i,'meaning',false,Date.now()-cardShownAtMC);
     addMastery(i,-0.3);
     studyPending.push({idx:i,mod:'cloze'});
@@ -7631,6 +7662,7 @@ function showWordOrderDrill(i){
           });
         }
         recordChallengeResult(i,'word-order',isCorrect,respMs);
+        recordObservation({mod:'word-order',comp:zh,fg:i,fax:'meaning',ok:isCorrect,opt:selected.join('')});
         recordAxisResultNew(i,'meaning',isCorrect,respMs);
         logAnswer(i,isCorrect,'word-order',respMs);
         if(isCorrect){
@@ -7792,6 +7824,69 @@ function showDebugModal(title, body, buttons){
   document.body.appendChild(overlay);
 }
 
+
+/* ============ EXCEPTION CATCHER ============ */
+// Identifies Chinese characters in `text` not yet in D[], then asks Claude
+// to propose flashcard entries for them. Result: {ok, proposals, error}.
+function analyzeTextForExceptions(text, onDone){
+  var key=getAnthropicKey();
+  if(!key){ if(onDone) onDone({ok:false,error:'no api key'}); return; }
+
+  // Build set of characters already covered by D[]
+  var known={};
+  D.forEach(function(entry){ known[entry[0]]=true; });
+
+  // Extract unique CJK characters from input text
+  var seenChars={};
+  var unknown=[];
+  Array.from(text).forEach(function(c){
+    if(seenChars[c]) return;
+    seenChars[c]=true;
+    if(/[一-鿿㐀-䶿\u{20000}-\u{2a6df}]/u.test(c)&&!known[c]) unknown.push(c);
+  });
+
+  if(!unknown.length){ if(onDone) onDone({ok:true,proposals:[]}); return; }
+
+  var prompt='The user is learning Mandarin Chinese. They encountered the following characters not yet in their vocabulary deck:\n'
+    +unknown.join('、')+'\n\n'
+    +'For each, propose a flashcard entry. Return ONLY a JSON array, no prose:\n'
+    +'[{"word":"书","pinyin":[["shū",1]],"meaning":"book","pos":"noun","radicals":[["木",4]]}]\n\n'
+    +'Rules:\n'
+    +'- word: the character(s) as they appear (single char or compound unit)\n'
+    +'- pinyin: [[syllable_with_diacritic, tone_number]] one pair per character (tone 5=neutral)\n'
+    +'- meaning: concise English, max 6 words\n'
+    +'- pos: noun|verb|adjective|adverb|pronoun|particle|measure-word|interjection|conjunction\n'
+    +'- radicals: [[radical_char, stroke_count]] can be []\n'
+    +'Source text for context: '+text.slice(0,300);
+
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'content-type':'application/json',
+      'x-api-key':key,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({
+      model:'claude-haiku-4-5-20251001',
+      max_tokens:600,
+      messages:[{role:'user',content:prompt}]
+    })
+  }).then(function(r){ return r.json(); }).then(function(data){
+    var raw=(data.content&&data.content[0]&&data.content[0].text)||'[]';
+    var proposals=[];
+    // Try parsing the whole response first (clean path), then regex fallback.
+    // Greedy /\[[\s\S]*\]/ over-captures when LLM appends a trailing note like [see above].
+    var stripped=raw.replace(/```[a-z]*\n?/gi,'').replace(/```/g,'').trim();
+    try{ var p=JSON.parse(stripped); proposals=Array.isArray(p)?p:[]; }catch(e){
+      var start=stripped.indexOf('[');
+      if(start>=0){ try{ proposals=JSON.parse(stripped.slice(start)); if(!Array.isArray(proposals)) proposals=[]; }catch(e2){} }
+    }
+    if(onDone) onDone({ok:true,proposals:proposals});
+  }).catch(function(e){
+    if(onDone) onDone({ok:false,error:e.message});
+  });
+}
 
 /* ============ SEMANTIC RELATIONS DATABASE ============ */
 // Handcrafted for the 100-word Mandarin frequency spine.
@@ -7959,6 +8054,66 @@ function classifyDistractorError(targetIdx, chosenDef){
 }
 
 // ── SENTENCE CURATOR ─────────────────────────────────────────────────────
+function _esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── EXCEPTION CATCHER ────────────────────────────────────────────────────
+var _exProposals=[];
+var _exDropped={};
+
+function showExceptionCatcher(){
+  var el=document.getElementById('exceptionCatcher');
+  if(!el) return;
+  _exProposals=[];
+  _exDropped={};
+  renderExceptionProposals();
+  el.style.display='flex';
+}
+
+function renderExceptionProposals(){
+  var body=document.getElementById('exceptionBody');
+  if(!body) return;
+  var CJK="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+
+  if(!_exProposals.length){
+    body.innerHTML='<div style="padding:24px;color:#666;font-size:11px;letter-spacing:1px;">Paste Chinese text above and hit ⚡ ANALYZE.</div>';
+    return;
+  }
+
+  var html='<div style="font-size:9px;color:#777;margin-bottom:14px;letter-spacing:.5px;">Unknown words found. ✗ DROP removes from batch. ADD TO DECK introduces approved words immediately.</div>';
+
+  _exProposals.forEach(function(p,i){
+    var dropped=!!_exDropped[i];
+    var pinyinStr=(p.pinyin||[]).map(function(s){return s[0];}).join(' ');
+    html+='<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:4px;margin-bottom:6px;'
+      +'border:1px solid '+(dropped?'rgba(248,113,113,0.25)':'rgba(255,255,255,0.1)')+';'
+      +'background:'+(dropped?'rgba(255,60,60,0.06)':'#1c1c1c')+';">';
+    html+='<div style="flex:1;'+(dropped?'opacity:.28;':'')+'transition:opacity .15s;">';
+    html+='<span style="'+CJK+';font-size:26px;line-height:1;color:#fff;">'+_esc(p.word)+'</span>';
+    html+='<span style="font-size:10px;color:#9a9a9a;margin-left:10px;">'+_esc(pinyinStr)+'</span>';
+    html+='<span style="font-size:10px;color:#d0d0d0;margin-left:8px;">"'+_esc(p.meaning||'')+'"</span>';
+    html+='<span style="font-size:9px;color:#888;margin-left:8px;">'+_esc(p.pos||'')+'</span>';
+    html+='</div>';
+    html+='<button class="btn exc-toggle" data-idx="'+i+'" style="font-size:8px;padding:2px 8px;flex-shrink:0;'
+      +(dropped?'color:#4ade80;border-color:#4ade80;':'color:#f87171;border-color:#f87171;')
+      +'">'+(dropped?'KEEP':'✗ DROP')+'</button>';
+    html+='</div>';
+  });
+
+  body.innerHTML=html;
+
+  body.querySelectorAll('.exc-toggle').forEach(function(btn){
+    btn.onclick=function(){
+      var idx=parseInt(this.getAttribute('data-idx'),10);
+      if(_exDropped[idx]) delete _exDropped[idx]; else _exDropped[idx]=true;
+      renderExceptionProposals();
+    };
+  });
+}
+
+function proposalToEntry(p){
+  return [p.word, p.pinyin||[], p.meaning||'', p.radicals||[], p.pos||'noun'];
+}
+
 function showSentenceCurator(){
   var el=document.getElementById('sentenceCurator');
   if(!el) return;
@@ -8004,9 +8159,9 @@ function renderSentenceCurator(){
       html+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:4px;'
         +'background:'+(rejected?'rgba(255,60,60,0.07)':'rgba(255,255,255,0.03)')+';margin-bottom:6px;">';
       html+='<div style="flex:1;'+(rejected?'opacity:.3;':'')+'transition:opacity .15s;">';
-      html+='<div style="'+CJK+';font-size:18px;line-height:1.3;">'+s[0]+'</div>';
-      html+='<div style="font-size:9px;opacity:.6;margin-top:2px;">'+(s[1]||'')+'</div>';
-      html+='<div style="font-size:9px;opacity:.7;margin-top:1px;">'+(s[2]||'')+'</div>';
+      html+='<div style="'+CJK+';font-size:18px;line-height:1.3;">'+_esc(s[0])+'</div>';
+      html+='<div style="font-size:9px;opacity:.6;margin-top:2px;">'+_esc(s[1]||'')+'</div>';
+      html+='<div style="font-size:9px;opacity:.7;margin-top:1px;">'+_esc(s[2]||'')+'</div>';
       html+='</div>';
       html+='<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">';
       html+='<span style="font-size:8px;color:'+(passes?'#4ade80':'#f87171')+';letter-spacing:.5px;">'+(passes?'✓ vocab':'✗ vocab')+'</span>';
@@ -8212,6 +8367,41 @@ if($('debugImport')) $('debugImport').onclick=()=>{
   inp.click();
 };
 if($('debugElig')) $('debugElig').onclick=()=>{ showEligibilityBrowser(); };
+if($('debugAddWords')) $('debugAddWords').onclick=()=>{ showExceptionCatcher(); };
+if($('exceptionBack')) $('exceptionBack').onclick=function(){
+  var el=document.getElementById('exceptionCatcher'); if(el) el.style.display='none';
+};
+if($('exceptionAnalyze')) $('exceptionAnalyze').onclick=function(){
+  var btn=$('exceptionAnalyze'), status=$('exceptionStatus');
+  var text=($('exceptionInput')&&$('exceptionInput').value)||'';
+  if(!text.trim()){ if(status) status.textContent='paste some text first'; return; }
+  if(!getAnthropicKey()){ if(status) status.textContent='no api key'; return; }
+  btn.disabled=true;
+  if(status) status.textContent='analyzing…';
+  analyzeTextForExceptions(text,function(r){
+    btn.disabled=false;
+    if(!r.ok){ if(status) status.textContent='error: '+(r.error||'unknown'); return; }
+    _exProposals=r.proposals||[];
+    _exDropped={};
+    if(status) status.textContent=_exProposals.length?_exProposals.length+' new word'
+      +(_exProposals.length!==1?'s':'')+' found':'no unknown characters found';
+    renderExceptionProposals();
+  });
+};
+if($('exceptionCommit')) $('exceptionCommit').onclick=function(){
+  var batch=[];
+  _exProposals.forEach(function(p,i){
+    if(!_exDropped[i]) batch.push(proposalToEntry(p));
+  });
+  var added=batch.length;
+  if(added) addUserWords(batch);
+  var el=document.getElementById('exceptionCatcher'); if(el) el.style.display='none';
+  var btn=$('debugAddWords');
+  if(btn&&added){
+    btn.textContent='⊕ '+added+' word'+(added!==1?'s':'')+' added';
+    setTimeout(function(){ btn.textContent='⊕ ADD WORDS'; },3000);
+  }
+};
 // API key management (stored in localStorage only — never in any file or repo)
 (function(){
   var inp=$('debugApiKey'), status=$('debugKeyStatus');
@@ -8426,15 +8616,15 @@ const Scheduler = {
         if (meanStg === 1) return 'mc-fwd';
         if (meanStg === 2) return Math.random() < 0.6 ? 'mc-fwd' : 'mc-rev';
         if (meanStg === 3) {
-          const hasSentences = getPuzzleSentences(i).length > 0;
+          const hasSentences = getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); });
           if (hasSentences) return Math.random() < 0.4 ? 'cloze' : 'mc-rev';
           return Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev';
         }
         if (meanStg >= 4) {
           const r = Math.random();
-          const hasSentences = getPuzzleSentences(i).length > 0;
+          const hasSentences = getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); });
           if (r < 0.35 && hasSentences) return 'cloze';
-          if (r < 0.55) return 'word-order';
+          if (r < 0.55) return hasSentences ? 'word-order' : (Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev');
           return Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev';
         }
       }
@@ -8649,6 +8839,13 @@ const Scheduler = {
   },
 
   _nextWordToIntroduce(S, D) {
+    // User-added words take immediate priority over the core spine.
+    if (S.userWordQueue && S.userWordQueue.length) {
+      for (let j = 0; j < S.userWordQueue.length; j++) {
+        const wi = S.userWordQueue[j];
+        if (D[wi] && !this._isUnlocked(S, wi)) return wi;
+      }
+    }
     for (let i = 0; i < D.length; i++) {
       if (!this._isUnlocked(S, i)) return i;
     }

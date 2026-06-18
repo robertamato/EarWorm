@@ -73,6 +73,66 @@ function classifyDistractorError(targetIdx, chosenDef){
 }
 
 // ── SENTENCE CURATOR ─────────────────────────────────────────────────────
+function _esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── EXCEPTION CATCHER ────────────────────────────────────────────────────
+var _exProposals=[];
+var _exDropped={};
+
+function showExceptionCatcher(){
+  var el=document.getElementById('exceptionCatcher');
+  if(!el) return;
+  _exProposals=[];
+  _exDropped={};
+  renderExceptionProposals();
+  el.style.display='flex';
+}
+
+function renderExceptionProposals(){
+  var body=document.getElementById('exceptionBody');
+  if(!body) return;
+  var CJK="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+
+  if(!_exProposals.length){
+    body.innerHTML='<div style="padding:24px;color:#666;font-size:11px;letter-spacing:1px;">Paste Chinese text above and hit ⚡ ANALYZE.</div>';
+    return;
+  }
+
+  var html='<div style="font-size:9px;color:#777;margin-bottom:14px;letter-spacing:.5px;">Unknown words found. ✗ DROP removes from batch. ADD TO DECK introduces approved words immediately.</div>';
+
+  _exProposals.forEach(function(p,i){
+    var dropped=!!_exDropped[i];
+    var pinyinStr=(p.pinyin||[]).map(function(s){return s[0];}).join(' ');
+    html+='<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:4px;margin-bottom:6px;'
+      +'border:1px solid '+(dropped?'rgba(248,113,113,0.25)':'rgba(255,255,255,0.1)')+';'
+      +'background:'+(dropped?'rgba(255,60,60,0.06)':'#1c1c1c')+';">';
+    html+='<div style="flex:1;'+(dropped?'opacity:.28;':'')+'transition:opacity .15s;">';
+    html+='<span style="'+CJK+';font-size:26px;line-height:1;color:#fff;">'+_esc(p.word)+'</span>';
+    html+='<span style="font-size:10px;color:#9a9a9a;margin-left:10px;">'+_esc(pinyinStr)+'</span>';
+    html+='<span style="font-size:10px;color:#d0d0d0;margin-left:8px;">"'+_esc(p.meaning||'')+'"</span>';
+    html+='<span style="font-size:9px;color:#888;margin-left:8px;">'+_esc(p.pos||'')+'</span>';
+    html+='</div>';
+    html+='<button class="btn exc-toggle" data-idx="'+i+'" style="font-size:8px;padding:2px 8px;flex-shrink:0;'
+      +(dropped?'color:#4ade80;border-color:#4ade80;':'color:#f87171;border-color:#f87171;')
+      +'">'+(dropped?'KEEP':'✗ DROP')+'</button>';
+    html+='</div>';
+  });
+
+  body.innerHTML=html;
+
+  body.querySelectorAll('.exc-toggle').forEach(function(btn){
+    btn.onclick=function(){
+      var idx=parseInt(this.getAttribute('data-idx'),10);
+      if(_exDropped[idx]) delete _exDropped[idx]; else _exDropped[idx]=true;
+      renderExceptionProposals();
+    };
+  });
+}
+
+function proposalToEntry(p){
+  return [p.word, p.pinyin||[], p.meaning||'', p.radicals||[], p.pos||'noun'];
+}
+
 function showSentenceCurator(){
   var el=document.getElementById('sentenceCurator');
   if(!el) return;
@@ -118,9 +178,9 @@ function renderSentenceCurator(){
       html+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:4px;'
         +'background:'+(rejected?'rgba(255,60,60,0.07)':'rgba(255,255,255,0.03)')+';margin-bottom:6px;">';
       html+='<div style="flex:1;'+(rejected?'opacity:.3;':'')+'transition:opacity .15s;">';
-      html+='<div style="'+CJK+';font-size:18px;line-height:1.3;">'+s[0]+'</div>';
-      html+='<div style="font-size:9px;opacity:.6;margin-top:2px;">'+(s[1]||'')+'</div>';
-      html+='<div style="font-size:9px;opacity:.7;margin-top:1px;">'+(s[2]||'')+'</div>';
+      html+='<div style="'+CJK+';font-size:18px;line-height:1.3;">'+_esc(s[0])+'</div>';
+      html+='<div style="font-size:9px;opacity:.6;margin-top:2px;">'+_esc(s[1]||'')+'</div>';
+      html+='<div style="font-size:9px;opacity:.7;margin-top:1px;">'+_esc(s[2]||'')+'</div>';
       html+='</div>';
       html+='<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">';
       html+='<span style="font-size:8px;color:'+(passes?'#4ade80':'#f87171')+';letter-spacing:.5px;">'+(passes?'✓ vocab':'✗ vocab')+'</span>';
@@ -326,6 +386,41 @@ if($('debugImport')) $('debugImport').onclick=()=>{
   inp.click();
 };
 if($('debugElig')) $('debugElig').onclick=()=>{ showEligibilityBrowser(); };
+if($('debugAddWords')) $('debugAddWords').onclick=()=>{ showExceptionCatcher(); };
+if($('exceptionBack')) $('exceptionBack').onclick=function(){
+  var el=document.getElementById('exceptionCatcher'); if(el) el.style.display='none';
+};
+if($('exceptionAnalyze')) $('exceptionAnalyze').onclick=function(){
+  var btn=$('exceptionAnalyze'), status=$('exceptionStatus');
+  var text=($('exceptionInput')&&$('exceptionInput').value)||'';
+  if(!text.trim()){ if(status) status.textContent='paste some text first'; return; }
+  if(!getAnthropicKey()){ if(status) status.textContent='no api key'; return; }
+  btn.disabled=true;
+  if(status) status.textContent='analyzing…';
+  analyzeTextForExceptions(text,function(r){
+    btn.disabled=false;
+    if(!r.ok){ if(status) status.textContent='error: '+(r.error||'unknown'); return; }
+    _exProposals=r.proposals||[];
+    _exDropped={};
+    if(status) status.textContent=_exProposals.length?_exProposals.length+' new word'
+      +(_exProposals.length!==1?'s':'')+' found':'no unknown characters found';
+    renderExceptionProposals();
+  });
+};
+if($('exceptionCommit')) $('exceptionCommit').onclick=function(){
+  var batch=[];
+  _exProposals.forEach(function(p,i){
+    if(!_exDropped[i]) batch.push(proposalToEntry(p));
+  });
+  var added=batch.length;
+  if(added) addUserWords(batch);
+  var el=document.getElementById('exceptionCatcher'); if(el) el.style.display='none';
+  var btn=$('debugAddWords');
+  if(btn&&added){
+    btn.textContent='⊕ '+added+' word'+(added!==1?'s':'')+' added';
+    setTimeout(function(){ btn.textContent='⊕ ADD WORDS'; },3000);
+  }
+};
 // API key management (stored in localStorage only — never in any file or repo)
 (function(){
   var inp=$('debugApiKey'), status=$('debugKeyStatus');
@@ -540,15 +635,15 @@ const Scheduler = {
         if (meanStg === 1) return 'mc-fwd';
         if (meanStg === 2) return Math.random() < 0.6 ? 'mc-fwd' : 'mc-rev';
         if (meanStg === 3) {
-          const hasSentences = getPuzzleSentences(i).length > 0;
+          const hasSentences = getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); });
           if (hasSentences) return Math.random() < 0.4 ? 'cloze' : 'mc-rev';
           return Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev';
         }
         if (meanStg >= 4) {
           const r = Math.random();
-          const hasSentences = getPuzzleSentences(i).length > 0;
+          const hasSentences = getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); });
           if (r < 0.35 && hasSentences) return 'cloze';
-          if (r < 0.55) return 'word-order';
+          if (r < 0.55) return hasSentences ? 'word-order' : (Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev');
           return Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev';
         }
       }
@@ -763,6 +858,13 @@ const Scheduler = {
   },
 
   _nextWordToIntroduce(S, D) {
+    // User-added words take immediate priority over the core spine.
+    if (S.userWordQueue && S.userWordQueue.length) {
+      for (let j = 0; j < S.userWordQueue.length; j++) {
+        const wi = S.userWordQueue[j];
+        if (D[wi] && !this._isUnlocked(S, wi)) return wi;
+      }
+    }
     for (let i = 0; i < D.length; i++) {
       if (!this._isUnlocked(S, i)) return i;
     }

@@ -189,8 +189,11 @@ function clearPendingState(){
 function commitApprovedSentences(){
   var count=0;
   Object.keys(_pendingSentences).forEach(function(ch){
-    var approved=_pendingSentences[ch].filter(function(_,idx){
-      return !_pendingRejected[ch+'::'+idx];
+    var approved=_pendingSentences[ch].filter(function(s,idx){
+      if(_pendingRejected[ch+'::'+idx]) return false;
+      // Hard gate: never commit a sentence whose component words aren't all introduced.
+      // The curator badge is advisory; this is the enforcement point.
+      return sentenceAllIntroduced(s[0]);
     });
     if(approved.length){
       _sentenceCache[ch]=(_sentenceCache[ch]||[]).concat(approved);
@@ -263,14 +266,33 @@ try{ window.generateSentencesForWord=generateSentencesForWord; window.commitAppr
 function getPuzzleSentences(i){
   try{
     var ch=D[i][0];
-    var stat=EXAMPLE_SENTENCES[ch]||[];
-    var gen=(_sentenceCache&&_sentenceCache[ch])||[];
-    return stat.concat(gen);
+    var seen={};
+    var results=[];
+    // Scan every key, not just D[i][0]: a sentence belongs to every atom it can
+    // blank, not only the one it was seeded from. Multiplies the effective bank
+    // without generating new content.
+    Object.keys(EXAMPLE_SENTENCES).forEach(function(key){
+      (EXAMPLE_SENTENCES[key]||[]).forEach(function(s){
+        if(s[0].indexOf(ch)<0) return;
+        if(!seen[s[0]]){ seen[s[0]]=true; results.push(s); }
+      });
+    });
+    if(_sentenceCache){
+      Object.keys(_sentenceCache).forEach(function(key){
+        (_sentenceCache[key]||[]).forEach(function(s){
+          if(s[0].indexOf(ch)<0) return;
+          if(!seen[s[0]]){ seen[s[0]]=true; results.push(s); }
+        });
+      });
+    }
+    return results;
   }catch(e){ return []; }
 }
 
 function clozeUnlocked(i){
-  if(getPuzzleSentences(i).length===0) return false;
+  // Require at least one sentence that passes the runtime sentenceAllIntroduced gate.
+  // Raw .length is insufficient: LLM sentences can be in cache but blocked until vocab is introduced.
+  if(!getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); })) return false;
   // Permissive rule: one sighting unlocks cloze (depth accrues through context).
   // The strict stage>=2 v1 gate has been removed as v2 is now the active path.
   return (card(i).exp||0)>=1;
@@ -330,37 +352,34 @@ function hasPhoneticContent(s){
 
 // Speaks zh with the target word ch replaced by a beep.
 //
-// Strategy: speak the full sentence as one utterance so prosody is natural.
-// SpeechSynthesisEvent.onboundary fires just before the engine produces audio
-// for each word — when charIndex reaches the target word we cancel immediately.
-// The cut lands at the exact natural timing of the missing word with no timing math.
-// After the cancel we beep, then speak the remaining suffix.
-//
-// Degradation: if onboundary never fires (iOS Safari), onend fires after the full
-// sentence plays. A trailing beep signals the blank was tested.
-// Any unexpected error falls back to speaking the full sentence with no bleep.
+// Chain: speak(before) → beepBlank() → speak(after).
+// All three steps guard against card change — if the user advances
+// mid-chain the remaining steps are silently dropped.
+// Avoids speechSynthesis.cancel() and onBoundary entirely (iOS-safe).
+// Limitation: before/after fragments have independent prosody; pregenerated
+// audio with SSML muting is the correct long-term fix.
 function speakWithBlank(zh,ch,langCode){
   const idx=zh.indexOf(ch);
   if(idx<0){ speak(zh,langCode); return; }
+  const before=zh.slice(0,idx);
   const after=zh.slice(idx+ch.length);
-  let cut=false;
-  speak(zh, langCode,
-    // onDone: iOS / no-onboundary fallback — full sentence already played; trailing beep marks blank
-    function(){ if(!cut) beepBlank(); },
-    {
-      suppressInterrupted:true,
-      onBoundary:function(ev){
-        if(cut||ev.name!=='word'||ev.charIndex<idx) return;
-        cut=true;
-        try{ speechSynthesis.cancel(); }catch(e){}
-        const capturedGen=_ttsGen;
-        beepBlank(function(){
-          if(_ttsGen!==capturedGen) return;
-          if(hasPhoneticContent(after)) speak(after,langCode);
-        });
-      }
-    }
-  );
+  const _card=activeCardIdx;
+
+  const speakAfter=function(){
+    if(activeCardIdx!==_card) return;
+    if(hasPhoneticContent(after)) speak(after,langCode);
+  };
+
+  const playBeep=function(){
+    if(activeCardIdx!==_card) return;
+    beepBlank(speakAfter);
+  };
+
+  if(hasPhoneticContent(before)){
+    speak(before,langCode,playBeep,{suppressInterrupted:true});
+  } else {
+    playBeep();
+  }
 }
 
 function showStudyCloze(i){
@@ -520,6 +539,7 @@ function showStudyCloze(i){
         tb.style.pointerEvents='none';
       });
       recordChallengeResult(i,'cloze',isCorrect,respMs);
+      recordObservation({mod:'cloze',comp:zh,fg:i,fax:'meaning',ok:isCorrect,opt:opt});
       recordAxisResultNew(i,'meaning',isCorrect,respMs);
       recordWagerDecision(i,isCorrect,currentMultIdx,defaultMultIdx,respMs);
       logAnswer(i,isCorrect,'cloze',respMs);
@@ -546,6 +566,7 @@ function showStudyCloze(i){
   renderChallengeRings(i,'cloze',$('studyMCPrompt'));
   studyDontKnowAction=function(){
     if(locked) return; locked=true;
+    recordObservation({mod:'cloze',comp:zh,fg:i,fax:'meaning',ok:false,opt:null});
     recordAxisResultNew(i,'meaning',false,Date.now()-cardShownAtMC);
     addMastery(i,-0.3);
     studyPending.push({idx:i,mod:'cloze'});
@@ -708,6 +729,7 @@ function showWordOrderDrill(i){
           });
         }
         recordChallengeResult(i,'word-order',isCorrect,respMs);
+        recordObservation({mod:'word-order',comp:zh,fg:i,fax:'meaning',ok:isCorrect,opt:selected.join('')});
         recordAxisResultNew(i,'meaning',isCorrect,respMs);
         logAnswer(i,isCorrect,'word-order',respMs);
         if(isCorrect){
@@ -869,6 +891,69 @@ function showDebugModal(title, body, buttons){
   document.body.appendChild(overlay);
 }
 
+
+/* ============ EXCEPTION CATCHER ============ */
+// Identifies Chinese characters in `text` not yet in D[], then asks Claude
+// to propose flashcard entries for them. Result: {ok, proposals, error}.
+function analyzeTextForExceptions(text, onDone){
+  var key=getAnthropicKey();
+  if(!key){ if(onDone) onDone({ok:false,error:'no api key'}); return; }
+
+  // Build set of characters already covered by D[]
+  var known={};
+  D.forEach(function(entry){ known[entry[0]]=true; });
+
+  // Extract unique CJK characters from input text
+  var seenChars={};
+  var unknown=[];
+  Array.from(text).forEach(function(c){
+    if(seenChars[c]) return;
+    seenChars[c]=true;
+    if(/[一-鿿㐀-䶿\u{20000}-\u{2a6df}]/u.test(c)&&!known[c]) unknown.push(c);
+  });
+
+  if(!unknown.length){ if(onDone) onDone({ok:true,proposals:[]}); return; }
+
+  var prompt='The user is learning Mandarin Chinese. They encountered the following characters not yet in their vocabulary deck:\n'
+    +unknown.join('、')+'\n\n'
+    +'For each, propose a flashcard entry. Return ONLY a JSON array, no prose:\n'
+    +'[{"word":"书","pinyin":[["shū",1]],"meaning":"book","pos":"noun","radicals":[["木",4]]}]\n\n'
+    +'Rules:\n'
+    +'- word: the character(s) as they appear (single char or compound unit)\n'
+    +'- pinyin: [[syllable_with_diacritic, tone_number]] one pair per character (tone 5=neutral)\n'
+    +'- meaning: concise English, max 6 words\n'
+    +'- pos: noun|verb|adjective|adverb|pronoun|particle|measure-word|interjection|conjunction\n'
+    +'- radicals: [[radical_char, stroke_count]] can be []\n'
+    +'Source text for context: '+text.slice(0,300);
+
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'content-type':'application/json',
+      'x-api-key':key,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({
+      model:'claude-haiku-4-5-20251001',
+      max_tokens:600,
+      messages:[{role:'user',content:prompt}]
+    })
+  }).then(function(r){ return r.json(); }).then(function(data){
+    var raw=(data.content&&data.content[0]&&data.content[0].text)||'[]';
+    var proposals=[];
+    // Try parsing the whole response first (clean path), then regex fallback.
+    // Greedy /\[[\s\S]*\]/ over-captures when LLM appends a trailing note like [see above].
+    var stripped=raw.replace(/```[a-z]*\n?/gi,'').replace(/```/g,'').trim();
+    try{ var p=JSON.parse(stripped); proposals=Array.isArray(p)?p:[]; }catch(e){
+      var start=stripped.indexOf('[');
+      if(start>=0){ try{ proposals=JSON.parse(stripped.slice(start)); if(!Array.isArray(proposals)) proposals=[]; }catch(e2){} }
+    }
+    if(onDone) onDone({ok:true,proposals:proposals});
+  }).catch(function(e){
+    if(onDone) onDone({ok:false,error:e.message});
+  });
+}
 
 /* ============ SEMANTIC RELATIONS DATABASE ============ */
 // Handcrafted for the 100-word Mandarin frequency spine.
