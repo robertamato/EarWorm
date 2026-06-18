@@ -1196,8 +1196,13 @@ function showStudyTone(i){
     py.style.opacity='0';
   }
 
-  // Audio: stages 1,2,4 play immediately; stage 3 waits until after answer
-  if(stage!==3 && S.sound!=='mute') speak(ch,activeCourse().langCode);
+  // Tone drills autoplay the target word across the learning range: it is a listening
+  // task — you can't identify a tone you haven't heard. Stage 3 used to stay silent
+  // until the answer, but stage 3 is reached at mid mastery (the tone drill only
+  // appears once meaning-axis stage >= 2, by which point .m has usually crossed 2.0),
+  // so the silent variant surfaced as "tone drill has no audio" at low mastery. Stage 4
+  // (pure listen) plays too. A correct tap replays below to reinforce.
+  if(S.sound!=='mute') speak(ch,activeCourse().langCode);
 
   // Build tone buttons -- force-correct paradigm:
   // wrong tap -> error sound + dim button + audio replay; card stays live until correct tone found.
