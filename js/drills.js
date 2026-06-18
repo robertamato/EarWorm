@@ -640,6 +640,7 @@ function showWordOrderDrill(i){
   $('studyMC').style.display='flex';
   $('studyTone').style.display='none';
   if($('studyPOS')) $('studyPOS').style.display='none';
+  if($('studyColl')) $('studyColl').style.display='none'; // word-order missed this \u2014 left a stale collocation card showing underneath
 
   $('studyMCRank').textContent=cardRankStr(i);
   $('studyMCModality').textContent='WORD ORDER \u00b7 ARRANGE';
