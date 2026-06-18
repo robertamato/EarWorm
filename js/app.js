@@ -8931,16 +8931,24 @@ const Scheduler = {
 
   _shouldIntroduce(S, D, studyCardCount, modalityFilter) {
     if (modalityFilter) return false;
-    const isFirst = studyCardCount === 1;
-    if (!isFirst && studyCardCount % 6 !== 0) return false;
+    // Introduction is governed by the WORKING SET, not a fixed card-count cadence
+    // (ACQUISITION_MODEL §8-bis; breadth-first-to-context). The old
+    // `studyCardCount % 6` throttle capped intros at 1 per 6 cards regardless of how
+    // fast the learner graduated words, so a learner who answered correctly was stuck
+    // drilling 2-3 words instead of expanding. Drive it by brandNew (un-encoded words
+    // still in flight): new vocab flows as fast as the learner consolidates, and pauses
+    // to consolidate when they fall behind. BRAND_NEW_CAP is the desirable-difficulty
+    // knob (working-memory bound on simultaneously-new words).
+    const BRAND_NEW_CAP = 3;
+    const ROTATION_CEILING = 16;
     const brandNew = D.filter((_, i) => {
       const ci = S.cards[i];
       if (!ci || !ci.exp) return false;
       return !this._isGraduated(ci);
     }).length;
-    if (brandNew >= 3) return false;
+    if (brandNew >= BRAND_NEW_CAP) return false;
     const inRotation = D.filter((_, i) => this._isUnlocked(S, i) && !this._isGraduated(S.cards[i])).length;
-    return inRotation < 12;
+    return inRotation < ROTATION_CEILING;
   },
 
   _nextWordToIntroduce(S, D) {
