@@ -8665,7 +8665,7 @@ const Scheduler = {
     const vocabSeen = this._seenVocab(S, D);
 
     // 6. Build interleaved queue
-    return this._pickFromPools(grammarDrills, vocabDue, vocabSeen, S, D);
+    return this._pickFromPools(grammarDrills, vocabDue, vocabSeen, S, D, (sessionState && sessionState.sessionRecentCards) || []);
   },
 
   // ─── Modality selection ──────────────────────────────────────────────────
@@ -8992,7 +8992,7 @@ const Scheduler = {
     return gStg >= 1 && mStg >= 1;
   },
 
-  _pickFromPools(grammarDrills, vocabDue, vocabSeen, S, D) {
+  _pickFromPools(grammarDrills, vocabDue, vocabSeen, S, D, recent) {
     const fr = D.filter((_, i) => this._isUnlocked(S, i)).length;
     const grammarInterval = fr < 10 ? 10 : fr < 30 ? 7 : 5;
 
@@ -9011,12 +9011,25 @@ const Scheduler = {
       } else break;
     }
 
-    if (!items.length) {
-      // Fallback: seen cards
-      if (vocabSeen.length) return { type: 'vocab', idx: vocabSeen[0] };
-      return null;
+    const recentArr = recent || [];
+    const rset = new Set(recentArr);
+
+    // Rotate among vocab outside the recency window. Grammar is disabled from the
+    // main flow, so it is never injected into the rotation here — only used if there
+    // is no vocab at all (matches the pre-rotation behavior where items[0] is vocab).
+    const vocabItems = items.filter(it => it.type === 'vocab');
+    if (vocabItems.length) {
+      let pick = vocabItems.find(it => !rset.has(it.idx));
+      if (!pick) {
+        // Seen pool ≤ recency window: round-robin by least-recent showing
+        // (largest lastIndexOf = most recent; smallest = show next).
+        pick = vocabItems.slice().sort((a, b) =>
+          recentArr.lastIndexOf(a.idx) - recentArr.lastIndexOf(b.idx))[0];
+      }
+      return { type: 'vocab', idx: pick.idx };
     }
 
+    if (!items.length) return null;
     const first = items[0];
     if (first.type === 'grammar') return first;
     return { type: 'vocab', idx: first.idx };
