@@ -563,6 +563,99 @@ function renderCardBrowser(){
   var cb=document.getElementById('cardBrowserClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
 }
 if($('debugCardBrowser')) $('debugCardBrowser').onclick=renderCardBrowser;
+
+// ── Scheduler dry-run simulator ────────────────────────────────────────────
+// Hypothetical playthrough from a FRESH course (card 0 → N) using the REAL
+// Scheduler.next + recordAxisResultNew, so changes to the heuristics show up
+// immediately — iterate without playing the deck. Read-only: swaps in a throwaway
+// state and stubs save(), restores everything (real progress/localStorage untouched).
+function simulateSchedule(N, accuracy){
+  N=N||80; accuracy=(accuracy==null)?1.0:accuracy;
+  var trace=[], intros=0, finalFrontier=0;
+  var _S=S, _save=save;
+  var _mi=(typeof currentMultIdx!=='undefined')?currentMultIdx:0;
+  var _md=(typeof defaultMultIdx!=='undefined')?defaultMultIdx:0;
+  try{
+    var fresh=(typeof defaultState==='function')?JSON.parse(JSON.stringify(defaultState())):{};
+    fresh.cards={}; fresh.totalSeen=0; fresh.userWordQueue=[]; fresh.coldCutover=false;
+    S=fresh; save=function(){};
+    try{ currentMultIdx=defaultMultIdx; }catch(e){}   // neutralize wager stage-compression for a clean baseline
+    var grad=function(i){ try{ return Scheduler._isGraduated(S.cards[i]||{}); }catch(e){ return false; } };
+    var frontierNow=function(){ var f=0; for(var k=0;k<D.length;k++){ if(S.cards[k]&&S.cards[k].exp>0) f=k+1; } return f; };
+    var brandNewNow=function(){ var n=0; for(var k=0;k<D.length;k++){ var c=S.cards[k]; if(c&&c.exp>0&&!grad(k)) n++; } return n; };
+    var simCount=0;
+    for(var step=0; step<N; step++){
+      var sess={ studyCardCount:simCount, studyFlashOnly:false, studyModalityFilter:null,
+        studyPending:[], sessionGrammarAnswered:new Set(), studyEncounters:new Map(),
+        sessionRecentCards:[], sessionAnswerRing:[], nextQueueRebuildAt:0 };
+      var decision; try{ decision=Scheduler.next(S,D,sess); }catch(e){ trace.push({n:step+1,error:String(e)}); break; }
+      if(!decision || decision.idx==null || decision.idx<0){ trace.push({n:step+1,end:true}); break; }
+      var idx=decision.idx, isIntro=decision.type==='introduce';
+      var frB=frontierNow(), bnB=brandNewNow();
+      simCount++; S.totalSeen=(S.totalSeen||0)+1;
+      if(typeof isGrammarKey==='function'&&isGrammarKey(idx)){ trace.push({n:step+1,ch:'(grammar)',type:'grammar',mod:'grammar',reason:'grammar drill'}); continue; }
+      var ci=S.cards[idx]=S.cards[idx]||{};
+      var mod=isIntro?'flash':(function(){ try{ return Scheduler.modality(S,D,idx); }catch(e){ return 'mc-fwd'; } })();
+      var stg=(typeof getAxisStage==='function')?getAxisStage(idx,'meaning'):((ci.axisStage||{}).meaning||0);
+      if(isIntro) intros++;
+      var reason= isIntro
+        ? ('introduce — frontier '+frB+'→'+(frB+1)+', brand-new '+bnB+'/3 (room)')
+        : ('review · '+mod+' · '+(mod==='flash'?'not yet MC-ready':(stg===0?'first MC → graduates it':((mod==='cloze'||mod==='word-order')?'context (stg'+stg+')':'recall (stg'+stg+')'))));
+      trace.push({n:step+1, idx:idx, ch:D[idx][0], type:decision.type, mod:mod, stg:stg, frontier:frB, brandNew:bnB, reason:reason});
+      ci._lastSeenAt=S.totalSeen;
+      if(mod==='flash'){
+        if(!(ci.exp>0)){ ci.exp=1; ci.seen=true; ci.axisDue=ci.axisDue||{};
+          ci.axisDue.meaning=S.totalSeen+((typeof AXIS_STABILITY!=='undefined'&&AXIS_STABILITY.meaning&&AXIS_STABILITY.meaning[0])||3);
+          ci.axisDue.pos=S.totalSeen+((typeof AXIS_STABILITY!=='undefined'&&AXIS_STABILITY.pos&&AXIS_STABILITY.pos[0])||5); }
+      } else {
+        var axis=(mod.indexOf('pos')===0)?'pos':'meaning';
+        try{ recordAxisResultNew(idx, axis, Math.random()<accuracy, 2500); }catch(e){}
+      }
+    }
+    finalFrontier=frontierNow();
+  } finally { S=_S; save=_save; try{ currentMultIdx=_mi; defaultMultIdx=_md; }catch(e){} }
+  return { steps:trace, finalFrontier:finalFrontier, intros:intros };
+}
+try{ window.simulateSchedule=simulateSchedule; }catch(e){}
+
+var _simN=80, _simAcc=1.0;
+function renderSimTrace(){
+  var r=simulateSchedule(_simN,_simAcc);
+  var ov=document.getElementById('simTraceOverlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='simTraceOverlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;background:#0b0e0c;color:#cfe9dd;font-family:monospace;overflow:hidden;';
+    document.body.appendChild(ov); }
+  ov.style.display='flex';
+  function btn(label,on){ return '<button class="btn st-ctl" data-act="'+on+'" style="width:auto;font-size:9px;padding:4px 8px;">'+label+'</button>'; }
+  var head='<div style="padding:9px 14px;border-bottom:1px solid rgba(255,255,255,.15);display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0;">'
+    +'<button class="btn" id="simClose" style="width:auto;font-size:10px;padding:5px 12px;">◄ BACK</button>'
+    +'<span style="font-size:11px;letter-spacing:1px;">SIM PLAYTHROUGH (fresh course, real scheduler)</span>'
+    +'<span style="font-size:10px;opacity:.8;">'+r.steps.length+' steps · reached FRONTIER '+r.finalFrontier+' · '+r.intros+' introductions · acc '+Math.round(_simAcc*100)+'%</span>'
+    +'<span style="margin-left:auto;display:flex;gap:6px;">'+btn('80','n80')+btn('160','n160')+btn('300','n300')+btn('100%','a100')+btn('85%','a85')+'</span></div>'
+    +'<div style="flex:1;overflow-y:auto;padding:6px 12px;font-size:11px;line-height:1.5;">';
+  var body='';
+  r.steps.forEach(function(s){
+    if(s.error){ body+='<div style="color:#ff6b6b">#'+s.n+' ERROR '+s.error+'</div>'; return; }
+    if(s.end){ body+='<div style="opacity:.6">#'+s.n+' — session would end (no card)</div>'; return; }
+    var col=s.type==='introduce'?'#6f6':(s.mod==='flash'?'#ffb84d':'#9ab');
+    var tag=s.type==='introduce'?'INTRO':'·';
+    body+='<div style="display:flex;gap:8px;padding:1px 0;">'
+      +'<span style="width:34px;opacity:.4;flex-shrink:0;">#'+s.n+'</span>'
+      +'<span style="width:46px;flex-shrink:0;color:'+col+'">'+tag+'</span>'
+      +'<span style="width:26px;flex-shrink:0;font-size:13px;">'+s.ch+'</span>'
+      +'<span style="width:70px;flex-shrink:0;opacity:.85;">'+s.mod+'</span>'
+      +'<span style="opacity:.65;">'+s.reason+'</span></div>';
+  });
+  ov.innerHTML=head+body+'</div>';
+  var cb=document.getElementById('simClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
+  Array.prototype.forEach.call(ov.querySelectorAll('.st-ctl'), function(b){ b.onclick=function(){
+    var a=b.getAttribute('data-act');
+    if(a==='n80')_simN=80; else if(a==='n160')_simN=160; else if(a==='n300')_simN=300;
+    else if(a==='a100')_simAcc=1.0; else if(a==='a85')_simAcc=0.85;
+    renderSimTrace();
+  }; });
+}
+if($('debugSimTrace')) $('debugSimTrace').onclick=renderSimTrace;
 // Cutover toggle: flip whether the cold engine drives graduation/selection.
 function updateColdCutoverBtn(){ var b=document.getElementById('debugColdCutover'); if(b) b.textContent='⇄ COLD CUTOVER: '+((typeof S!=='undefined'&&S.coldCutover)?'ON':'OFF'); }
 if($('debugColdCutover')) $('debugColdCutover').onclick=function(){
