@@ -638,6 +638,123 @@ function showStudyCloze(i){
   renderWagerControl('studyMCActions',i);
 }
 
+/* ============ COMPREHENSION MODALITY ============ */
+// The PRIMARY context-first test (modality audit): hear/read the whole sentence,
+// demonstrate you understood its MEANING (not "supply the missing part" like cloze).
+// Audio-first. Grades the foreground atom but logs a COMPOSITE observation
+// (comp:zh) so the cold engine propagates comprehension to the background atoms
+// (the incidental channel — automatization). Reuses the studyMC panel.
+function comprehensionDistractorGlosses(correctGloss, n){
+  var pool=[], seen={}; seen[correctGloss]=1;
+  try{ for(var k in EXAMPLE_SENTENCES){ (EXAMPLE_SENTENCES[k]||[]).forEach(function(s){ if(s&&s[2]) pool.push(s[2]); }); } }catch(e){}
+  try{ if(typeof _sentenceCache!=='undefined') for(var k2 in _sentenceCache){ (_sentenceCache[k2]||[]).forEach(function(s){ if(s&&s[2]) pool.push(s[2]); }); } }catch(e){}
+  pool=shuffle(pool);
+  var out=[];
+  for(var p=0;p<pool.length && out.length<n;p++){ var g=pool[p]; if(!seen[g]){ seen[g]=1; out.push(g); } }
+  return out;
+}
+function showStudyComprehension(i){
+  const [ch,syls,def,,pos]=D[i];
+  const sents=getPuzzleSentences(i);
+  if(!sents.length){ nextStudyCard(); return; }
+  const validSents=sents.filter(function(s){ return sentenceAllIntroduced(s[0]); });
+  if(!validSents.length){ nextStudyCard(); return; }
+  const sent=validSents[Math.floor(Math.random()*validSents.length)];
+  const zh=sent[0], en=sent[2];
+
+  let distractors=comprehensionDistractorGlosses(en,3);
+  if(!distractors.length){ nextStudyCard(); return; }
+  distractors=distractors.length>=3?distractors.slice(0,3):distractors.slice(0,1); // even total (2 or 4)
+  const choices=shuffle([en,...distractors]);
+
+  activeCardIdx=i;
+  rollBg();
+  const fg=getComputedStyle(document.body).color;
+  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+
+  // Audio-first: play the whole sentence
+  if(S.sound!=='mute'){ const _card=activeCardIdx; setTimeout(()=>{ if(activeCardIdx===_card) speak(zh,activeCourse().langCode); },30); }
+  cardShownAtMC=Date.now();
+
+  show('study');
+  $('studySession').style.display='none';
+  $('studyMC').style.display='flex';
+  $('studyTone').style.display='none';
+  if($('studyPOS')) $('studyPOS').style.display='none';
+  if($('studyColl')) $('studyColl').style.display='none';
+  $('studyMCRank').textContent=cardRankStr(i);
+  $('studyMCModality').textContent='COMPREHENSION · WHAT DOES THIS MEAN?';
+
+  // Prompt: the full sentence (phi-units, no blank)
+  const promptEl=$('studyMCPromptText'); promptEl.innerHTML='';
+  const sentRow=document.createElement('div');
+  sentRow.style.cssText='display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;gap:4px;';
+  const isCJKChar=function(c){return /[一-鿿㐀-䶿]/.test(c);};
+  for(let k=0;k<zh.length;k++){
+    const c=zh[k];
+    if(isCJKChar(c)){
+      const syl=charSyl(c);
+      const unit=document.createElement('div');
+      unit.style.cssText='display:flex;flex-direction:column;align-items:center;gap:3px;';
+      const cSpan=document.createElement('span'); cSpan.textContent=c; cSpan.style.cssText='font-size:30px;line-height:1;'+CJKf;
+      unit.appendChild(cSpan);
+      if(syl){ const pSpan=document.createElement('span'); pSpan.textContent=syl[0]; pSpan.style.cssText='font-size:9px;font-family:\'Noto Sans\',Arial,sans-serif;'; pSpan.style.color=toneColor(syl[1],fg); unit.appendChild(pSpan); }
+      sentRow.appendChild(unit);
+    } else {
+      const plain=document.createElement('span'); plain.textContent=c; plain.style.cssText='font-size:30px;line-height:1;align-self:flex-start;opacity:.5;'; sentRow.appendChild(plain);
+    }
+  }
+  promptEl.appendChild(sentRow);
+  $('studyMCPinyin').innerHTML='';
+
+  // Tap prompt to repeat audio
+  $('studyMCPrompt').style.cursor='pointer';
+  $('studyMCPrompt').onclick=function(e){ if(S.sound==='mute')return; speak(zh,activeCourse().langCode); e.stopPropagation(); };
+
+  // Choices = glosses (single column)
+  const box=$('studyMCChoices'); box.innerHTML=''; box.style.gridTemplateColumns='1fr';
+  let locked=false;
+  choices.forEach(function(opt){
+    const b=document.createElement('button'); b.className='choice';
+    b.style.cssText='border-color:'+fg+';color:'+fg+';padding:12px 10px;font-size:13px;line-height:1.35;text-align:center;';
+    b.textContent=opt;
+    b.onclick=function(){
+      if(locked) return; locked=true;
+      const isCorrect=opt===en;
+      const respMs=Date.now()-cardShownAtMC;
+      document.querySelectorAll('#studyMCChoices .choice').forEach(function(tb){
+        if(tb.textContent===en) tb.classList.add('correct');
+        else if(tb===b&&!isCorrect) tb.classList.add('wrong');
+        tb.style.pointerEvents='none';
+      });
+      recordChallengeResult(i,'comprehension',isCorrect,respMs);
+      recordObservation({mod:'comprehension',comp:zh,fg:i,fax:'meaning',ok:isCorrect,opt:opt});
+      recordAxisResultNew(i,'meaning',isCorrect,respMs);
+      recordWagerDecision(i,isCorrect,currentMultIdx,defaultMultIdx,respMs);
+      logAnswer(i,isCorrect,'comprehension',respMs);
+      const speedM=respMs<1500?1.3:respMs<4000?1.0:0.8;
+      if(isCorrect){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier()); addMastery(i,0.5*speedM); }
+      else { resetMult(); addMastery(i,-0.3); studyPending.push({idx:i,mod:'comprehension'}); }
+      save();
+      if(S.sound!=='mute') speak(zh,activeCourse().langCode);
+      armTapAdvance($('studyMC'),function(){nextStudyCard();},isCorrect?0:1200);
+    };
+    box.appendChild(b);
+  });
+
+  renderChallengeRings(i,'comprehension',$('studyMCPrompt'));
+  studyDontKnowAction=function(){
+    if(locked) return; locked=true;
+    recordObservation({mod:'comprehension',comp:zh,fg:i,fax:'meaning',ok:false,opt:null});
+    recordAxisResultNew(i,'meaning',false,Date.now()-cardShownAtMC);
+    addMastery(i,-0.3);
+    studyPending.push({idx:i,mod:'comprehension'});
+    armTapAdvance($('studyMC'),function(){nextStudyCard();},1200);
+  };
+  renderWagerControl('studyMCActions',i);
+}
+try{ window.showStudyComprehension=showStudyComprehension; }catch(e){}
+
 /* ============ WORD ORDER MODALITY ============ */
 // Given 3-4 shuffled words, tap them in correct Mandarin order.
 // Bridges from receptive to productive — requires applying grammar knowledge.

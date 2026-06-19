@@ -104,7 +104,7 @@ function renderStats(){
   const adaptRatio=totalAxisReps?(totalAxisStages/totalAxisReps):null;
 
   // Per-mode breakdown (sorted by answer count)
-  const modOrder=['flash','mc','tone','cloze','word-order','pos','sentence','unknown'];
+  const modOrder=['flash','mc','tone','cloze','comprehension','word-order','pos','sentence','unknown'];
   const modRows=modOrder.map(function(mod){
     var mm=st.byModality&&st.byModality[mod]; if(!mm||!mm.answers) return null;
     var a=Math.round(mm.correct/mm.answers*100);

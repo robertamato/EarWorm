@@ -565,6 +565,7 @@ function nextStudyCard(){
               lastModality.set(reIdx,reMod);
               if(reMod==='convergence'){ showConvergenceQuestion(reIdx); return; }
               if(reMod==='cloze'){ showStudyCloze(reIdx); return; }
+              if(reMod==='comprehension'){ showStudyComprehension(reIdx); return; }
               if(reMod==='word-order'){ showWordOrderDrill(reIdx); return; }
               if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
                 const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
@@ -698,6 +699,8 @@ function showStudyCard(i){
     showConvergenceQuestion(i);
   } else if(mod==='cloze'){
     showStudyCloze(i);
+  } else if(mod==='comprehension'){
+    showStudyComprehension(i);
   } else if(mod==='word-order'){
     showWordOrderDrill(i);
   } else if(mod==='pos-s1'||mod==='pos-s2'||mod==='pos-s3'){

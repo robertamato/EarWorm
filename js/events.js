@@ -669,18 +669,30 @@ const Scheduler = {
       // Meaning axis scheduling
       const meanDue = this._isAxisDue(ci, 'meaning');
       if (meanDue || meanStg >= 1) {
+        const hasSentences = getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); });
         if (meanStg === 1) return 'mc-fwd';
-        if (meanStg === 2) return Math.random() < 0.6 ? 'mc-fwd' : 'mc-rev';
+        if (meanStg === 2) {
+          // First context exposure: comprehension (recognize the whole) leads,
+          // ahead of cloze (produce the part); isolated MC fills the rest.
+          if (hasSentences && Math.random() < 0.4) return 'comprehension';
+          return Math.random() < 0.6 ? 'mc-fwd' : 'mc-rev';
+        }
         if (meanStg === 3) {
-          const hasSentences = getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); });
-          if (hasSentences) return Math.random() < 0.4 ? 'cloze' : 'mc-rev';
+          if (hasSentences) {
+            const r = Math.random();
+            if (r < 0.4) return 'comprehension';
+            if (r < 0.65) return 'cloze';
+            return 'mc-rev';
+          }
           return Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev';
         }
         if (meanStg >= 4) {
           const r = Math.random();
-          const hasSentences = getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); });
-          if (r < 0.35 && hasSentences) return 'cloze';
-          if (r < 0.55) return hasSentences ? 'word-order' : (Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev');
+          if (hasSentences) {
+            if (r < 0.30) return 'comprehension';
+            if (r < 0.50) return 'cloze';
+            if (r < 0.70) return 'word-order';
+          }
           return Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev';
         }
       }
