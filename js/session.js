@@ -641,6 +641,7 @@ function showStudyCard(i){
   clearCardState();
   studyCardCount++;
   S.totalSeen=(S.totalSeen||0)+1; save();
+  try{ card(i)._lastSeenAt=S.totalSeen; }catch(e){}  // fair-rotation stamp (see _pickFromPools)
   tickSessionCard();
   studyEncounters.set(i,(studyEncounters.get(i)||0)+1);
   if(studyCardCount===1&&window.EW&&EW.obs) EW.obs.logEvent('session:firstFlash',{idx:i});

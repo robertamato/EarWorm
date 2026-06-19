@@ -998,21 +998,18 @@ const Scheduler = {
       } else break;
     }
 
-    const recentArr = recent || [];
-    const rset = new Set(recentArr);
-
-    // Rotate among vocab outside the recency window. Grammar is disabled from the
-    // main flow, so it is never injected into the rotation here — only used if there
-    // is no vocab at all (matches the pre-rotation behavior where items[0] is vocab).
+    // Fair rotation by LEAST-RECENTLY-SHOWN, tracked PER CARD via _lastSeenAt (a
+    // monotonic stamp set from S.totalSeen in showStudyCard). The old window-based
+    // recency (lastIndexOf over a 10-deep ring) could NOT distinguish "shown long
+    // ago" from "never shown" — both were -1 — so the tie broke by index and, with
+    // 14 due cards but a window of 10, the low indices perpetually cycled while the
+    // TAIL (11+) starved: never tested, never graduated, frontier frozen at the
+    // brand-new cap. A persistent per-card stamp is window-independent: never-shown
+    // (stamp 0) and oldest cards sort first. Grammar is disabled from this rotation.
+    const lastSeen = idx => (S.cards[idx] && S.cards[idx]._lastSeenAt) || 0;
     const vocabItems = items.filter(it => it.type === 'vocab');
     if (vocabItems.length) {
-      let pick = vocabItems.find(it => !rset.has(it.idx));
-      if (!pick) {
-        // Seen pool ≤ recency window: round-robin by least-recent showing
-        // (largest lastIndexOf = most recent; smallest = show next).
-        pick = vocabItems.slice().sort((a, b) =>
-          recentArr.lastIndexOf(a.idx) - recentArr.lastIndexOf(b.idx))[0];
-      }
+      const pick = vocabItems.slice().sort((a, b) => lastSeen(a.idx) - lastSeen(b.idx))[0];
       return { type: 'vocab', idx: pick.idx };
     }
 
