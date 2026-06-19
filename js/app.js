@@ -5027,6 +5027,9 @@ function goHome(){
   if(window.WaveViz) try{ WaveViz.clear(); }catch(e){}
   // Strategic-interval cold recompute (ACQUISITION_MODEL §7-bis, shadow mode).
   try{ if(typeof coldRecompute==='function'){ coldRecompute(); save(); } }catch(e){}
+  // Backfill frontier-legal context for already-introduced atoms (bounded; the
+  // intro hook only covers new introductions). Background, no-op without a key.
+  try{ if(typeof backfillSentences==='function') backfillSentences(3); }catch(e){}
   studyFlashOnly=false;
   studyModalityFilter=null;
   resetSessionFatigue();
@@ -7594,9 +7597,9 @@ function requestSentenceFor(i, onDone){
     if(getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); })){
       if(onDone) onDone({ok:true,cached:true}); return;
     }
+    if(!getAnthropicKey()){ if(onDone) onDone({ok:false,error:'no api key'}); return; }  // before the rate-limit so a keyless attempt doesn't burn it
     if(_genRequested[ch]){ if(onDone) onDone({ok:false,reason:'already-requested'}); return; }
     _genRequested[ch]=true;
-    if(!getAnthropicKey()){ if(onDone) onDone({ok:false,error:'no api key'}); return; }
     try{ if(window.EW&&EW.obs) EW.obs.logEvent('gen:request',{ch:ch,idx:i,reason:'pull'}); }catch(e){}
     generateSentencesForWord(i,function(r){
       if(!r.ok){ try{ if(window.EW&&EW.obs) EW.obs.logEvent('gen:fail',{ch:ch,error:r.error}); }catch(e){} if(onDone) onDone(r); return; }
@@ -7611,6 +7614,28 @@ function requestSentenceFor(i, onDone){
   }catch(e){ if(onDone) onDone({ok:false,error:String(e)}); }
 }
 try{ window.requestSentenceFor=requestSentenceFor; window._validateGenerated=_validateGenerated; }catch(e){}
+
+// Backfill: generate frontier-legal context for already-introduced atoms that
+// lack any — the introduction hook only fires for NEW introductions, so existing
+// vocabulary (and any learner mid-stream) stays starved without this. Bounded per
+// call, rate-limited per atom/session, skips atoms that already have a legal
+// sentence, and a no-op without a key. Called from goHome with a small limit so it
+// backfills gradually rather than in one burst.
+function backfillSentences(limit){
+  limit=limit||3; var fired=0;
+  try{
+    if(typeof getAnthropicKey==='function' && !getAnthropicKey()) return 0;
+    for(var i=0;i<D.length && fired<limit;i++){
+      var ci=S.cards[i];
+      if(!(ci&&ci.seen)) continue;                                                      // introduced only
+      if(_genRequested[D[i][0]]) continue;                                              // already tried this session
+      if(getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); })) continue; // already has context
+      fired++; requestSentenceFor(i,function(){});
+    }
+  }catch(e){}
+  return fired;
+}
+try{ window.backfillSentences=backfillSentences; }catch(e){}
 
 // Puzzle-source seam. Returns [target, pinyin, gloss] sentences for word i.
 // Static bank merged with LLM-generated cache; callers are generation-agnostic.
