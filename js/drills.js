@@ -454,7 +454,7 @@ function speakWithBlank(zh,ch,langCode){
 function showStudyCloze(i){
   const [ch,syls,def,,pos]=D[i];
   const sents=getPuzzleSentences(i);
-  if(!sents.length){ nextStudyCard(); return; }
+  if(!sents.length){ showStudyMC(i,false); return; }  // fall back to MC on the same card, not a wasted turn
 
   activeCardIdx=i;
   rollBg();
@@ -463,7 +463,7 @@ function showStudyCloze(i){
 
   // Pick a sentence — only use sentences where every multi-char D[] word is already introduced
   const validSents=sents.filter(function(s){ return sentenceAllIntroduced(s[0]); });
-  if(!validSents.length){ nextStudyCard(); return; }
+  if(!validSents.length){ showStudyMC(i,false); return; }
   const sent=validSents[Math.floor(Math.random()*validSents.length)];
   const [zh,py,en]=sent;
 
@@ -489,7 +489,7 @@ function showStudyCloze(i){
   let distractors=pickCharDistractors(i,targetChoices-1);
   // Enforce even total: distractors count must be odd (1→total 2, 3→total 4)
   if(distractors.length%2===0) distractors=distractors.slice(0,distractors.length-1);
-  if(!distractors.length){ nextStudyCard(); return; }
+  if(!distractors.length){ showStudyMC(i,false); return; }  // fall back to MC, don't waste the turn
   const choices=shuffle([ch,...distractors]);
 
   // Render into study panel — reuse MC panel
@@ -781,10 +781,14 @@ function showWordOrderDrill(i){
   // Find a sentence containing this word — routed through getPuzzleSentences so
   // a future generation backend only needs to implement that one function.
   const sents=getPuzzleSentences(i);
-  if(!sents.length){ nextStudyCard(); return; }
+  // Fall back to an MC on the SAME card (not nextStudyCard) when word-order can't
+  // be built: the modality picker only checks that a legal sentence EXISTS
+  // (hasSentences), but word-order also needs 3+ known-word tiles. Bailing to
+  // nextStudyCard wastes the turn and marks the card shown-but-not-tested.
+  if(!sents.length){ showStudyMC(i,false); return; }
   // Only use sentences where every multi-char D[] word is already introduced
   const validSentsWO=sents.filter(function(s){ return sentenceAllIntroduced(s[0]); });
-  if(!validSentsWO.length){ nextStudyCard(); return; }
+  if(!validSentsWO.length){ showStudyMC(i,false); return; }
   const sent=validSentsWO[Math.floor(Math.random()*validSentsWO.length)];
   const [zh,py,en]=sent;
 
@@ -795,10 +799,10 @@ function showWordOrderDrill(i){
   const introduced=D.filter(function(_,idx){return S.cards[idx]&&S.cards[idx].seen;}).map(function(d){return d[0];});
   // Find 3-4 known words that appear in this sentence
   const wordsInSent=introduced.filter(function(w){return zh.includes(w)&&w.length>0;});
-  if(wordsInSent.length<3){ nextStudyCard(); return; }
+  if(wordsInSent.length<3){ showStudyMC(i,false); return; }
   // Take up to 4 words, ensure target word is included
   let drillWords=[ch,...wordsInSent.filter(function(w){return w!==ch;}).slice(0,3)];
-  if(drillWords.length<3){ nextStudyCard(); return; }
+  if(drillWords.length<3){ showStudyMC(i,false); return; }
   drillWords=drillWords.slice(0,4);
   // Invariant check: every tile must have been properly seen as a flashcard.
   // Log any breach so the observability panel surfaces it immediately.
