@@ -394,12 +394,13 @@
       <button class="btn" id="debugElig" style="font-size:8px;opacity:.6;">◈ ELIGIBILITY</button>
       <button class="btn" id="debugColdLive" style="font-size:8px;opacity:.6;">⧉ COLD vs LIVE</button>
       <div style="border-top:1px solid;opacity:.3;margin:4px 0;"></div>
-      <div style="display:flex;gap:4px;align-items:center;">
-        <input id="debugApiKey" type="password" placeholder="sk-ant-api03-…" style="font-size:7px;flex:1;min-width:0;background:transparent;border:1px solid currentColor;color:inherit;padding:3px 6px;font-family:monospace;opacity:.7;"/>
-        <button class="btn" id="debugKeySave" style="font-size:8px;opacity:.6;white-space:nowrap;">SAVE</button>
-        <button class="btn" id="debugKeyClear" style="font-size:8px;opacity:.4;white-space:nowrap;">✕</button>
+      <div style="font-size:9px;opacity:.7;letter-spacing:1px;margin-bottom:3px;">ANTHROPIC API KEY</div>
+      <div style="display:flex;gap:6px;align-items:stretch;">
+        <input id="debugApiKey" type="password" placeholder="sk-ant-api03-…" style="font-size:12px;flex:1;min-width:0;background:rgba(255,255,255,0.06);border:1px solid currentColor;color:inherit;padding:8px 10px;font-family:monospace;border-radius:2px;"/>
+        <button class="btn" id="debugKeySave" style="font-size:10px;width:auto;padding:8px 14px;white-space:nowrap;">SAVE</button>
+        <button class="btn" id="debugKeyClear" style="font-size:10px;width:auto;padding:8px 12px;opacity:.5;white-space:nowrap;">✕</button>
       </div>
-      <span id="debugKeyStatus" style="font-size:7px;opacity:.5;display:block;min-height:10px;"></span>
+      <span id="debugKeyStatus" style="font-size:8px;opacity:.6;display:block;min-height:12px;margin-top:3px;"></span>
       <button class="btn" id="debugGenerate" style="font-size:8px;opacity:.6;">⚡ GENERATE SENTENCES</button>
       <button class="btn" id="debugCurate" style="font-size:8px;opacity:.6;">✎ CURATE SENTENCES</button>
       <button class="btn" id="debugAddWords" style="font-size:8px;opacity:.6;">⊕ ADD WORDS</button>
