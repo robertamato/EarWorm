@@ -1230,9 +1230,15 @@ try{ window.coldDrivesSelection=coldDrivesSelection; window.coldGraduated=coldGr
 // Axis stage gate: use accuracy window instead of consecutive-correct
 // Advance stage when accuracy >= threshold over last N attempts
 const AXIS_ADVANCE_ACCURACY=0.80; // 80% accuracy over window
+// attempts needed before evaluating each stage gate. NOTE: a legit value of 0
+// here used to be silently coerced to 5 by `x || 5` (0 is falsy) — that bug made
+// the stage 0→1 gate (the one that frees an acquisition-cap slot, ACQUIRED_STAGE=1)
+// require ~5 reps even at 100% accuracy, which is why pace felt slow. The stage 0→1
+// bar is now an explicit low gate (2 clean corrects; a winning wager compresses it
+// to 1 via windowSize=max(1,baseWindow-wBonus)). Coalescing fixed below.
 const AXIS_ADVANCE_WINDOW={
-  pos:  [0,5,5,4],    // attempts needed before evaluating each stage gate
-  meaning:[0,4,4,5,5,4],
+  pos:  [2,5,5,4],
+  meaning:[2,4,4,5,5,4],
 };
 
 function recordAxisResultNew(i, axis, isCorrect, responseMs){
@@ -1262,7 +1268,8 @@ function recordAxisResultNew(i, axis, isCorrect, responseMs){
 
   // Stage advancement: accuracy window threshold
   const hist=ci.axisHistory[axis]||[];
-  const baseWindow=(AXIS_ADVANCE_WINDOW[axis]&&AXIS_ADVANCE_WINDOW[axis][currentStage])||5;
+  const _w=AXIS_ADVANCE_WINDOW[axis]&&AXIS_ADVANCE_WINDOW[axis][currentStage];
+  const baseWindow=(_w==null)?5:_w;   // explicit null-check: a legit window of 0/low must NOT coerce to 5
   // Wager above default compresses the stage gate (max -3 from window)
   const _wBonus=(typeof currentMultIdx!=='undefined'&&typeof defaultMultIdx!=='undefined')
     ?Math.min(3,Math.max(0,currentMultIdx-defaultMultIdx)):0;
