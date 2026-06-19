@@ -3755,7 +3755,7 @@ function nextStudyCard(){
   // Returns early after showing the card; v1 path below is preserved for rollback.
   if(newSchedulerPolicy()){
     try{
-      const schedState=(typeof State!=='undefined'&&State._s)?State._s:S;
+      const schedState=S; // S is the authoritative LIVE card state; State._s drifts out of sync (stale exp read as 0 -> modality 'flash' -> new cards never MC'd -> frontier froze)
       const sessionState=buildSessionState();
       const decision=Scheduler.next(schedState,D,sessionState);
       if(window.EW&&EW.obs) EW.obs.logEvent('study:next',{type:decision&&decision.type,reason:decision&&decision.reason,idx:decision&&decision.idx,source:'v2-scheduler'});
@@ -3888,7 +3888,7 @@ function showStudyCard(i){
   if(mod===null){
     if(newSchedulerPolicy()){
       try{
-        const schedState=(typeof State!=='undefined'&&State._s)?State._s:S;
+        const schedState=S; // S is the authoritative LIVE card state; State._s drifts out of sync (stale exp read as 0 -> modality 'flash' -> new cards never MC'd -> frontier froze)
         mod=Scheduler.modality(schedState,D,i);
         if(window.EW&&EW.obs) EW.obs.logEvent('study:modality',{item:i,mod:mod,source:'v2-scheduler'});
       }catch(e){
