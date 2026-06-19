@@ -7559,6 +7559,47 @@ function generateSentencesForWord(i, onDone){
 
 try{ window.generateSentencesForWord=generateSentencesForWord; window.commitApprovedSentences=commitApprovedSentences; }catch(e){}
 
+// ── Trusted pull-generation (no human gate) ────────────────────────────────
+// The curator is a manual, human-gated batch op. For the context-first loop the
+// scheduler needs to PULL a comprehensible sentence for a target atom on demand
+// and trust it without a human approving each one. Auto-validation replaces the
+// human's structural checks: target present, sane length, and the hard
+// all-introduced gate (only seen scaffold). Quality beyond structure is accepted
+// for the hypothesis-test phase; the curator remains for manual review.
+var _genRequested={};  // in-session rate-limit: ch -> true (don't re-fire per atom)
+function _validateGenerated(zh, targetCh){
+  if(typeof zh!=='string'||!zh) return false;
+  var n=0; for(var k=0;k<zh.length;k++){ if(/[一-鿿]/.test(zh[k])) n++; }
+  if(n<3||n>12) return false;                 // sane sentence length (CJK atoms)
+  if(zh.indexOf(targetCh)<0) return false;     // the target must actually appear
+  return sentenceAllIntroduced(zh);            // hard gate: only seen scaffold
+}
+// Pull a legal sentence for atom i: returns cached if one exists, else generates,
+// auto-validates, auto-commits the valid ones, and logs to the proctor bus.
+function requestSentenceFor(i, onDone){
+  try{
+    var ch=D[i][0];
+    if(getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); })){
+      if(onDone) onDone({ok:true,cached:true}); return;
+    }
+    if(_genRequested[ch]){ if(onDone) onDone({ok:false,reason:'already-requested'}); return; }
+    _genRequested[ch]=true;
+    if(!getAnthropicKey()){ if(onDone) onDone({ok:false,error:'no api key'}); return; }
+    try{ if(window.EW&&EW.obs) EW.obs.logEvent('gen:request',{ch:ch,idx:i,reason:'pull'}); }catch(e){}
+    generateSentencesForWord(i,function(r){
+      if(!r.ok){ try{ if(window.EW&&EW.obs) EW.obs.logEvent('gen:fail',{ch:ch,error:r.error}); }catch(e){} if(onDone) onDone(r); return; }
+      if(r.cached||r.pending){ if(onDone) onDone(r); return; }
+      var pend=(_pendingSentences[ch]||[]);
+      var valid=pend.filter(function(s){ return _validateGenerated(s[0],ch); });
+      if(valid.length){ _sentenceCache[ch]=(_sentenceCache[ch]||[]).concat(valid); _saveSentenceCache(); }
+      delete _pendingSentences[ch];   // committed the valid; drop the rest (no human gate)
+      try{ if(window.EW&&EW.obs) EW.obs.logEvent('gen:commit',{ch:ch,generated:pend.length,committed:valid.length}); }catch(e){}
+      if(onDone) onDone({ok:true,committed:valid.length,generated:pend.length});
+    });
+  }catch(e){ if(onDone) onDone({ok:false,error:String(e)}); }
+}
+try{ window.requestSentenceFor=requestSentenceFor; window._validateGenerated=_validateGenerated; }catch(e){}
+
 // Puzzle-source seam. Returns [target, pinyin, gloss] sentences for word i.
 // Static bank merged with LLM-generated cache; callers are generation-agnostic.
 function getPuzzleSentences(i){
