@@ -959,8 +959,9 @@ function showStudyMC(i, reverse, showPosHint){
   // Wire inline wager controls — anchored to the HOUSE LINE (model P_algo via
   // Scheduler._pCorrect), NOT the streak. uplift = bet - line = Δ(P_user, P_algo).
   ensureBankrollDay();
-  const _line=houseLineLabel(i,'meaning');
-  defaultMultIdx=houseLineIdx(i,'meaning');
+  const _wmod=reverse?'mc-rev':'mc-fwd';
+  const _line=houseLineLabel(i,'meaning',_wmod);
+  defaultMultIdx=houseLineIdx(i,'meaning',_wmod);
   currentMultIdx=defaultMultIdx;
   wagerTouched=false;
   const sml=document.getElementById('studyMultLabel');

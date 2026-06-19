@@ -491,6 +491,30 @@ const MASTERY_MAX=4;
 function masteryScore(i){ return Math.min(MASTERY_MAX, Math.max(0, card(i).m||0)); }
 function isMastered(i){ return masteryScore(i)>=MASTERY_MAX; }
 
+// ── FORMAL PER-MODALITY DIFFICULTY MODEL ──────────────────────────────────
+// One declared source of truth, replacing the ~20 hand-tuned addMastery nudges
+// scattered across modalities. Each test modality is an evidence channel
+// (acquisition model: recall < discrimination < incidental) at a distinct strength.
+//   diff ∈ [0,1): how much harder than baseline recognition to be correct. Lowers
+//     the wager line P_algo (_pCorrect) so a correct on a harder ask earns a bigger
+//     edge — the line tells the truth about what's being asked.
+//   ev: evidence weight — how much a correct advances progression. Declared here so
+//     the whole difficulty model lives in one place; wired into graduation in Phase 3
+//     (demonstrating a word on a harder channel graduates it faster).
+const MODALITY_PROFILE = {
+  'flash':        { diff: 0.00, ev: 0.0 },  // exposure only — no test, no evidence
+  'mc-fwd':       { diff: 0.00, ev: 1.0 },  // baseline recognition (char→meaning)
+  'mc':           { diff: 0.00, ev: 1.0 },
+  'pos':          { diff: 0.10, ev: 1.0 },
+  'tone':         { diff: 0.15, ev: 1.0 },  // phonological discrimination
+  'mc-rev':       { diff: 0.18, ev: 1.3 },  // meaning→char, production-leaning
+  'cloze':        { diff: 0.25, ev: 1.5 },  // contextual recall
+  'comprehension':{ diff: 0.30, ev: 1.6 },
+  'word-order':   { diff: 0.35, ev: 1.8 },  // syntactic production (hardest)
+};
+function modalityDiff(mod){ const p=MODALITY_PROFILE[mod]; return p?p.diff:0; }
+function modalityEv(mod){ const p=MODALITY_PROFILE[mod]; return p?p.ev:1; }
+
 // ── FRONTIER MODEL ──────────────────────────────────────────────
 // Words enter one at a time in strict frequency order.
 // A word is INTRODUCED when it has been shown as a flashcard (seen:true).

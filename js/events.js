@@ -1004,7 +1004,7 @@ const Scheduler = {
   // (forgetting pulls retrievability toward a recognition guess floor). This is the
   // "house line" the wager will eventually be posted from, and the signal frontier-
   // seeking selection ranks on. Range clamped to (0.02, 0.98).
-  _pCorrect(ci, axis) {
+  _pCorrect(ci, axis, modality) {
     if (!ci || !ci.exp) return 0.5;
     const stage = this._getAxisStage(ci, axis);
     const STAGE_PRIOR = [0.50, 0.66, 0.78, 0.87, 0.92, 0.95];
@@ -1025,6 +1025,13 @@ const Scheduler = {
       const r = Math.pow(2, -(seen - due) / stab);   // retrievability ∈ (0,1], one full interval overdue → 0.5
       const FLOOR = 0.30;                             // recognition floor (you can still guess)
       p = FLOOR + (p - FLOOR) * r;
+    }
+    // Modality difficulty (formal model): a harder ask lowers the expected P toward
+    // the guess floor, so the posted wager line drops and the correct call earns a
+    // bigger edge. Omitted modality → competence-only (selection/frontier use this).
+    if (modality && typeof modalityDiff === 'function') {
+      const d = modalityDiff(modality);
+      if (d > 0) { const FLOOR = 0.25; p = FLOOR + (p - FLOOR) * (1 - d); }
     }
     return Math.max(0.02, Math.min(0.98, p));
   },

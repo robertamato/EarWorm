@@ -138,23 +138,23 @@ function naturalMultIdx(){
 // uplift = currentMultIdx - defaultMultIdx = Δ(P_user, P_algo), the quantity the
 // meta-game measures. (Scheduler is concatenated after this file; these are only
 // CALLED at runtime, by which point it exists — guarded regardless.)
-function houseP(i, axis){
+function houseP(i, axis, modality){
   try{
     if(typeof Scheduler!=='undefined' && Scheduler._pCorrect)
-      return Scheduler._pCorrect(card(i), axis||'meaning');
+      return Scheduler._pCorrect(card(i), axis||'meaning', modality);
   }catch(e){}
   return 0.5;
 }
 // P_algo → MULT_STEPS index. The default bet rises WITH the house's confidence
 // (high P → high default), so betting ABOVE the line = "I'm surer than the house."
 // A low line on a card you actually know is the edge to press. P≈0.5 sits mid-slider.
-function houseLineIdx(i, axis){
-  const p=houseP(i, axis);
+function houseLineIdx(i, axis, modality){
+  const p=houseP(i, axis, modality);
   return p<0.35?0 : p<0.50?1 : p<0.65?2 : p<0.80?3 : p<0.90?4 : 5;
 }
 // Human-facing posted line: payout odds (~1/P) + a read on the house's stance.
-function houseLineLabel(i, axis){
-  const p=houseP(i, axis);
+function houseLineLabel(i, axis, modality){
+  const p=houseP(i, axis, modality);
   const odds=Math.max(1, Math.round((1/Math.max(0.08,p))*10)/10);
   const read=p>=0.85?'KNOWS YOU KNOW':p>=0.65?'EXPECTS A HIT':p>=0.45?'TOSS-UP':p>=0.30?'DOUBTS YOU':'BETS YOU MISS';
   return {odds:odds, read:read, p:p};

@@ -491,6 +491,30 @@ const MASTERY_MAX=4;
 function masteryScore(i){ return Math.min(MASTERY_MAX, Math.max(0, card(i).m||0)); }
 function isMastered(i){ return masteryScore(i)>=MASTERY_MAX; }
 
+// ── FORMAL PER-MODALITY DIFFICULTY MODEL ──────────────────────────────────
+// One declared source of truth, replacing the ~20 hand-tuned addMastery nudges
+// scattered across modalities. Each test modality is an evidence channel
+// (acquisition model: recall < discrimination < incidental) at a distinct strength.
+//   diff ∈ [0,1): how much harder than baseline recognition to be correct. Lowers
+//     the wager line P_algo (_pCorrect) so a correct on a harder ask earns a bigger
+//     edge — the line tells the truth about what's being asked.
+//   ev: evidence weight — how much a correct advances progression. Declared here so
+//     the whole difficulty model lives in one place; wired into graduation in Phase 3
+//     (demonstrating a word on a harder channel graduates it faster).
+const MODALITY_PROFILE = {
+  'flash':        { diff: 0.00, ev: 0.0 },  // exposure only — no test, no evidence
+  'mc-fwd':       { diff: 0.00, ev: 1.0 },  // baseline recognition (char→meaning)
+  'mc':           { diff: 0.00, ev: 1.0 },
+  'pos':          { diff: 0.10, ev: 1.0 },
+  'tone':         { diff: 0.15, ev: 1.0 },  // phonological discrimination
+  'mc-rev':       { diff: 0.18, ev: 1.3 },  // meaning→char, production-leaning
+  'cloze':        { diff: 0.25, ev: 1.5 },  // contextual recall
+  'comprehension':{ diff: 0.30, ev: 1.6 },
+  'word-order':   { diff: 0.35, ev: 1.8 },  // syntactic production (hardest)
+};
+function modalityDiff(mod){ const p=MODALITY_PROFILE[mod]; return p?p.diff:0; }
+function modalityEv(mod){ const p=MODALITY_PROFILE[mod]; return p?p.ev:1; }
+
 // ── FRONTIER MODEL ──────────────────────────────────────────────
 // Words enter one at a time in strict frequency order.
 // A word is INTRODUCED when it has been shown as a flashcard (seen:true).
@@ -4179,8 +4203,9 @@ function showStudyMC(i, reverse, showPosHint){
   // Wire inline wager controls — anchored to the HOUSE LINE (model P_algo via
   // Scheduler._pCorrect), NOT the streak. uplift = bet - line = Δ(P_user, P_algo).
   ensureBankrollDay();
-  const _line=houseLineLabel(i,'meaning');
-  defaultMultIdx=houseLineIdx(i,'meaning');
+  const _wmod=reverse?'mc-rev':'mc-fwd';
+  const _line=houseLineLabel(i,'meaning',_wmod);
+  defaultMultIdx=houseLineIdx(i,'meaning',_wmod);
   currentMultIdx=defaultMultIdx;
   wagerTouched=false;
   const sml=document.getElementById('studyMultLabel');
@@ -5732,23 +5757,23 @@ function naturalMultIdx(){
 // uplift = currentMultIdx - defaultMultIdx = Δ(P_user, P_algo), the quantity the
 // meta-game measures. (Scheduler is concatenated after this file; these are only
 // CALLED at runtime, by which point it exists — guarded regardless.)
-function houseP(i, axis){
+function houseP(i, axis, modality){
   try{
     if(typeof Scheduler!=='undefined' && Scheduler._pCorrect)
-      return Scheduler._pCorrect(card(i), axis||'meaning');
+      return Scheduler._pCorrect(card(i), axis||'meaning', modality);
   }catch(e){}
   return 0.5;
 }
 // P_algo → MULT_STEPS index. The default bet rises WITH the house's confidence
 // (high P → high default), so betting ABOVE the line = "I'm surer than the house."
 // A low line on a card you actually know is the edge to press. P≈0.5 sits mid-slider.
-function houseLineIdx(i, axis){
-  const p=houseP(i, axis);
+function houseLineIdx(i, axis, modality){
+  const p=houseP(i, axis, modality);
   return p<0.35?0 : p<0.50?1 : p<0.65?2 : p<0.80?3 : p<0.90?4 : 5;
 }
 // Human-facing posted line: payout odds (~1/P) + a read on the house's stance.
-function houseLineLabel(i, axis){
-  const p=houseP(i, axis);
+function houseLineLabel(i, axis, modality){
+  const p=houseP(i, axis, modality);
   const odds=Math.max(1, Math.round((1/Math.max(0.08,p))*10)/10);
   const read=p>=0.85?'KNOWS YOU KNOW':p>=0.65?'EXPECTS A HIT':p>=0.45?'TOSS-UP':p>=0.30?'DOUBTS YOU':'BETS YOU MISS';
   return {odds:odds, read:read, p:p};
@@ -9652,7 +9677,7 @@ const Scheduler = {
   // (forgetting pulls retrievability toward a recognition guess floor). This is the
   // "house line" the wager will eventually be posted from, and the signal frontier-
   // seeking selection ranks on. Range clamped to (0.02, 0.98).
-  _pCorrect(ci, axis) {
+  _pCorrect(ci, axis, modality) {
     if (!ci || !ci.exp) return 0.5;
     const stage = this._getAxisStage(ci, axis);
     const STAGE_PRIOR = [0.50, 0.66, 0.78, 0.87, 0.92, 0.95];
@@ -9673,6 +9698,13 @@ const Scheduler = {
       const r = Math.pow(2, -(seen - due) / stab);   // retrievability ∈ (0,1], one full interval overdue → 0.5
       const FLOOR = 0.30;                             // recognition floor (you can still guess)
       p = FLOOR + (p - FLOOR) * r;
+    }
+    // Modality difficulty (formal model): a harder ask lowers the expected P toward
+    // the guess floor, so the posted wager line drops and the correct call earns a
+    // bigger edge. Omitted modality → competence-only (selection/frontier use this).
+    if (modality && typeof modalityDiff === 'function') {
+      const d = modalityDiff(modality);
+      if (d > 0) { const FLOOR = 0.25; p = FLOOR + (p - FLOOR) * (1 - d); }
     }
     return Math.max(0.02, Math.min(0.98, p));
   },
