@@ -750,6 +750,14 @@ if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
 // Input: state snapshot. Output: {type, idx, axis, modality, reason}
 // Every scheduling decision is traceable and testable.
 
+// Working-set governor knobs (§8-bis). Live-tunable (let) so the SIM can sweep
+// them without a rebuild. ACQUIRED_STAGE = the meaning-stage at which a word stops
+// counting as active acquisition load (consolidated); ACQUISITION_CAP = the bound
+// on simultaneously-in-acquisition atoms (working-memory limit).
+let ACQUIRED_STAGE = 1;   // a word counts as active load until meaning-stage 1 (recognized once); stage 2 is consolidation-rate-bound (~12/80) — too slow
+let ACQUISITION_CAP = 6;
+try{ window.setAcqKnobs=function(cap,stage){ if(cap!=null)ACQUISITION_CAP=cap; if(stage!=null)ACQUIRED_STAGE=stage; return {ACQUISITION_CAP,ACQUIRED_STAGE}; }; }catch(e){}
+
 const Scheduler = {
 
   // ─── Primary entry point ─────────────────────────────────────────────────
@@ -1014,24 +1022,19 @@ const Scheduler = {
 
   _shouldIntroduce(S, D, studyCardCount, modalityFilter) {
     if (modalityFilter) return false;
-    // Introduction is governed by the WORKING SET, not a fixed card-count cadence
-    // (ACQUISITION_MODEL §8-bis; breadth-first-to-context). The old
-    // `studyCardCount % 6` throttle capped intros at 1 per 6 cards regardless of how
-    // fast the learner graduated words, so a learner who answered correctly was stuck
-    // drilling 2-3 words instead of expanding. Drive it by brandNew (un-encoded words
-    // still in flight): new vocab flows as fast as the learner consolidates, and pauses
-    // to consolidate when they fall behind. BRAND_NEW_CAP is the desirable-difficulty
-    // knob (working-memory bound on simultaneously-new words).
-    const BRAND_NEW_CAP = 3;
-    const ROTATION_CEILING = 16;
-    const brandNew = D.filter((_, i) => {
+    // Working set = atoms still being ACQUIRED (§8-bis): introduced but meaning-stage
+    // below ACQUIRED_STAGE. This is STAGE-based, not the old 1-answer graduation bar —
+    // a word answered once is still stage 0-1 and still occupies working memory, so it
+    // must count as load. (The old brandNew/inRotation pair both keyed on the 1-answer
+    // bar, so they measured "introduced-but-never-answered", not real acquisition load,
+    // and were the same set — one binding cap.) Selection prioritizes this same set so
+    // it consolidates fast (see _pickFromPools), so a truer measure doesn't just stall.
+    const inAcquisition = D.filter((_, i) => {
       const ci = S.cards[i];
       if (!ci || !ci.exp) return false;
-      return !this._isGraduatedEff(S, i);
+      return this._getAxisStage(ci, 'meaning') < ACQUIRED_STAGE;
     }).length;
-    if (brandNew >= BRAND_NEW_CAP) return false;
-    const inRotation = D.filter((_, i) => this._isUnlocked(S, i) && !this._isGraduatedEff(S, i)).length;
-    return inRotation < ROTATION_CEILING;
+    return inAcquisition < ACQUISITION_CAP;
   },
 
   _nextWordToIntroduce(S, D) {
@@ -1144,9 +1147,14 @@ const Scheduler = {
     // brand-new cap. A persistent per-card stamp is window-independent: never-shown
     // (stamp 0) and oldest cards sort first. Grammar is disabled from this rotation.
     const lastSeen = idx => (S.cards[idx] && S.cards[idx]._lastSeenAt) || 0;
+    // Prioritize atoms still in ACQUISITION (meaning-stage < ACQUIRED_STAGE) so they
+    // consolidate fast and free the frontier; consolidated words fall back to the
+    // least-recently-seen rotation. (Without this, a stage-based load measure just
+    // throttles harder — the new words wait behind perpetually-due mastered ones.)
+    const acqRank = idx => { const ci = S.cards[idx]; return (ci && ci.exp > 0 && this._getAxisStage(ci,'meaning') < ACQUIRED_STAGE) ? 0 : 1; };
     const vocabItems = items.filter(it => it.type === 'vocab');
     if (vocabItems.length) {
-      const pick = vocabItems.slice().sort((a, b) => lastSeen(a.idx) - lastSeen(b.idx))[0];
+      const pick = vocabItems.slice().sort((a, b) => (acqRank(a.idx) - acqRank(b.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)))[0];
       return { type: 'vocab', idx: pick.idx };
     }
 
