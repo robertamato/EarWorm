@@ -9085,6 +9085,52 @@ function renderColdVsLive(){
   var cb=document.getElementById('coldLiveClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
 }
 if($('debugColdLive')) $('debugColdLive').onclick=renderColdVsLive;
+// Card browser: the full rank-ordered ranking 0→N with per-card scheduler state
+// and the INTRODUCTION GATE diagnostic (why the frontier is/isn't advancing).
+function renderCardBrowser(){
+  var ov=document.getElementById('cardBrowserOverlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='cardBrowserOverlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;background:#0b0e0c;color:#cfe9dd;font-family:monospace;overflow:hidden;';
+    document.body.appendChild(ov); }
+  ov.style.display='flex';
+  var fr=(typeof frontier==='function')?frontier():0, CAP=3, CEIL=16;
+  var grad=function(i){ try{ return Scheduler._isGraduated(S.cards[i]||{}); }catch(e){ return false; } };
+  var brandNew=0, blockers=[];
+  for(var i=0;i<D.length;i++){ var ci=S.cards[i]; if(ci&&ci.exp>0&&!grad(i)){ brandNew++; blockers.push(D[i][0]); } }
+  var canIntro=brandNew<CAP && brandNew<CEIL;
+  var nextIdx=-1; for(var j=0;j<D.length;j++){ if(!(S.cards[j]&&S.cards[j].exp>0)){ nextIdx=j; break; } }
+  var MMAX=(typeof MASTERY_MAX!=='undefined')?MASTERY_MAX:4;
+  var head='<div style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.15);display:flex;gap:10px;align-items:center;flex-wrap:wrap;flex-shrink:0;">'
+    +'<button class="btn" id="cardBrowserClose" style="width:auto;font-size:10px;padding:5px 12px;">◄ BACK</button>'
+    +'<span style="font-size:11px;letter-spacing:1px;">CARD RANKING 0→N</span>'
+    +'<span style="font-size:10px;opacity:.85;">FRONTIER '+fr+' · brand-new <b style="color:'+(brandNew>=CAP?'#ff6b6b':'#9fd')+'">'+brandNew+'/'+CAP+'</b>'
+    +' · introduce: '+(canIntro?'<span style="color:#6f6">YES</span>':'<span style="color:#ff6b6b">NO — cap hit</span>')
+    +(nextIdx>=0?' · next: '+D[nextIdx][0]+' #'+(nextIdx+1):'')+'</span></div>';
+  if(brandNew>=CAP && blockers.length) head+='<div style="padding:5px 14px;font-size:10px;color:#ffb84d;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;">⚠ introduction blocked — these are seen but not graduated (show/answer them to advance): '+blockers.join(' ')+'</div>';
+  var upto=Math.min(D.length, Math.max(fr+12, 22));
+  var body='<div style="flex:1;overflow-y:auto;padding:6px 12px;font-size:11px;line-height:1.55;">';
+  for(var i=0;i<upto;i++){
+    var ci=S.cards[i]||{}, seen=!!ci.seen, g=grad(i);
+    var m=(typeof masteryScore==='function')?masteryScore(i):(ci.m||0);
+    var stg=(typeof getAxisStage==='function')?getAxisStage(i,'meaning'):((ci.axisStage||{}).meaning||0);
+    var tag,col;
+    if(!seen){ tag='fog'; col='#566'; }
+    else if(!g){ tag='● BLOCKER'; col='#ffb84d'; }
+    else if(m>=MMAX){ tag='mastered'; col='#7dffc0'; }
+    else { tag='learning'; col='#9fd'; }
+    var ls=(ci._lastSeenAt?('seen@'+ci._lastSeenAt):'');
+    body+='<div style="display:flex;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04);'+(i===fr?'border-top:2px solid #4dffa0;':'')+'">'
+      +'<span style="width:34px;opacity:.5;flex-shrink:0;">#'+(i+1)+'</span>'
+      +'<span style="width:26px;flex-shrink:0;font-size:14px;color:'+(seen?'#eafff4':'#566')+'">'+D[i][0]+'</span>'
+      +'<span style="width:74px;flex-shrink:0;color:'+col+'">'+tag+'</span>'
+      +'<span style="opacity:.82;">'+(seen?('exp'+(ci.exp||0)+' m'+(Math.round(m*10)/10)+' stg'+stg+(g?' GRAD':' —')+' '+ls):D[i][2])+'</span>'
+      +'</div>';
+  }
+  body+='</div>';
+  ov.innerHTML=head+body;
+  var cb=document.getElementById('cardBrowserClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
+}
+if($('debugCardBrowser')) $('debugCardBrowser').onclick=renderCardBrowser;
 // Cutover toggle: flip whether the cold engine drives graduation/selection.
 function updateColdCutoverBtn(){ var b=document.getElementById('debugColdCutover'); if(b) b.textContent='⇄ COLD CUTOVER: '+((typeof S!=='undefined'&&S.coldCutover)?'ON':'OFF'); }
 if($('debugColdCutover')) $('debugColdCutover').onclick=function(){
