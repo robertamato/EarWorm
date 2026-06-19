@@ -635,6 +635,43 @@ function demandPullNextWord(nextSpine){
   return bestGain>0?best:-1;
 }
 
+// ── Generativity-biased introduction (escape the scaffold valley) ──────────
+// Strict-rank introduction front-loads function words (Zipf's top is dominated
+// by particles/pronouns that are useless in isolation) and defers the first
+// self-standing predicate, so the learner accumulates atoms that unlock NO
+// comprehensible context (measured: at frontier 14, 2 of 121 bank sentences are
+// legal). This biases the next introduction toward the atom — within a bounded
+// rank window, so it stays Zipf-honest — that makes the MOST currently-blocked
+// bank sentences comprehensible. It's the §8-ter cheap-unlock / set-cover greedy:
+// language-agnostic (sentence-bank driven), and it naturally pulls a predicate
+// forward to cross M1. Returns an atom index, or -1 to fall back to pure rank.
+var INTRO_WINDOW=24;  // stay within this many ranks of the frontier
+function introUnlockBias(S, D){
+  try{
+    function intro(i){ return !!(S.cards[i] && S.cards[i].exp>0); }
+    var cand=[]; for(var i=0;i<D.length && cand.length<INTRO_WINDOW;i++){ if(!intro(i)) cand.push(i); }
+    if(cand.length<=1) return -1;
+    var bank=[], bseen={};
+    if(typeof EXAMPLE_SENTENCES!=='undefined') for(var k in EXAMPLE_SENTENCES){ (EXAMPLE_SENTENCES[k]||[]).forEach(function(s){ if(s&&s[0]) bank.push(s[0]); }); }
+    if(typeof _sentenceCache!=='undefined') for(var k2 in _sentenceCache){ (_sentenceCache[k2]||[]).forEach(function(s){ if(s&&s[0]) bank.push(s[0]); }); }
+    var CJK=/[一-鿿]/, marg={}, mass={};
+    bank.forEach(function(zh){
+      if(bseen[zh]) return; bseen[zh]=1;
+      var present=[], coveredChars={};
+      for(var j=0;j<D.length;j++){ var w=D[j][0]; if(zh.indexOf(w)>=0){ present.push(j); for(var c=0;c<w.length;c++) coveredChars[w[c]]=1; } }
+      for(var p=0;p<zh.length;p++){ var ch=zh[p]; if(CJK.test(ch)&&!coveredChars[ch]) return; } // unreachable (untaught content) — skip
+      var gaps=present.filter(function(j){ return !intro(j); });
+      if(!gaps.length) return;                                   // already legal
+      gaps.forEach(function(g){ mass[g]=(mass[g]||0)+1; });
+      if(gaps.length===1) marg[gaps[0]]=(marg[gaps[0]]||0)+1;     // sole gap → introducing it makes the sentence legal NOW
+    });
+    var best=-1, bestScore=0;
+    cand.forEach(function(i){ var sc=(marg[i]||0)*100+(mass[i]||0); if(sc>bestScore){ bestScore=sc; best=i; } });
+    return bestScore>0 ? best : -1;
+  }catch(e){ return -1; }
+}
+try{ window.introUnlockBias=introUnlockBias; }catch(e){}
+
 function nextWordToIntroduce(){
   // User-added words take immediate priority over the core frontier.
   if(S.userWordQueue&&S.userWordQueue.length){

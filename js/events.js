@@ -876,6 +876,13 @@ const Scheduler = {
         if (D[wi] && !this._isUnlocked(S, wi)) return wi;
       }
     }
+    // Generativity bias: within a bounded rank window, prefer the un-introduced
+    // atom that unlocks the most comprehensible sentences (crosses milestones,
+    // escapes the scaffold valley). Falls back to pure rank when nothing unlocks.
+    if (typeof introUnlockBias === 'function') {
+      const biased = introUnlockBias(S, D);
+      if (biased >= 0) return biased;
+    }
     for (let i = 0; i < D.length; i++) {
       if (!this._isUnlocked(S, i)) return i;
     }
