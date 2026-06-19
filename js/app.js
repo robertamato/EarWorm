@@ -4176,18 +4176,21 @@ function showStudyMC(i, reverse, showPosHint){
   if($('studyDontKnow')) $('studyDontKnow').disabled=false;
   $('studyMCRank').textContent=cardRankStr(i);
   cardShownAtMC=Date.now();
-  // Wire inline wager controls
-  currentMultIdx=Math.max(0,naturalMultIdx());
-  defaultMultIdx=currentMultIdx;
+  // Wire inline wager controls — anchored to the HOUSE LINE (model P_algo via
+  // Scheduler._pCorrect), NOT the streak. uplift = bet - line = Δ(P_user, P_algo).
+  const _line=houseLineLabel(i,'meaning');
+  defaultMultIdx=houseLineIdx(i,'meaning');
+  currentMultIdx=defaultMultIdx;
   wagerTouched=false;
   const sml=document.getElementById('studyMultLabel');
-  if(sml) sml.textContent=MULT_STEPS[currentMultIdx]+'x';
+  const fmtWager=()=>{ const d=currentMultIdx-defaultMultIdx; const tag=d>0?' ▲':d<0?' ▼':''; return MULT_STEPS[currentMultIdx]+'x'+tag+'  ·  HOUSE '+_line.read+' '+_line.odds+':1'; };
+  if(sml) sml.textContent=fmtWager();
   const swd=document.getElementById('studyWagerDown');
   const swu=document.getElementById('studyWagerUp');
   if(swd){ swd.style.borderColor=fg; swd.style.color=fg;
-    swd.onclick=(e)=>{ e.stopPropagation(); currentMultIdx=Math.max(0,currentMultIdx-1); wagerTouched=true; if(sml) sml.textContent=MULT_STEPS[currentMultIdx]+'x'; }; }
+    swd.onclick=(e)=>{ e.stopPropagation(); currentMultIdx=Math.max(0,currentMultIdx-1); wagerTouched=true; if(sml) sml.textContent=fmtWager(); }; }
   if(swu){ swu.style.borderColor=fg; swu.style.color=fg;
-    swu.onclick=(e)=>{ e.stopPropagation(); currentMultIdx=Math.min(MULT_STEPS.length-1,currentMultIdx+1); wagerTouched=true; if(sml) sml.textContent=MULT_STEPS[currentMultIdx]+'x'; }; }
+    swu.onclick=(e)=>{ e.stopPropagation(); currentMultIdx=Math.min(MULT_STEPS.length-1,currentMultIdx+1); wagerTouched=true; if(sml) sml.textContent=fmtWager(); }; }
   const sModeEl=document.getElementById('studyMCModality');
   if(sModeEl){ sModeEl.textContent=reverse?'MEANING → CHARACTER':'CHARACTER → MEANING'; }
   $('studyXP').textContent='XP '+S.xp;
@@ -4273,7 +4276,7 @@ function pickStudyMC(btn,chosen,correct,i){
     mcCombo++;
     advanceMult();
     const mGain=(sConfident?1.2:sUnsure?0.6:1.0)*speedMult*(currentMultIdx>defaultMultIdx?1.1:1.0);
-    const xpGained=computeXP(true, currentMultIdx, responseMs)*(mcCombo>=5?2:1);
+    const xpGained=computeXP(true, currentMultIdx, responseMs, defaultMultIdx)*(mcCombo>=5?2:1);
     S.xp+=Math.round(xpGained*fatigueXPMultiplier());
     addMastery(i,Math.min(2.0,mGain)); rate(i,3);
     if($('studyMCExplain')) $('studyMCExplain').textContent='';
@@ -5718,6 +5721,35 @@ function naturalMultIdx(){
   return 0;
 }
 
+// ── HOUSE LINE (wager re-anchor) ──────────────────────────────────────────
+// The wager is a calibration market. The house posts a LINE = the model's
+// confidence P_algo that the user knows this card-axis (Scheduler._pCorrect).
+// defaultMultIdx is anchored to this line — NOT the streak — so
+// uplift = currentMultIdx - defaultMultIdx = Δ(P_user, P_algo), the quantity the
+// meta-game measures. (Scheduler is concatenated after this file; these are only
+// CALLED at runtime, by which point it exists — guarded regardless.)
+function houseP(i, axis){
+  try{
+    if(typeof Scheduler!=='undefined' && Scheduler._pCorrect)
+      return Scheduler._pCorrect(card(i), axis||'meaning');
+  }catch(e){}
+  return 0.5;
+}
+// P_algo → MULT_STEPS index. The default bet rises WITH the house's confidence
+// (high P → high default), so betting ABOVE the line = "I'm surer than the house."
+// A low line on a card you actually know is the edge to press. P≈0.5 sits mid-slider.
+function houseLineIdx(i, axis){
+  const p=houseP(i, axis);
+  return p<0.35?0 : p<0.50?1 : p<0.65?2 : p<0.80?3 : p<0.90?4 : 5;
+}
+// Human-facing posted line: payout odds (~1/P) + a read on the house's stance.
+function houseLineLabel(i, axis){
+  const p=houseP(i, axis);
+  const odds=Math.max(1, Math.round((1/Math.max(0.08,p))*10)/10);
+  const read=p>=0.85?'KNOWS YOU KNOW':p>=0.65?'EXPECTS A HIT':p>=0.45?'TOSS-UP':p>=0.30?'DOUBTS YOU':'BETS YOU MISS';
+  return {odds:odds, read:read, p:p};
+}
+
 function resetMult(){
   S.multStreak=0;
   S.mult=MULT_STEPS[0];
@@ -5734,12 +5766,17 @@ function advanceMult(){
   save();
 }
 
-function computeXP(isCorrect, wagerIdx, responseMs){
+function computeXP(isCorrect, wagerIdx, responseMs, defIdx){
   const base=MULT_BASE_XP;
   if(!isCorrect) return 0;
   const mult=MULT_STEPS[wagerIdx];
   const speedBonus=responseMs<1500?1.3:responseMs<4000?1.0:0.8;
-  return Math.round(base*mult*speedBonus);
+  // Proper-scoring-rule flavor: you're paid for INFORMATION — beating the house
+  // line — not the raw stake. Two equal bets pay very differently if one defied a
+  // low line. defIdx omitted (legacy callers) → no edge bonus, identical to before.
+  const edge=(defIdx==null)?0:Math.max(0, wagerIdx-defIdx);
+  const edgeBonus=1+edge*0.5;
+  return Math.round(base*mult*edgeBonus*speedBonus);
 }
 
 function recordWagerDecision(i, isCorrect, wagerIdx, defIdx, responseMs){
@@ -5760,7 +5797,8 @@ function renderWagerControl(containerId, cardIdx){
   if(!el) return;
   const fg=getComputedStyle(document.body).color;
 
-  defaultMultIdx=Math.max(0,naturalMultIdx());
+  const _line=(cardIdx!=null)?houseLineLabel(cardIdx,'meaning'):null;
+  defaultMultIdx=(cardIdx!=null)?houseLineIdx(cardIdx,'meaning'):Math.max(0,naturalMultIdx());
   currentMultIdx=defaultMultIdx;
   wagerTouched=false;
   studyConfidence=null;
@@ -5790,7 +5828,7 @@ function renderWagerControl(containerId, cardIdx){
     const pct=(currentMultIdx/n)*100;
     fill.style.width=pct+'%';
     thumb.style.left=pct+'%';
-    multLabel.textContent=MULT_STEPS[currentMultIdx]+'x';
+    multLabel.textContent=MULT_STEPS[currentMultIdx]+'x'+(_line?'  · '+_line.read+' '+_line.odds+':1':'');
     const col=currentMultIdx>defaultMultIdx?'hsl(30,90%,60%)':
                currentMultIdx<defaultMultIdx?'hsl(200,70%,65%)':fg;
     multLabel.style.color=col;

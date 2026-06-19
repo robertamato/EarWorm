@@ -956,18 +956,21 @@ function showStudyMC(i, reverse, showPosHint){
   if($('studyDontKnow')) $('studyDontKnow').disabled=false;
   $('studyMCRank').textContent=cardRankStr(i);
   cardShownAtMC=Date.now();
-  // Wire inline wager controls
-  currentMultIdx=Math.max(0,naturalMultIdx());
-  defaultMultIdx=currentMultIdx;
+  // Wire inline wager controls — anchored to the HOUSE LINE (model P_algo via
+  // Scheduler._pCorrect), NOT the streak. uplift = bet - line = Δ(P_user, P_algo).
+  const _line=houseLineLabel(i,'meaning');
+  defaultMultIdx=houseLineIdx(i,'meaning');
+  currentMultIdx=defaultMultIdx;
   wagerTouched=false;
   const sml=document.getElementById('studyMultLabel');
-  if(sml) sml.textContent=MULT_STEPS[currentMultIdx]+'x';
+  const fmtWager=()=>{ const d=currentMultIdx-defaultMultIdx; const tag=d>0?' ▲':d<0?' ▼':''; return MULT_STEPS[currentMultIdx]+'x'+tag+'  ·  HOUSE '+_line.read+' '+_line.odds+':1'; };
+  if(sml) sml.textContent=fmtWager();
   const swd=document.getElementById('studyWagerDown');
   const swu=document.getElementById('studyWagerUp');
   if(swd){ swd.style.borderColor=fg; swd.style.color=fg;
-    swd.onclick=(e)=>{ e.stopPropagation(); currentMultIdx=Math.max(0,currentMultIdx-1); wagerTouched=true; if(sml) sml.textContent=MULT_STEPS[currentMultIdx]+'x'; }; }
+    swd.onclick=(e)=>{ e.stopPropagation(); currentMultIdx=Math.max(0,currentMultIdx-1); wagerTouched=true; if(sml) sml.textContent=fmtWager(); }; }
   if(swu){ swu.style.borderColor=fg; swu.style.color=fg;
-    swu.onclick=(e)=>{ e.stopPropagation(); currentMultIdx=Math.min(MULT_STEPS.length-1,currentMultIdx+1); wagerTouched=true; if(sml) sml.textContent=MULT_STEPS[currentMultIdx]+'x'; }; }
+    swu.onclick=(e)=>{ e.stopPropagation(); currentMultIdx=Math.min(MULT_STEPS.length-1,currentMultIdx+1); wagerTouched=true; if(sml) sml.textContent=fmtWager(); }; }
   const sModeEl=document.getElementById('studyMCModality');
   if(sModeEl){ sModeEl.textContent=reverse?'MEANING → CHARACTER':'CHARACTER → MEANING'; }
   $('studyXP').textContent='XP '+S.xp;
@@ -1053,7 +1056,7 @@ function pickStudyMC(btn,chosen,correct,i){
     mcCombo++;
     advanceMult();
     const mGain=(sConfident?1.2:sUnsure?0.6:1.0)*speedMult*(currentMultIdx>defaultMultIdx?1.1:1.0);
-    const xpGained=computeXP(true, currentMultIdx, responseMs)*(mcCombo>=5?2:1);
+    const xpGained=computeXP(true, currentMultIdx, responseMs, defaultMultIdx)*(mcCombo>=5?2:1);
     S.xp+=Math.round(xpGained*fatigueXPMultiplier());
     addMastery(i,Math.min(2.0,mGain)); rate(i,3);
     if($('studyMCExplain')) $('studyMCExplain').textContent='';
