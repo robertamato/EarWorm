@@ -7543,11 +7543,17 @@ function generateSentencesForWord(i, onDone){
     }
   }
   var pinyinStr=ci[1].map(function(s){return s[0];}).join(' ');
-  var prompt='Generate 3 short Mandarin example sentences (5–10 characters each) for:\n'
-    +ch+' ('+pinyinStr+') — "'+ci[2]+'"\n\n'
-    +'HARD CONSTRAINT: use ONLY these CJK characters (none other): '+coveredArr.join('')+'\n\n'
-    +'Reply with ONLY a JSON array, no markdown, no explanation:\n'
-    +'[["Chinese","pinyin with tone marks","English gloss"],["...","...","..."],["...","...","..."]]';
+  var prompt='You are writing beginner Mandarin example sentences for a learner who knows ONLY these characters (most common first):\n'
+    +coveredArr.join('')+'\n\n'
+    +'Feature this target word: '+ch+' ('+pinyinStr+') — "'+ci[2]+'"\n\n'
+    +'Write 3 short, natural sentences:\n'
+    +'- HARD CONSTRAINT: use ONLY characters from the list above; never any other character.\n'
+    +'- Every sentence MUST contain '+ch+'.\n'
+    +'- 4–10 characters each; prefer the most common words and the simplest phrasing.\n'
+    +'- Vary the grammar across the three (e.g. a statement, a yes/no question, a negation) — not three of the same frame.\n'
+    +'- Each must be grammatical and something a beginner would really say.\n\n'
+    +'Reply with ONLY a JSON array, no markdown, no prose:\n'
+    +'[["汉字","pīnyīn with tone marks","English gloss"],["...","...","..."],["...","...","..."]]';
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{
