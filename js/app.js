@@ -9157,11 +9157,12 @@ function simulateSchedule(N, accuracy){
     var grad=function(i){ try{ return Scheduler._isGraduated(S.cards[i]||{}); }catch(e){ return false; } };
     var frontierNow=function(){ var f=0; for(var k=0;k<D.length;k++){ if(S.cards[k]&&S.cards[k].exp>0) f=k+1; } return f; };
     var brandNewNow=function(){ var n=0; for(var k=0;k<D.length;k++){ var c=S.cards[k]; if(c&&c.exp>0&&!grad(k)) n++; } return n; };
-    var simCount=0;
+    var simCount=0, simRing=[];
     for(var step=0; step<N; step++){
       var sess={ studyCardCount:simCount, studyFlashOnly:false, studyModalityFilter:null,
         studyPending:[], sessionGrammarAnswered:new Set(), studyEncounters:new Map(),
-        sessionRecentCards:[], sessionAnswerRing:[], nextQueueRebuildAt:0 };
+        sessionRecentCards:[], sessionAnswerRing:simRing.slice(), nextQueueRebuildAt:0 };
+      var effCap=(function(){ try{ return Scheduler._effectiveCap(sess); }catch(e){ return null; } })();
       var decision; try{ decision=Scheduler.next(S,D,sess); }catch(e){ trace.push({n:step+1,error:String(e)}); break; }
       if(!decision || decision.idx==null || decision.idx<0){ trace.push({n:step+1,end:true}); break; }
       var idx=decision.idx, isIntro=decision.type==='introduce';
@@ -9172,10 +9173,11 @@ function simulateSchedule(N, accuracy){
       var mod=isIntro?'flash':(function(){ try{ return Scheduler.modality(S,D,idx); }catch(e){ return 'mc-fwd'; } })();
       var stg=(typeof getAxisStage==='function')?getAxisStage(idx,'meaning'):((ci.axisStage||{}).meaning||0);
       if(isIntro) intros++;
+      var capTxt=(effCap==null)?'cap':('cap '+effCap+(simRing.length>=ACQ_ADAPT_MIN&&ACQ_ADAPT?'*':''));
       var reason= isIntro
-        ? ('introduce — frontier '+frB+'→'+(frB+1)+', brand-new '+bnB+'/3 (room)')
+        ? ('introduce — frontier '+frB+'→'+(frB+1)+', in-acq room ('+capTxt+')')
         : ('review · '+mod+' · '+(mod==='flash'?'not yet MC-ready':(stg===0?'first MC → graduates it':((mod==='cloze'||mod==='word-order')?'context (stg'+stg+')':'recall (stg'+stg+')'))));
-      trace.push({n:step+1, idx:idx, ch:D[idx][0], type:decision.type, mod:mod, stg:stg, frontier:frB, brandNew:bnB, reason:reason});
+      trace.push({n:step+1, idx:idx, ch:D[idx][0], type:decision.type, mod:mod, stg:stg, frontier:frB, brandNew:bnB, cap:effCap, reason:reason});
       ci._lastSeenAt=S.totalSeen;
       if(mod==='flash'){
         if(!(ci.exp>0)){ ci.exp=1; ci.seen=true; ci.axisDue=ci.axisDue||{};
@@ -9183,7 +9185,9 @@ function simulateSchedule(N, accuracy){
           ci.axisDue.pos=S.totalSeen+((typeof AXIS_STABILITY!=='undefined'&&AXIS_STABILITY.pos&&AXIS_STABILITY.pos[0])||5); }
       } else {
         var axis=(mod.indexOf('pos')===0)?'pos':'meaning';
-        try{ recordAxisResultNew(idx, axis, Math.random()<accuracy, 2500); }catch(e){}
+        var ok=Math.random()<accuracy;
+        try{ recordAxisResultNew(idx, axis, ok, 2500); }catch(e){}
+        simRing.push(ok); if(simRing.length>15) simRing.shift();   // mirror live sessionAnswerRing for adaptive C
       }
     }
     finalFrontier=frontierNow();
@@ -9329,8 +9333,10 @@ if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
 // counting as active acquisition load (consolidated); ACQUISITION_CAP = the bound
 // on simultaneously-in-acquisition atoms (working-memory limit).
 let ACQUIRED_STAGE = 1;   // a word counts as active load until meaning-stage 1 (recognized once); stage 2 is consolidation-rate-bound (~12/80) — too slow
-let ACQUISITION_CAP = 6;
-try{ window.setAcqKnobs=function(cap,stage){ if(cap!=null)ACQUISITION_CAP=cap; if(stage!=null)ACQUIRED_STAGE=stage; return {ACQUISITION_CAP,ACQUIRED_STAGE}; }; }catch(e){}
+let ACQUISITION_CAP = 6;  // BASELINE working-set cap; flexed by recent accuracy (adaptive C, §8-bis)
+let ACQ_ADAPT = true;     // accuracy-adaptive cap on/off
+let ACQ_CAP_MIN = 3, ACQ_CAP_MAX = 10, ACQ_ADAPT_MIN = 8;  // adaptive bounds + min recent answers before flexing
+try{ window.setAcqKnobs=function(cap,stage,adapt){ if(cap!=null)ACQUISITION_CAP=cap; if(stage!=null)ACQUIRED_STAGE=stage; if(adapt!=null)ACQ_ADAPT=!!adapt; return {ACQUISITION_CAP,ACQUIRED_STAGE,ACQ_ADAPT,ACQ_CAP_MIN,ACQ_CAP_MAX}; }; }catch(e){}
 
 const Scheduler = {
 
@@ -9361,7 +9367,7 @@ const Scheduler = {
     }
 
     // 4. New word introduction
-    if (this._shouldIntroduce(S, D, studyCardCount, studyModalityFilter)) {
+    if (this._shouldIntroduce(S, D, sessionState)) {
       const idx = this._nextWordToIntroduce(S, D);
       if (idx >= 0) return { type: 'introduce', idx, modality: 'flash', reason: 'new-word' };
     }
@@ -9594,8 +9600,24 @@ const Scheduler = {
     return !!(S.cards[i] && S.cards[i].exp > 0);
   },
 
-  _shouldIntroduce(S, D, studyCardCount, modalityFilter) {
-    if (modalityFilter) return false;
+  // Adaptive C (§8-bis): flex the working-set cap by recent accuracy. High
+  // recent accuracy → admit more parallel new atoms; struggling → fewer. The
+  // pace tracks the learner instead of a fixed constant. Throughput is still
+  // consolidation-rep-bound; this matches working-set SIZE to performance.
+  _effectiveCap(sessionState) {
+    if (!ACQ_ADAPT) return ACQUISITION_CAP;
+    const ring = (sessionState && sessionState.sessionAnswerRing) || [];
+    if (ring.length < ACQ_ADAPT_MIN) return ACQUISITION_CAP;
+    const acc = ring.reduce((s, b) => s + (b ? 1 : 0), 0) / ring.length;
+    const adj = acc >= 0.90 ?  2 :
+                acc >= 0.75 ?  1 :
+                acc >= 0.60 ?  0 :
+                acc >= 0.45 ? -1 : -2;
+    return Math.max(ACQ_CAP_MIN, Math.min(ACQ_CAP_MAX, ACQUISITION_CAP + adj));
+  },
+
+  _shouldIntroduce(S, D, sessionState) {
+    if (sessionState && sessionState.studyModalityFilter) return false;
     // Working set = atoms still being ACQUIRED (§8-bis): introduced but meaning-stage
     // below ACQUIRED_STAGE. This is STAGE-based, not the old 1-answer graduation bar —
     // a word answered once is still stage 0-1 and still occupies working memory, so it
@@ -9608,7 +9630,7 @@ const Scheduler = {
       if (!ci || !ci.exp) return false;
       return this._getAxisStage(ci, 'meaning') < ACQUIRED_STAGE;
     }).length;
-    return inAcquisition < ACQUISITION_CAP;
+    return inAcquisition < this._effectiveCap(sessionState);
   },
 
   _nextWordToIntroduce(S, D) {
