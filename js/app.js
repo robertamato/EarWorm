@@ -4031,7 +4031,7 @@ function showStudyFlash(i){
       const backMs=Date.now()-flashFlippedAt;
       recordFlashcardFlip(i, frontMs, backMs);
       S.xp+=Math.round(10*fatigueXPMultiplier()); save();
-      $('studyXP').textContent='XP '+S.xp;
+      $('studyXP').textContent=studyHudText();
       $('studyCard').onclick=null;
       nextStudyCard();
     }
@@ -4178,6 +4178,7 @@ function showStudyMC(i, reverse, showPosHint){
   cardShownAtMC=Date.now();
   // Wire inline wager controls — anchored to the HOUSE LINE (model P_algo via
   // Scheduler._pCorrect), NOT the streak. uplift = bet - line = Δ(P_user, P_algo).
+  ensureBankrollDay();
   const _line=houseLineLabel(i,'meaning');
   defaultMultIdx=houseLineIdx(i,'meaning');
   currentMultIdx=defaultMultIdx;
@@ -4193,7 +4194,7 @@ function showStudyMC(i, reverse, showPosHint){
     swu.onclick=(e)=>{ e.stopPropagation(); currentMultIdx=Math.min(MULT_STEPS.length-1,currentMultIdx+1); wagerTouched=true; if(sml) sml.textContent=fmtWager(); }; }
   const sModeEl=document.getElementById('studyMCModality');
   if(sModeEl){ sModeEl.textContent=reverse?'MEANING → CHARACTER':'CHARACTER → MEANING'; }
-  $('studyXP').textContent='XP '+S.xp;
+  $('studyXP').textContent=studyHudText();
 
   // Wager bar — always present on MC
   studyDontKnowAction=()=>{
@@ -4277,12 +4278,15 @@ function pickStudyMC(btn,chosen,correct,i){
     advanceMult();
     const mGain=(sConfident?1.2:sUnsure?0.6:1.0)*speedMult*(currentMultIdx>defaultMultIdx?1.1:1.0);
     const xpGained=computeXP(true, currentMultIdx, responseMs, defaultMultIdx)*(mcCombo>=5?2:1);
-    S.xp+=Math.round(xpGained*fatigueXPMultiplier());
+    const _won=Math.round(xpGained*fatigueXPMultiplier());
+    S.xp+=_won;
+    if(!isBusted()){ S.chips=settleWager(S.chips||0,currentMultIdx,defaultMultIdx,true,_won).chips; }
     addMastery(i,Math.min(2.0,mGain)); rate(i,3);
     if($('studyMCExplain')) $('studyMCExplain').textContent='';
   } else {
     mcCombo=0;
     resetMult();
+    if(!isBusted()){ S.chips=settleWager(S.chips||0,currentMultIdx,defaultMultIdx,false,0).chips; if((S.chips||0)<=0) S.busted=true; }
     // Overconfident wrong (high wager, fast) = bigger loss
     const mLoss2=(sConfident?-0.8:sUnsure?-0.2:-0.5)*wagerMult*(speedMult>1.0?1.2:1.0);
     addMastery(i,Math.max(-1.5,mLoss2)); rate(i,1); studyPending.push(i);
@@ -4306,7 +4310,7 @@ function pickStudyMC(btn,chosen,correct,i){
     }
   }
   save();
-  $('studyXP').textContent='XP '+S.xp;
+  $('studyXP').textContent=studyHudText();
 
   // Arm tap immediately — don't wait for TTS to finish
   armTapAdvance($('studyMC'),()=>nextStudyCard(),isCorrect?0:1200);
@@ -5403,7 +5407,7 @@ function showStudyColl(cardI){
       if(S.sound!=='mute') speak(expr,activeCourse().langCode);
     } else {
       S.xp+=Math.round(15*fatigueXPMultiplier()); save();
-      $('studyXP').textContent='XP '+S.xp;
+      $('studyXP').textContent=studyHudText();
       $('studyCollCard').onclick=null;
       nextStudyCard();
     }
@@ -5778,6 +5782,31 @@ function computeXP(isCorrect, wagerIdx, responseMs, defIdx){
   const edgeBonus=1+edge*0.5;
   return Math.round(base*mult*edgeBonus*speedBonus);
 }
+
+// ── CHIP BANKROLL (losable stakes) ────────────────────────────────────────
+// A wager you can't lose is hollow. Chips are a DAILY, forfeitable bankroll: win
+// the edge-weighted payout on a correct call, forfeit the stake on a wrong one.
+// Stake scales as you bet ABOVE the line, so pressing an edge risks more. Bust
+// (chips→0) is a clean EVENT: the META-GAME pauses for the day — study is NEVER
+// blocked (the dose/coupling tests forbid locking out learning) — and a fresh
+// stack arrives tomorrow. Going negative (credit line) is a deferred top-tier opt-in.
+const BANKROLL_BASE=200;   // fresh daily stack
+const BET_UNIT=20;         // chips risked at the line; scales up as you bet above it
+function ensureBankrollDay(){
+  const today=new Date().toDateString();
+  if(S.chipsDay!==today){ S.chipsDay=today; S.chips=BANKROLL_BASE; S.busted=false; save(); }
+}
+function wagerStake(){ return BET_UNIT*(1+Math.max(0,currentMultIdx-defaultMultIdx)); }
+function isBusted(){ ensureBankrollDay(); return !!S.busted || (S.chips||0)<=0; }
+// Pure settle (unit-testable): new chips + event given outcome and base payout.
+function settleWager(chips, wagerIdx, lineIdx, isCorrect, payout){
+  const stake=BET_UNIT*(1+Math.max(0,wagerIdx-lineIdx));
+  if(isCorrect) return {chips:chips+payout, delta:payout, stake:stake, busted:false, won:true};
+  const nc=Math.max(0,chips-stake);
+  return {chips:nc, delta:-(chips-nc), stake:stake, busted:nc<=0, won:false};
+}
+// Study HUD: lifetime XP (never lost) + the daily chip bankroll (losable).
+function studyHudText(){ return 'XP '+S.xp+'   ♦ '+(S.chips||0)+(S.busted?' · BUST':''); }
 
 function recordWagerDecision(i, isCorrect, wagerIdx, defIdx, responseMs){
   const ci=card(i);

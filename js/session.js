@@ -811,7 +811,7 @@ function showStudyFlash(i){
       const backMs=Date.now()-flashFlippedAt;
       recordFlashcardFlip(i, frontMs, backMs);
       S.xp+=Math.round(10*fatigueXPMultiplier()); save();
-      $('studyXP').textContent='XP '+S.xp;
+      $('studyXP').textContent=studyHudText();
       $('studyCard').onclick=null;
       nextStudyCard();
     }
@@ -958,6 +958,7 @@ function showStudyMC(i, reverse, showPosHint){
   cardShownAtMC=Date.now();
   // Wire inline wager controls — anchored to the HOUSE LINE (model P_algo via
   // Scheduler._pCorrect), NOT the streak. uplift = bet - line = Δ(P_user, P_algo).
+  ensureBankrollDay();
   const _line=houseLineLabel(i,'meaning');
   defaultMultIdx=houseLineIdx(i,'meaning');
   currentMultIdx=defaultMultIdx;
@@ -973,7 +974,7 @@ function showStudyMC(i, reverse, showPosHint){
     swu.onclick=(e)=>{ e.stopPropagation(); currentMultIdx=Math.min(MULT_STEPS.length-1,currentMultIdx+1); wagerTouched=true; if(sml) sml.textContent=fmtWager(); }; }
   const sModeEl=document.getElementById('studyMCModality');
   if(sModeEl){ sModeEl.textContent=reverse?'MEANING → CHARACTER':'CHARACTER → MEANING'; }
-  $('studyXP').textContent='XP '+S.xp;
+  $('studyXP').textContent=studyHudText();
 
   // Wager bar — always present on MC
   studyDontKnowAction=()=>{
@@ -1057,12 +1058,15 @@ function pickStudyMC(btn,chosen,correct,i){
     advanceMult();
     const mGain=(sConfident?1.2:sUnsure?0.6:1.0)*speedMult*(currentMultIdx>defaultMultIdx?1.1:1.0);
     const xpGained=computeXP(true, currentMultIdx, responseMs, defaultMultIdx)*(mcCombo>=5?2:1);
-    S.xp+=Math.round(xpGained*fatigueXPMultiplier());
+    const _won=Math.round(xpGained*fatigueXPMultiplier());
+    S.xp+=_won;
+    if(!isBusted()){ S.chips=settleWager(S.chips||0,currentMultIdx,defaultMultIdx,true,_won).chips; }
     addMastery(i,Math.min(2.0,mGain)); rate(i,3);
     if($('studyMCExplain')) $('studyMCExplain').textContent='';
   } else {
     mcCombo=0;
     resetMult();
+    if(!isBusted()){ S.chips=settleWager(S.chips||0,currentMultIdx,defaultMultIdx,false,0).chips; if((S.chips||0)<=0) S.busted=true; }
     // Overconfident wrong (high wager, fast) = bigger loss
     const mLoss2=(sConfident?-0.8:sUnsure?-0.2:-0.5)*wagerMult*(speedMult>1.0?1.2:1.0);
     addMastery(i,Math.max(-1.5,mLoss2)); rate(i,1); studyPending.push(i);
@@ -1086,7 +1090,7 @@ function pickStudyMC(btn,chosen,correct,i){
     }
   }
   save();
-  $('studyXP').textContent='XP '+S.xp;
+  $('studyXP').textContent=studyHudText();
 
   // Arm tap immediately — don't wait for TTS to finish
   armTapAdvance($('studyMC'),()=>nextStudyCard(),isCorrect?0:1200);
@@ -2183,7 +2187,7 @@ function showStudyColl(cardI){
       if(S.sound!=='mute') speak(expr,activeCourse().langCode);
     } else {
       S.xp+=Math.round(15*fatigueXPMultiplier()); save();
-      $('studyXP').textContent='XP '+S.xp;
+      $('studyXP').textContent=studyHudText();
       $('studyCollCard').onclick=null;
       nextStudyCard();
     }

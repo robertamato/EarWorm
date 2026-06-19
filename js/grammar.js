@@ -189,6 +189,31 @@ function computeXP(isCorrect, wagerIdx, responseMs, defIdx){
   return Math.round(base*mult*edgeBonus*speedBonus);
 }
 
+// ── CHIP BANKROLL (losable stakes) ────────────────────────────────────────
+// A wager you can't lose is hollow. Chips are a DAILY, forfeitable bankroll: win
+// the edge-weighted payout on a correct call, forfeit the stake on a wrong one.
+// Stake scales as you bet ABOVE the line, so pressing an edge risks more. Bust
+// (chips→0) is a clean EVENT: the META-GAME pauses for the day — study is NEVER
+// blocked (the dose/coupling tests forbid locking out learning) — and a fresh
+// stack arrives tomorrow. Going negative (credit line) is a deferred top-tier opt-in.
+const BANKROLL_BASE=200;   // fresh daily stack
+const BET_UNIT=20;         // chips risked at the line; scales up as you bet above it
+function ensureBankrollDay(){
+  const today=new Date().toDateString();
+  if(S.chipsDay!==today){ S.chipsDay=today; S.chips=BANKROLL_BASE; S.busted=false; save(); }
+}
+function wagerStake(){ return BET_UNIT*(1+Math.max(0,currentMultIdx-defaultMultIdx)); }
+function isBusted(){ ensureBankrollDay(); return !!S.busted || (S.chips||0)<=0; }
+// Pure settle (unit-testable): new chips + event given outcome and base payout.
+function settleWager(chips, wagerIdx, lineIdx, isCorrect, payout){
+  const stake=BET_UNIT*(1+Math.max(0,wagerIdx-lineIdx));
+  if(isCorrect) return {chips:chips+payout, delta:payout, stake:stake, busted:false, won:true};
+  const nc=Math.max(0,chips-stake);
+  return {chips:nc, delta:-(chips-nc), stake:stake, busted:nc<=0, won:false};
+}
+// Study HUD: lifetime XP (never lost) + the daily chip bankroll (losable).
+function studyHudText(){ return 'XP '+S.xp+'   ♦ '+(S.chips||0)+(S.busted?' · BUST':''); }
+
 function recordWagerDecision(i, isCorrect, wagerIdx, defIdx, responseMs){
   const ci=card(i);
   if(!ci.wagerLog) ci.wagerLog=[];
