@@ -424,6 +424,37 @@ questions / negate / talk about wanting") — far more motivating than a word co
 especially across the scaffold valley where the game layer must carry the most
 weight.
 
+### Status & scope — the deviation is gated, justification is per-language [2026-06-18]
+
+**The milestone-driven deviation from `rank` is a SPECTRUM, not a universal — and
+for Mandarin it is gated OFF (pure Zipf).** Measured on a real Mandarin session
+(frontier 14): the generativity bias would pull a predicate forward only ~2 ranks
+(那→来) because Mandarin is **isolating** — atoms are words, predicates surface
+near the top of `rank`, so the valley is shallow and Zipf crosses it on its own.
+Breaking the rank invariant for a 2-rank gain is not worth it. The `introUnlockBias`
+mechanism ships but is gated behind a per-course `introBias` flag (no course sets
+it); the Mandarin introduction path is pure `rank`.
+
+**What governs valley depth** (carry this abstraction forward — it predicts where
+the deviation earns its keep):
+- *Is there a comprehensible sub-word unit?* Isolating (Mandarin, Vietnamese) →
+  shallow. Polysynthetic (Navajo, Inuktitut) → **deepest** (no morpheme below the
+  verb-complex means anything; frequency over morphemes yields meaningless affixes).
+- *Zero-copula present predication?* Russian, Arabic-nominal, Mandarin-adjectives
+  reach M1 early → shallower than expected.
+- *Frequency fragmentation* (fusional: Spanish/Russian split a lemma across
+  inflections, sinking predicate ranks) → deeper, but top irregulars resist it →
+  **moderate, not extreme**.
+- *Obligatory bound morphology* (agglutinative: Turkish/Korean/Finnish) →
+  moderate-to-deep.
+
+So payoff scales with morphological synthesis + fragmentation, peaking at
+polysynthetic and ≈0 at isolating. **The meta-lesson:** do not justify a deviation
+from a clean invariant (`rank`) on its weakest instance; **measure valley depth per
+language first.** Re-evaluate this whole sub-theory deeply at the first non-isolating
+target — **Arabic** (Semitic, root-and-pattern: shallow nominal predication, deep
+verbal morphology) is the natural forcing function and first real measurement.
+
 ### Open / fit
 - `θ` (or `ε`); whether `G` weights *diversity* of grammatical frames over raw
   count (50 sentences all of frame "X 是 Y" are less generative than 20 across

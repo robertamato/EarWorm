@@ -648,6 +648,14 @@ function demandPullNextWord(nextSpine){
 var INTRO_WINDOW=24;  // stay within this many ranks of the frontier
 function introUnlockBias(S, D){
   try{
+    // GATED OFF by default — Mandarin emphasizes pure Zipf. It is isolating, so
+    // its scaffold valley is ~2 ranks deep and Zipf crosses it on its own; the
+    // deviation isn't worth breaking the rank invariant. The generativity bias is
+    // only justified where the valley is DEEP (agglutinative/polysynthetic, or via
+    // frequency fragmentation). A course opts in with `introBias:true`. Re-evaluate
+    // per language — measure valley depth first — before enabling (ACQUISITION_MODEL
+    // §8-ter). No active course sets the flag today.
+    if(!(typeof activeCourse==='function' && activeCourse() && activeCourse().introBias)) return -1;
     function intro(i){ return !!(S.cards[i] && S.cards[i].exp>0); }
     var cand=[]; for(var i=0;i<D.length && cand.length<INTRO_WINDOW;i++){ if(!intro(i)) cand.push(i); }
     if(cand.length<=1) return -1;
