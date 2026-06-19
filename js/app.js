@@ -1131,6 +1131,41 @@ function coldRecompute(now){
 }
 try{ window.coldRecompute=coldRecompute; window.dumpColdState=function(){return (typeof S!=='undefined'&&S.coldState)||null;}; }catch(e){}
 
+// ── Cutover validation instrument (shadow-mode, read-only) ──────────────
+// Compare the cold engine's verdict against the live engine's, per atom, so
+// the cutover (coldState → selection) can be a TRUSTED, deliberate flip and
+// not a flag-flip. The expected, healthy signal is "cold-stricter": the live
+// engine over-graduates on recall volume (isGraduated = 1 correct answer),
+// while the cold engine withholds graduation until the upper channels
+// (discrimination + incidental) show real contextual evidence. A cold-stricter
+// atom is one to eyeball during play: can the learner actually USE it in
+// context, or did the live engine graduate it on a single isolated recall?
+function coldVsLive(){
+  var cold=(typeof S!=='undefined'&&S.coldState&&S.coldState.atoms)||{};
+  var rows=[], agree=0, coldStricter=0, coldLooser=0, n=0;
+  for(var i=0;i<D.length;i++){
+    var ci=S.cards[i], seen=ci&&ci.seen, ca=cold[i]&&cold[i].meaning;
+    if(!seen && !ca) continue;
+    var liveGrad=(typeof isGraduated==='function')?isGraduated(i):false;
+    var liveM=(typeof masteryScore==='function')?masteryScore(i):((ci&&ci.m)||0);
+    var liveStage=(ci&&ci.axisStage&&ci.axisStage.meaning)||0;
+    var coldGrad=ca?!!ca.graduated:false;
+    var rel=(liveGrad===coldGrad)?'agree':(coldGrad?'cold-looser':'cold-stricter');
+    if(rel==='agree') agree++; else if(rel==='cold-stricter') coldStricter++; else coldLooser++;
+    n++;
+    rows.push({ i:i, ch:D[i][0], rel:rel,
+      live:{ grad:liveGrad, m:Math.round(liveM*10)/10, stage:liveStage },
+      cold: ca?{ n:ca.n, recall:ca.recall, discrim:ca.discrim, incid:ca.incid, grad:coldGrad, regime:ca.regime }
+              :{ n:0, recall:0, discrim:0, incid:0, grad:false, regime:'no-data' } });
+  }
+  var ord={ 'cold-stricter':0, 'cold-looser':1, 'agree':2 };
+  rows.sort(function(a,b){ return ord[a.rel]!==ord[b.rel] ? ord[a.rel]-ord[b.rel] : a.i-b.i; });
+  return { rows:rows, summary:{ compared:n, agree:agree, coldStricter:coldStricter, coldLooser:coldLooser,
+    agreePct:n?Math.round(agree/n*100):0, computedAt:(S.coldState&&S.coldState.computedAt)||0,
+    obsRecords:(typeof S!=='undefined'&&S.obsLog&&S.obsLog.length)||0 } };
+}
+try{ window.coldVsLive=coldVsLive; }catch(e){}
+
 // Axis stage gate: use accuracy window instead of consecutive-correct
 // Advance stage when accuracy >= threshold over last N attempts
 const AXIS_ADVANCE_ACCURACY=0.80; // 80% accuracy over window
@@ -8755,6 +8790,43 @@ if($('eligClose')) $('eligClose').onclick=()=>{ var el=document.getElementById('
 if($('eligFilterAll')) $('eligFilterAll').onclick=()=>{ _eligFilter='all'; renderEligibilityBrowser(); };
 if($('eligFilterRipe')) $('eligFilterRipe').onclick=()=>{ _eligFilter='ripe'; renderEligibilityBrowser(); };
 if($('eligFilterFresh')) $('eligFilterFresh').onclick=()=>{ _eligFilter='fresh'; renderEligibilityBrowser(); };
+// Cutover validation instrument: recompute the cold engine and render the
+// cold-vs-live divergence so the cutover can be a trusted, deliberate flip.
+function renderColdVsLive(){
+  try{ if(typeof coldRecompute==='function') coldRecompute(); }catch(e){}
+  var rep=(typeof coldVsLive==='function')?coldVsLive():null;
+  var ov=document.getElementById('coldLiveOverlay');
+  if(!ov){
+    ov=document.createElement('div'); ov.id='coldLiveOverlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;background:#0c0f0d;color:#cfe9dd;font-family:monospace;overflow:hidden;';
+    document.body.appendChild(ov);
+  }
+  ov.style.display='flex';
+  if(!rep){ ov.innerHTML='<div style="padding:16px">no cold state — play a session first</div>'; return; }
+  var s=rep.summary;
+  var html='<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.15);flex-wrap:wrap;flex-shrink:0;">'
+    +'<button class="btn" id="coldLiveClose" style="width:auto;font-size:10px;padding:5px 12px;">◄ BACK</button>'
+    +'<span style="font-size:11px;letter-spacing:1px;">COLD vs LIVE</span>'
+    +'<span style="font-size:10px;opacity:.75;">'+s.compared+' atoms · agree '+s.agreePct+'% · '
+    +'<span style="color:#ffb84d">live over-grad '+s.coldStricter+'</span> · '
+    +'<span style="color:#4dd8ff">cold-ahead '+s.coldLooser+'</span> · obs '+s.obsRecords+'</span></div>'
+    +'<div style="flex:1;overflow-y:auto;padding:8px 12px;font-size:11px;line-height:1.5;">';
+  if(!rep.rows.length){ html+='<div style="opacity:.6;padding:12px">no seen atoms with data yet — play a session.</div>'; }
+  rep.rows.forEach(function(r){
+    var col=r.rel==='cold-stricter'?'#ffb84d':r.rel==='cold-looser'?'#4dd8ff':'#7c8a82';
+    var tag=r.rel==='cold-stricter'?'LIVE OVER-GRAD':r.rel==='cold-looser'?'COLD AHEAD':'agree';
+    html+='<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05);">'
+      +'<span style="width:96px;flex-shrink:0;color:'+col+'">'+tag+'</span>'
+      +'<span style="width:30px;flex-shrink:0;font-size:14px;">'+r.ch+'</span>'
+      +'<span style="opacity:.85;flex-shrink:0;width:130px;">live '+(r.live.grad?'GRAD':'—')+' m'+r.live.m+' s'+r.live.stage+'</span>'
+      +'<span style="opacity:.6;">cold '+(r.cold.grad?'GRAD':'—')+' d'+r.cold.discrim+' i'+r.cold.incid+' n'+r.cold.n+'</span>'
+      +'</div>';
+  });
+  html+='</div>';
+  ov.innerHTML=html;
+  var cb=document.getElementById('coldLiveClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
+}
+if($('debugColdLive')) $('debugColdLive').onclick=renderColdVsLive;
 $('debugToggle').onclick=()=>{
   const dm=$('debugModes');
   const open=dm.style.display==='flex';

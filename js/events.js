@@ -480,6 +480,43 @@ if($('eligClose')) $('eligClose').onclick=()=>{ var el=document.getElementById('
 if($('eligFilterAll')) $('eligFilterAll').onclick=()=>{ _eligFilter='all'; renderEligibilityBrowser(); };
 if($('eligFilterRipe')) $('eligFilterRipe').onclick=()=>{ _eligFilter='ripe'; renderEligibilityBrowser(); };
 if($('eligFilterFresh')) $('eligFilterFresh').onclick=()=>{ _eligFilter='fresh'; renderEligibilityBrowser(); };
+// Cutover validation instrument: recompute the cold engine and render the
+// cold-vs-live divergence so the cutover can be a trusted, deliberate flip.
+function renderColdVsLive(){
+  try{ if(typeof coldRecompute==='function') coldRecompute(); }catch(e){}
+  var rep=(typeof coldVsLive==='function')?coldVsLive():null;
+  var ov=document.getElementById('coldLiveOverlay');
+  if(!ov){
+    ov=document.createElement('div'); ov.id='coldLiveOverlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;background:#0c0f0d;color:#cfe9dd;font-family:monospace;overflow:hidden;';
+    document.body.appendChild(ov);
+  }
+  ov.style.display='flex';
+  if(!rep){ ov.innerHTML='<div style="padding:16px">no cold state — play a session first</div>'; return; }
+  var s=rep.summary;
+  var html='<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.15);flex-wrap:wrap;flex-shrink:0;">'
+    +'<button class="btn" id="coldLiveClose" style="width:auto;font-size:10px;padding:5px 12px;">◄ BACK</button>'
+    +'<span style="font-size:11px;letter-spacing:1px;">COLD vs LIVE</span>'
+    +'<span style="font-size:10px;opacity:.75;">'+s.compared+' atoms · agree '+s.agreePct+'% · '
+    +'<span style="color:#ffb84d">live over-grad '+s.coldStricter+'</span> · '
+    +'<span style="color:#4dd8ff">cold-ahead '+s.coldLooser+'</span> · obs '+s.obsRecords+'</span></div>'
+    +'<div style="flex:1;overflow-y:auto;padding:8px 12px;font-size:11px;line-height:1.5;">';
+  if(!rep.rows.length){ html+='<div style="opacity:.6;padding:12px">no seen atoms with data yet — play a session.</div>'; }
+  rep.rows.forEach(function(r){
+    var col=r.rel==='cold-stricter'?'#ffb84d':r.rel==='cold-looser'?'#4dd8ff':'#7c8a82';
+    var tag=r.rel==='cold-stricter'?'LIVE OVER-GRAD':r.rel==='cold-looser'?'COLD AHEAD':'agree';
+    html+='<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05);">'
+      +'<span style="width:96px;flex-shrink:0;color:'+col+'">'+tag+'</span>'
+      +'<span style="width:30px;flex-shrink:0;font-size:14px;">'+r.ch+'</span>'
+      +'<span style="opacity:.85;flex-shrink:0;width:130px;">live '+(r.live.grad?'GRAD':'—')+' m'+r.live.m+' s'+r.live.stage+'</span>'
+      +'<span style="opacity:.6;">cold '+(r.cold.grad?'GRAD':'—')+' d'+r.cold.discrim+' i'+r.cold.incid+' n'+r.cold.n+'</span>'
+      +'</div>';
+  });
+  html+='</div>';
+  ov.innerHTML=html;
+  var cb=document.getElementById('coldLiveClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
+}
+if($('debugColdLive')) $('debugColdLive').onclick=renderColdVsLive;
 $('debugToggle').onclick=()=>{
   const dm=$('debugModes');
   const open=dm.style.display==='flex';

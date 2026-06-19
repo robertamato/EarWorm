@@ -1131,6 +1131,41 @@ function coldRecompute(now){
 }
 try{ window.coldRecompute=coldRecompute; window.dumpColdState=function(){return (typeof S!=='undefined'&&S.coldState)||null;}; }catch(e){}
 
+// ── Cutover validation instrument (shadow-mode, read-only) ──────────────
+// Compare the cold engine's verdict against the live engine's, per atom, so
+// the cutover (coldState → selection) can be a TRUSTED, deliberate flip and
+// not a flag-flip. The expected, healthy signal is "cold-stricter": the live
+// engine over-graduates on recall volume (isGraduated = 1 correct answer),
+// while the cold engine withholds graduation until the upper channels
+// (discrimination + incidental) show real contextual evidence. A cold-stricter
+// atom is one to eyeball during play: can the learner actually USE it in
+// context, or did the live engine graduate it on a single isolated recall?
+function coldVsLive(){
+  var cold=(typeof S!=='undefined'&&S.coldState&&S.coldState.atoms)||{};
+  var rows=[], agree=0, coldStricter=0, coldLooser=0, n=0;
+  for(var i=0;i<D.length;i++){
+    var ci=S.cards[i], seen=ci&&ci.seen, ca=cold[i]&&cold[i].meaning;
+    if(!seen && !ca) continue;
+    var liveGrad=(typeof isGraduated==='function')?isGraduated(i):false;
+    var liveM=(typeof masteryScore==='function')?masteryScore(i):((ci&&ci.m)||0);
+    var liveStage=(ci&&ci.axisStage&&ci.axisStage.meaning)||0;
+    var coldGrad=ca?!!ca.graduated:false;
+    var rel=(liveGrad===coldGrad)?'agree':(coldGrad?'cold-looser':'cold-stricter');
+    if(rel==='agree') agree++; else if(rel==='cold-stricter') coldStricter++; else coldLooser++;
+    n++;
+    rows.push({ i:i, ch:D[i][0], rel:rel,
+      live:{ grad:liveGrad, m:Math.round(liveM*10)/10, stage:liveStage },
+      cold: ca?{ n:ca.n, recall:ca.recall, discrim:ca.discrim, incid:ca.incid, grad:coldGrad, regime:ca.regime }
+              :{ n:0, recall:0, discrim:0, incid:0, grad:false, regime:'no-data' } });
+  }
+  var ord={ 'cold-stricter':0, 'cold-looser':1, 'agree':2 };
+  rows.sort(function(a,b){ return ord[a.rel]!==ord[b.rel] ? ord[a.rel]-ord[b.rel] : a.i-b.i; });
+  return { rows:rows, summary:{ compared:n, agree:agree, coldStricter:coldStricter, coldLooser:coldLooser,
+    agreePct:n?Math.round(agree/n*100):0, computedAt:(S.coldState&&S.coldState.computedAt)||0,
+    obsRecords:(typeof S!=='undefined'&&S.obsLog&&S.obsLog.length)||0 } };
+}
+try{ window.coldVsLive=coldVsLive; }catch(e){}
+
 // Axis stage gate: use accuracy window instead of consecutive-correct
 // Advance stage when accuracy >= threshold over last N attempts
 const AXIS_ADVANCE_ACCURACY=0.80; // 80% accuracy over window
