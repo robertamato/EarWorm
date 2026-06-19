@@ -1211,6 +1211,22 @@ function coldVsLive(){
 }
 try{ window.coldVsLive=coldVsLive; }catch(e){}
 
+// ── Cutover policy — the one switch (default OFF) ──────────────────────────
+// When ON, GRADUATION (and therefore frontier advancement / working-set pacing)
+// is read from the cold engine's conservative verdict instead of the live
+// engine's eager one. Selection-only: the live engine still WRITES axis state;
+// the cutover only flips the READ. Persisted on S, flipped from the COLD CUTOVER
+// debug toggle once COLD vs LIVE shows the cold engine is fed and trustworthy.
+// CAUTION: with cold driving, an atom stays "not graduated" until it shows real
+// contextual evidence (discrim≥3 ∧ incid≥2) — so if context isn't flowing, the
+// working set fills and introduction stalls. That stall IS the signal to flip back.
+function coldDrivesSelection(){ return !!(typeof S!=='undefined' && S.coldCutover); }
+function coldGraduated(i){
+  var a=(typeof S!=='undefined' && S.coldState && S.coldState.atoms && S.coldState.atoms[i] && S.coldState.atoms[i].meaning);
+  return !!(a && a.graduated);
+}
+try{ window.coldDrivesSelection=coldDrivesSelection; window.coldGraduated=coldGraduated; }catch(e){}
+
 // Axis stage gate: use accuracy window instead of consecutive-correct
 // Advance stage when accuracy >= threshold over last N attempts
 const AXIS_ADVANCE_ACCURACY=0.80; // 80% accuracy over window

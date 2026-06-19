@@ -1211,6 +1211,22 @@ function coldVsLive(){
 }
 try{ window.coldVsLive=coldVsLive; }catch(e){}
 
+// ── Cutover policy — the one switch (default OFF) ──────────────────────────
+// When ON, GRADUATION (and therefore frontier advancement / working-set pacing)
+// is read from the cold engine's conservative verdict instead of the live
+// engine's eager one. Selection-only: the live engine still WRITES axis state;
+// the cutover only flips the READ. Persisted on S, flipped from the COLD CUTOVER
+// debug toggle once COLD vs LIVE shows the cold engine is fed and trustworthy.
+// CAUTION: with cold driving, an atom stays "not graduated" until it shows real
+// contextual evidence (discrim≥3 ∧ incid≥2) — so if context isn't flowing, the
+// working set fills and introduction stalls. That stall IS the signal to flip back.
+function coldDrivesSelection(){ return !!(typeof S!=='undefined' && S.coldCutover); }
+function coldGraduated(i){
+  var a=(typeof S!=='undefined' && S.coldState && S.coldState.atoms && S.coldState.atoms[i] && S.coldState.atoms[i].meaning);
+  return !!(a && a.graduated);
+}
+try{ window.coldDrivesSelection=coldDrivesSelection; window.coldGraduated=coldGraduated; }catch(e){}
+
 // Axis stage gate: use accuracy window instead of consecutive-correct
 // Advance stage when accuracy >= threshold over last N attempts
 const AXIS_ADVANCE_ACCURACY=0.80; // 80% accuracy over window
@@ -9068,6 +9084,15 @@ function renderColdVsLive(){
   var cb=document.getElementById('coldLiveClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
 }
 if($('debugColdLive')) $('debugColdLive').onclick=renderColdVsLive;
+// Cutover toggle: flip whether the cold engine drives graduation/selection.
+function updateColdCutoverBtn(){ var b=document.getElementById('debugColdCutover'); if(b) b.textContent='⇄ COLD CUTOVER: '+((typeof S!=='undefined'&&S.coldCutover)?'ON':'OFF'); }
+if($('debugColdCutover')) $('debugColdCutover').onclick=function(){
+  S.coldCutover=!S.coldCutover;
+  if(S.coldCutover){ try{ if(typeof coldRecompute==='function') coldRecompute(); }catch(e){} } // fresh verdicts before it drives anything
+  try{ save(); }catch(e){}
+  updateColdCutoverBtn();
+};
+try{ updateColdCutoverBtn(); }catch(e){}
 $('debugToggle').onclick=()=>{
   const dm=$('debugModes');
   const open=dm.style.display==='flex';
@@ -9405,6 +9430,14 @@ const Scheduler = {
     return false;
   },
 
+  // Effective graduation — the single READ seam the cutover flips. Cold verdict
+  // when coldDrivesSelection() is on, else the live verdict (unchanged default).
+  _isGraduatedEff(S, i) {
+    if (typeof coldDrivesSelection === 'function' && coldDrivesSelection())
+      return (typeof coldGraduated === 'function') ? coldGraduated(i) : this._isGraduated(S.cards[i]);
+    return this._isGraduated(S.cards[i]);
+  },
+
   _isUnlocked(S, i) {
     return !!(S.cards[i] && S.cards[i].exp > 0);
   },
@@ -9424,10 +9457,10 @@ const Scheduler = {
     const brandNew = D.filter((_, i) => {
       const ci = S.cards[i];
       if (!ci || !ci.exp) return false;
-      return !this._isGraduated(ci);
+      return !this._isGraduatedEff(S, i);
     }).length;
     if (brandNew >= BRAND_NEW_CAP) return false;
-    const inRotation = D.filter((_, i) => this._isUnlocked(S, i) && !this._isGraduated(S.cards[i])).length;
+    const inRotation = D.filter((_, i) => this._isUnlocked(S, i) && !this._isGraduatedEff(S, i)).length;
     return inRotation < ROTATION_CEILING;
   },
 

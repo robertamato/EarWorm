@@ -517,6 +517,15 @@ function renderColdVsLive(){
   var cb=document.getElementById('coldLiveClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
 }
 if($('debugColdLive')) $('debugColdLive').onclick=renderColdVsLive;
+// Cutover toggle: flip whether the cold engine drives graduation/selection.
+function updateColdCutoverBtn(){ var b=document.getElementById('debugColdCutover'); if(b) b.textContent='⇄ COLD CUTOVER: '+((typeof S!=='undefined'&&S.coldCutover)?'ON':'OFF'); }
+if($('debugColdCutover')) $('debugColdCutover').onclick=function(){
+  S.coldCutover=!S.coldCutover;
+  if(S.coldCutover){ try{ if(typeof coldRecompute==='function') coldRecompute(); }catch(e){} } // fresh verdicts before it drives anything
+  try{ save(); }catch(e){}
+  updateColdCutoverBtn();
+};
+try{ updateColdCutoverBtn(); }catch(e){}
 $('debugToggle').onclick=()=>{
   const dm=$('debugModes');
   const open=dm.style.display==='flex';
@@ -854,6 +863,14 @@ const Scheduler = {
     return false;
   },
 
+  // Effective graduation — the single READ seam the cutover flips. Cold verdict
+  // when coldDrivesSelection() is on, else the live verdict (unchanged default).
+  _isGraduatedEff(S, i) {
+    if (typeof coldDrivesSelection === 'function' && coldDrivesSelection())
+      return (typeof coldGraduated === 'function') ? coldGraduated(i) : this._isGraduated(S.cards[i]);
+    return this._isGraduated(S.cards[i]);
+  },
+
   _isUnlocked(S, i) {
     return !!(S.cards[i] && S.cards[i].exp > 0);
   },
@@ -873,10 +890,10 @@ const Scheduler = {
     const brandNew = D.filter((_, i) => {
       const ci = S.cards[i];
       if (!ci || !ci.exp) return false;
-      return !this._isGraduated(ci);
+      return !this._isGraduatedEff(S, i);
     }).length;
     if (brandNew >= BRAND_NEW_CAP) return false;
-    const inRotation = D.filter((_, i) => this._isUnlocked(S, i) && !this._isGraduated(S.cards[i])).length;
+    const inRotation = D.filter((_, i) => this._isUnlocked(S, i) && !this._isGraduatedEff(S, i)).length;
     return inRotation < ROTATION_CEILING;
   },
 
