@@ -9914,20 +9914,33 @@ const Scheduler = {
     // least-recently-seen rotation. (Without this, a stage-based load measure just
     // throttles harder — the new words wait behind perpetually-due mastered ones.)
     const acqRank = idx => { const ci = S.cards[idx]; return (ci && ci.exp > 0 && this._getAxisStage(ci,'meaning') < ACQUIRED_STAGE) ? 0 : 1; };
+    const isDue = idx => { const ci = S.cards[idx]; return !!(ci && this._isCardDue(ci)); };
     const vocabItems = items.filter(it => it.type === 'vocab');
     if (vocabItems.length) {
+      // CRITICAL spacing gate: a just-introduced word is NOT due yet (its initial
+      // axisDue interval hasn't elapsed). Not-due cards must never pre-empt the queue —
+      // serving one as a test is "tested immediately after introduction". So DUE cards
+      // are picked first (frontier-seek ordered); not-due cards are filler only when
+      // nothing is due, ordered least-recently-seen — NOT by entropy, which would
+      // re-surface the freshly-flashed card (it's stage-0, P≈0.5 = top entropy).
+      const dueItems = vocabItems.filter(it => isDue(it.idx));
       let pick;
-      if (FRONTIER_SEEK) {
-        // Hybrid: in-acquisition cards still come first (preserves graduation velocity
-        // and the anti-starvation freeze fix), but WITHIN each rank order by entropy(P)
-        // — nearest P≈0.5 first — bucketed so the recency stamp rotates fairly inside a
-        // tier. Pure entropy-first starves the almost-graduated (p≈0.6) cards that free
-        // a cap slot, collapsing frontier velocity; this keeps both the edge and the pace.
-        const tier = idx => { const ci = S.cards[idx]; return Math.round(this._entropy(this._pCorrect(ci, 'meaning')) / ENTROPY_BUCKET); };
-        pick = vocabItems.slice().sort((a, b) =>
-          (acqRank(a.idx) - acqRank(b.idx)) || (tier(b.idx) - tier(a.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)))[0];
+      if (dueItems.length) {
+        if (FRONTIER_SEEK) {
+          // Hybrid: in-acquisition cards first (graduation velocity + anti-starvation
+          // freeze fix), then by entropy(P) — nearest P≈0.5 — bucketed so the recency
+          // stamp still rotates fairly within a tier. Pure entropy-first would starve
+          // the almost-graduated (p≈0.6) cards that free a cap slot.
+          const tier = idx => { const ci = S.cards[idx]; return Math.round(this._entropy(this._pCorrect(ci, 'meaning')) / ENTROPY_BUCKET); };
+          pick = dueItems.slice().sort((a, b) =>
+            (acqRank(a.idx) - acqRank(b.idx)) || (tier(b.idx) - tier(a.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)))[0];
+        } else {
+          pick = dueItems.slice().sort((a, b) => (acqRank(a.idx) - acqRank(b.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)))[0];
+        }
       } else {
-        pick = vocabItems.slice().sort((a, b) => (acqRank(a.idx) - acqRank(b.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)))[0];
+        // Nothing due — filler. Least-recently-seen so a freshly-flashed word is the
+        // LAST thing re-served, preserving its initial spacing interval.
+        pick = vocabItems.slice().sort((a, b) => (lastSeen(a.idx) - lastSeen(b.idx)))[0];
       }
       return { type: 'vocab', idx: pick.idx };
     }
