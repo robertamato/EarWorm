@@ -3923,6 +3923,10 @@ function showStudyFlash(i){
     ci0.axisDue['meaning']=(S.totalSeen||0)+AXIS_STABILITY.meaning[0]; // 3 cards
     ci0.axisDue['pos']=(S.totalSeen||0)+AXIS_STABILITY.pos[0]; // 5 cards
     save();
+    // Pull a frontier-legal example sentence for this newly-introduced atom in
+    // the background (non-blocking, rate-limited, no-op without an API key) so
+    // context is ready when it later needs a cloze/word-order modality.
+    try{ if(typeof requestSentenceFor==='function') requestSentenceFor(i,function(){}); }catch(e){}
   }
 
   // Rings
