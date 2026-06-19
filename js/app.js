@@ -9184,7 +9184,8 @@ function simulateSchedule(N, accuracy){
       var reason= isIntro
         ? ('introduce — frontier '+frB+'→'+(frB+1)+', in-acq room ('+capTxt+')')
         : ('review · '+mod+' · '+(mod==='flash'?'not yet MC-ready':(stg===0?'first MC → graduates it':((mod==='cloze'||mod==='word-order')?'context (stg'+stg+')':'recall (stg'+stg+')'))));
-      trace.push({n:step+1, idx:idx, ch:D[idx][0], type:decision.type, mod:mod, stg:stg, frontier:frB, brandNew:bnB, cap:effCap, reason:reason});
+      var pAlgo=(function(){ try{ return Math.round(Scheduler._pCorrect(ci,'meaning')*100)/100; }catch(e){ return null; } })();
+      trace.push({n:step+1, idx:idx, ch:D[idx][0], type:decision.type, mod:mod, stg:stg, frontier:frB, brandNew:bnB, cap:effCap, p:pAlgo, reason:reason});
       ci._lastSeenAt=S.totalSeen;
       if(mod==='flash'){
         if(!(ci.exp>0)){ ci.exp=1; ci.seen=true; ci.axisDue=ci.axisDue||{};
@@ -9344,6 +9345,15 @@ let ACQUISITION_CAP = 6;  // BASELINE working-set cap; flexed by recent accuracy
 let ACQ_ADAPT = true;     // accuracy-adaptive cap on/off
 let ACQ_CAP_MIN = 3, ACQ_CAP_MAX = 10, ACQ_ADAPT_MIN = 8;  // adaptive bounds + min recent answers before flexing
 try{ window.setAcqKnobs=function(cap,stage,adapt){ if(cap!=null)ACQUISITION_CAP=cap; if(stage!=null)ACQUIRED_STAGE=stage; if(adapt!=null)ACQ_ADAPT=!!adapt; return {ACQUISITION_CAP,ACQUIRED_STAGE,ACQ_ADAPT,ACQ_CAP_MIN,ACQ_CAP_MAX}; }; }catch(e){}
+
+// Frontier-seeking selection: among DUE cards, prefer those whose modeled P(correct)
+// is nearest 0.5 — the triple optimum (max information / zone of proximal development /
+// max reward-prediction-error). This is the COUPLING layer the wager meta-game sits on:
+// the highest-value table is always parked at the edge of what the learner almost knows.
+// Subsumes the old binary acqRank (stage-0 cards have P≈0.5 → top entropy → picked first).
+let FRONTIER_SEEK = true;   // select due cards by entropy(P_correct); off → legacy acqRank+recency
+let ENTROPY_BUCKET = 0.08;  // coarseness of entropy tiers, so fair recency rotation operates within a tier
+try{ window.setFrontierSeek=function(on){ FRONTIER_SEEK=!!on; return FRONTIER_SEEK; }; }catch(e){}
 
 const Scheduler = {
 
@@ -9569,6 +9579,44 @@ const Scheduler = {
     return ci.axisStage[axis] || 0;
   },
 
+  // P_algo: the model's posterior that the user retrieves this card-axis correctly
+  // right now. A stage prior (rising recognition with consolidation), blended toward
+  // empirical recent accuracy as evidence accrues, then decayed by overdue-ness
+  // (forgetting pulls retrievability toward a recognition guess floor). This is the
+  // "house line" the wager will eventually be posted from, and the signal frontier-
+  // seeking selection ranks on. Range clamped to (0.02, 0.98).
+  _pCorrect(ci, axis) {
+    if (!ci || !ci.exp) return 0.5;
+    const stage = this._getAxisStage(ci, axis);
+    const STAGE_PRIOR = [0.50, 0.66, 0.78, 0.87, 0.92, 0.95];
+    let p = STAGE_PRIOR[Math.min(stage, STAGE_PRIOR.length - 1)];
+    const hist = (ci.axisHistory && ci.axisHistory[axis]) || [];
+    if (hist.length >= 2) {
+      const acc = hist.reduce((s, b) => s + (b ? 1 : 0), 0) / hist.length;
+      const w = Math.min(0.7, hist.length / 10);   // trust empirical more as n grows (cap 0.7)
+      p = (1 - w) * p + w * acc;
+    }
+    const seen = (typeof S !== 'undefined' ? S.totalSeen : 0) || 0;
+    const dueRaw = (ci.axisDue && ci.axisDue[axis]) || 0;
+    const due = dueRaw > 1e9 ? 0 : dueRaw;
+    const reps = (ci.axisReps && ci.axisReps[axis]) || 0;
+    const stabArr = (typeof AXIS_STABILITY !== 'undefined' && AXIS_STABILITY[axis]) || [10];
+    const stab = stabArr[Math.min(reps, stabArr.length - 1)] || 10;
+    if (seen > due && stab > 0) {
+      const r = Math.pow(2, -(seen - due) / stab);   // retrievability ∈ (0,1], one full interval overdue → 0.5
+      const FLOOR = 0.30;                             // recognition floor (you can still guess)
+      p = FLOOR + (p - FLOOR) * r;
+    }
+    return Math.max(0.02, Math.min(0.98, p));
+  },
+
+  // Shannon entropy (bits) of a Bernoulli(p) — information value of testing this card.
+  // Peaks at p=0.5, → 0 at the extremes. The quantity frontier-seeking maximizes.
+  _entropy(p) {
+    if (p <= 0 || p >= 1) return 0;
+    return -(p * Math.log2(p) + (1 - p) * Math.log2(1 - p));
+  },
+
   _isAxisDue(ci, axis) {
     if (!ci || !ci.axisDue) return true;
     const v = ci.axisDue[axis] || 0;
@@ -9757,7 +9805,19 @@ const Scheduler = {
     const acqRank = idx => { const ci = S.cards[idx]; return (ci && ci.exp > 0 && this._getAxisStage(ci,'meaning') < ACQUIRED_STAGE) ? 0 : 1; };
     const vocabItems = items.filter(it => it.type === 'vocab');
     if (vocabItems.length) {
-      const pick = vocabItems.slice().sort((a, b) => (acqRank(a.idx) - acqRank(b.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)))[0];
+      let pick;
+      if (FRONTIER_SEEK) {
+        // Hybrid: in-acquisition cards still come first (preserves graduation velocity
+        // and the anti-starvation freeze fix), but WITHIN each rank order by entropy(P)
+        // — nearest P≈0.5 first — bucketed so the recency stamp rotates fairly inside a
+        // tier. Pure entropy-first starves the almost-graduated (p≈0.6) cards that free
+        // a cap slot, collapsing frontier velocity; this keeps both the edge and the pace.
+        const tier = idx => { const ci = S.cards[idx]; return Math.round(this._entropy(this._pCorrect(ci, 'meaning')) / ENTROPY_BUCKET); };
+        pick = vocabItems.slice().sort((a, b) =>
+          (acqRank(a.idx) - acqRank(b.idx)) || (tier(b.idx) - tier(a.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)))[0];
+      } else {
+        pick = vocabItems.slice().sort((a, b) => (acqRank(a.idx) - acqRank(b.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)))[0];
+      }
       return { type: 'vocab', idx: pick.idx };
     }
 
