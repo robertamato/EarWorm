@@ -7889,7 +7889,9 @@ function showStudyCloze(i){
   }
   promptEl.appendChild(sentRow);
   const glossDiv=document.createElement('div');
-  glossDiv.style.cssText='font-size:10px;opacity:.6;text-align:center;font-style:italic;';
+  // Parent language EXPOSED as scaffold: the meaning is given so the learner uses
+  // it to fill the blank (scaffolded production), not a blind comprehension guess.
+  glossDiv.style.cssText='font-size:15px;opacity:.9;text-align:center;margin-top:8px;';
   glossDiv.textContent=en;
   promptEl.appendChild(glossDiv);
 
@@ -9294,26 +9296,24 @@ const Scheduler = {
       if (meanDue || meanStg >= 1) {
         const hasSentences = getPuzzleSentences(i).some(function(s){ return sentenceAllIntroduced(s[0]); });
         if (meanStg === 1) return 'mc-fwd';
+        // Context modality is CLOZE with the gloss exposed (scaffolded production:
+        // see the sentence with one blank AND its meaning, fill the blank). The
+        // sentence-level target->parent "comprehension" modality is DISABLED for
+        // now — it's an unscaffolded whole-meaning guess, too hard/unengaging this
+        // early; showStudyComprehension stays in the code for a much-later
+        // (high-mastery) reintroduction. Isolated MC remains scaffold/remedial.
         if (meanStg === 2) {
-          // First context exposure: comprehension (recognize the whole) leads,
-          // ahead of cloze (produce the part); isolated MC fills the rest.
-          if (hasSentences && Math.random() < 0.4) return 'comprehension';
+          if (hasSentences && Math.random() < 0.35) return 'cloze';
           return Math.random() < 0.6 ? 'mc-fwd' : 'mc-rev';
         }
         if (meanStg === 3) {
-          if (hasSentences) {
-            const r = Math.random();
-            if (r < 0.4) return 'comprehension';
-            if (r < 0.65) return 'cloze';
-            return 'mc-rev';
-          }
+          if (hasSentences) return Math.random() < 0.5 ? 'cloze' : 'mc-rev';
           return Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev';
         }
         if (meanStg >= 4) {
           const r = Math.random();
           if (hasSentences) {
-            if (r < 0.30) return 'comprehension';
-            if (r < 0.50) return 'cloze';
+            if (r < 0.45) return 'cloze';
             if (r < 0.70) return 'word-order';
           }
           return Math.random() < 0.5 ? 'mc-fwd' : 'mc-rev';

@@ -556,7 +556,9 @@ function showStudyCloze(i){
   }
   promptEl.appendChild(sentRow);
   const glossDiv=document.createElement('div');
-  glossDiv.style.cssText='font-size:10px;opacity:.6;text-align:center;font-style:italic;';
+  // Parent language EXPOSED as scaffold: the meaning is given so the learner uses
+  // it to fill the blank (scaffolded production), not a blind comprehension guess.
+  glossDiv.style.cssText='font-size:15px;opacity:.9;text-align:center;margin-top:8px;';
   glossDiv.textContent=en;
   promptEl.appendChild(glossDiv);
 
