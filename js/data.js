@@ -488,7 +488,20 @@ function recordFlashcardFlip(i, frontMs, backMs){
 
 /* ============ MASTERY ============ */
 const MASTERY_MAX=4;
-function masteryScore(i){ return Math.min(MASTERY_MAX, Math.max(0, card(i).m||0)); }
+// masteryScore is now DERIVED from axisStage.meaning — the single authoritative
+// competence signal. The old independent .m accumulator is retired (addMastery is a
+// no-op below). This maps progression stage 0..5 → 0..4 for the display tiers
+// (state) and the difficulty stages (meaningStage/toneStage). A seen stage-0 card
+// reads as "learning" (>0, not "unseen"); stage ≥4 reads "mastered". Per-modality
+// difficulty texture now lives in MODALITY_PROFILE, not in this scalar — that
+// separation is what let competence collapse onto one signal.
+const MASTERY_FROM_STAGE=[0.6, 1.5, 2.3, 3.0, 4.0, 4.0];
+function masteryScore(i){
+  const ci=card(i);
+  if(!ci.seen && !(ci.exp>0)) return 0;
+  const st=(ci.axisStage&&ci.axisStage.meaning)||0;
+  return Math.min(MASTERY_MAX, MASTERY_FROM_STAGE[Math.min(st, MASTERY_FROM_STAGE.length-1)]);
+}
 function isMastered(i){ return masteryScore(i)>=MASTERY_MAX; }
 
 // ── FORMAL PER-MODALITY DIFFICULTY MODEL ──────────────────────────────────
@@ -882,11 +895,10 @@ function shouldIntroduceNewWord(){
 // the breadth-first introduction cap (retention-flexed, counts words below
 // recognition; see shouldIntroduceNewWord) interact with these rates.
 // ─────────────────────────────────────────────────────────────────────────────
-function addMastery(i, delta){
-  const c=card(i);
-  c.m=Math.min(MASTERY_MAX, Math.max(0, (c.m||0)+delta));
-  save();
-}
+// RETIRED: competence is now axisStage-derived (see masteryScore). Kept as a no-op
+// so the ~20 legacy call sites don't error; they are dead and removed in a follow-up.
+// Progression flows solely through axisStage (recordAxisResultNew's accuracy gate).
+function addMastery(i, delta){ /* no-op — .m accumulator retired */ }
 
 /* ============ SCHEDULER ============ */
 // Per-axis SRS intervals. Each axis has its own due date.
