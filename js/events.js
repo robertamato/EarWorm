@@ -583,15 +583,16 @@ function simulateSchedule(N, accuracy){
     var grad=function(i){ try{ return Scheduler._isGraduated(S.cards[i]||{}); }catch(e){ return false; } };
     var frontierNow=function(){ var f=0; for(var k=0;k<D.length;k++){ if(S.cards[k]&&S.cards[k].exp>0) f=k+1; } return f; };
     var brandNewNow=function(){ var n=0; for(var k=0;k<D.length;k++){ var c=S.cards[k]; if(c&&c.exp>0&&!grad(k)) n++; } return n; };
-    var simCount=0, simRing=[];
+    var simCount=0, simRing=[], simRecent=[];
     for(var step=0; step<N; step++){
       var sess={ studyCardCount:simCount, studyFlashOnly:false, studyModalityFilter:null,
         studyPending:[], sessionGrammarAnswered:new Set(), studyEncounters:new Map(),
-        sessionRecentCards:[], sessionAnswerRing:simRing.slice(), nextQueueRebuildAt:0 };
+        sessionRecentCards:simRecent.slice(), sessionAnswerRing:simRing.slice(), nextQueueRebuildAt:0 };
       var effCap=(function(){ try{ return Scheduler._effectiveCap(sess); }catch(e){ return null; } })();
       var decision; try{ decision=Scheduler.next(S,D,sess); }catch(e){ trace.push({n:step+1,error:String(e)}); break; }
       if(!decision || decision.idx==null || decision.idx<0){ trace.push({n:step+1,end:true}); break; }
       var idx=decision.idx, isIntro=decision.type==='introduce';
+      simRecent.push(idx); if(simRecent.length>8) simRecent.shift();  // mirror live sessionRecentCards (anti-repeat)
       var frB=frontierNow(), bnB=brandNewNow();
       simCount++; S.totalSeen=(S.totalSeen||0)+1;
       if(typeof isGrammarKey==='function'&&isGrammarKey(idx)){ trace.push({n:step+1,ch:'(grammar)',type:'grammar',mod:'grammar',reason:'grammar drill'}); continue; }
@@ -623,6 +624,43 @@ function simulateSchedule(N, accuracy){
 }
 try{ window.simulateSchedule=simulateSchedule; }catch(e){}
 
+// Standing invariant battery — runs on the SIM trace EVERY playthrough so the
+// obvious scheduler properties fail loudly instead of waiting for a user report.
+// Each invariant here encodes a property we've had to learn the hard way; add to
+// this list whenever a new "that can't be optimal" surfaces. A SIM with no
+// assertions is just a print statement — this is what makes it a regression harness.
+function simInvariants(r){
+  var steps=(r&&r.steps)||[];
+  var flashAt={}, testAt={}, prevIdx=null, immediateRepeat=0;
+  steps.forEach(function(s){
+    if(s.idx==null||s.type==='grammar'||s.end||s.error){ prevIdx=null; return; }
+    var isFlash=(s.mod==='flash'||s.type==='introduce');
+    if(isFlash){ if(flashAt[s.idx]==null) flashAt[s.idx]=s.n; }
+    else if(testAt[s.idx]==null){ testAt[s.idx]=s.n; }
+    if(prevIdx===s.idx) immediateRepeat++;
+    prevIdx=s.idx;
+  });
+  var beforeFlash=0, gaps=[];
+  Object.keys(testAt).forEach(function(idx){
+    var f=flashAt[idx], t=testAt[idx];
+    if(f==null||t<f) beforeFlash++; else gaps.push(t-f);
+  });
+  var minGap=gaps.length?Math.min.apply(null,gaps):null;
+  var ps=steps.filter(function(s){return s.type!=='introduce'&&s.type!=='grammar'&&typeof s.p==='number';}).map(function(s){return s.p;});
+  var meanEdge=ps.length?ps.reduce(function(a,b){return a+Math.abs(b-0.5);},0)/ps.length:null;
+  var MIN_GAP=3, PACE_FLOOR=Math.max(1,Math.round(steps.length*0.15)), EDGE_MAX=0.15;
+  var checks=[
+    {name:'never test before flash',     pass:beforeFlash===0,                              detail:beforeFlash+' violation(s)'},
+    {name:'initial spacing ≥'+MIN_GAP, pass:(minGap==null||minGap>=MIN_GAP),            detail:'min gap '+minGap},
+    {name:'no immediate repeat',         pass:immediateRepeat===0,                          detail:immediateRepeat+' repeat(s)'},
+    {name:'pace ≥'+PACE_FLOOR,         pass:(r.finalFrontier>=PACE_FLOOR),              detail:'frontier '+r.finalFrontier},
+    {name:'edge ≤'+EDGE_MAX,           pass:(meanEdge==null||meanEdge<=EDGE_MAX),       detail:'mean|P-.5| '+(meanEdge==null?'-':meanEdge.toFixed(3))}
+  ];
+  return {pass:checks.every(function(c){return c.pass;}), checks:checks};
+}
+// One-shot runner for console/CI: window.simCheck(160,0.85) → {pass, checks}
+try{ window.simInvariants=simInvariants; window.simCheck=function(N,acc){ return simInvariants(simulateSchedule(N||160, acc==null?0.85:acc)); }; }catch(e){}
+
 var _simN=80, _simAcc=1.0;
 function renderSimTrace(){
   var r=simulateSchedule(_simN,_simAcc);
@@ -632,11 +670,18 @@ function renderSimTrace(){
     document.body.appendChild(ov); }
   ov.style.display='flex';
   function btn(label,on){ return '<button class="btn st-ctl" data-act="'+on+'" style="width:auto;font-size:9px;padding:4px 8px;">'+label+'</button>'; }
+  var inv=simInvariants(r);
+  var badges=inv.checks.map(function(c){
+    var col=c.pass?'#6f6':'#ff5d5d';
+    return '<span title="'+c.detail+'" style="font-size:9px;padding:2px 6px;border:1px solid '+col+';color:'+col+';white-space:nowrap;">'+(c.pass?'✓':'✗')+' '+c.name+'</span>';
+  }).join('');
   var head='<div style="padding:9px 14px;border-bottom:1px solid rgba(255,255,255,.15);display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0;">'
     +'<button class="btn" id="simClose" style="width:auto;font-size:10px;padding:5px 12px;">◄ BACK</button>'
     +'<span style="font-size:11px;letter-spacing:1px;">SIM PLAYTHROUGH (fresh course, real scheduler)</span>'
     +'<span style="font-size:10px;opacity:.8;">'+r.steps.length+' steps · reached FRONTIER '+r.finalFrontier+' · '+r.intros+' introductions · acc '+Math.round(_simAcc*100)+'%</span>'
     +'<span style="margin-left:auto;display:flex;gap:6px;">'+btn('80','n80')+btn('160','n160')+btn('300','n300')+btn('100%','a100')+btn('85%','a85')+'</span></div>'
+    +'<div style="padding:6px 14px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex-shrink:0;">'
+    +'<span style="font-size:9px;letter-spacing:1px;opacity:.6;">INVARIANTS '+(inv.pass?'<span style="color:#6f6">ALL PASS</span>':'<span style="color:#ff5d5d">FAIL</span>')+'</span>'+badges+'</div>'
     +'<div style="flex:1;overflow-y:auto;padding:6px 12px;font-size:11px;line-height:1.5;">';
   var body='';
   r.steps.forEach(function(s){
@@ -1230,6 +1275,12 @@ const Scheduler = {
     // throttles harder — the new words wait behind perpetually-due mastered ones.)
     const acqRank = idx => { const ci = S.cards[idx]; return (ci && ci.exp > 0 && this._getAxisStage(ci,'meaning') < ACQUIRED_STAGE) ? 0 : 1; };
     const isDue = idx => { const ci = S.cards[idx]; return !!(ci && this._isCardDue(ci)); };
+    // Anti-repeat: never serve the immediately-previous card twice in a row when any
+    // alternative exists. A card stays "due" right after it's answered (its other axis,
+    // or it's alone in the top entropy tier), which otherwise re-serves it next card —
+    // surfaced by the SIM "no immediate repeat" invariant.
+    const prevIdx = (recent && recent.length) ? recent[recent.length - 1] : null;
+    const noRepeat = arr => { if (prevIdx == null) return arr; const f = arr.filter(it => it.idx !== prevIdx); return f.length ? f : arr; };
     const vocabItems = items.filter(it => it.type === 'vocab');
     if (vocabItems.length) {
       // CRITICAL spacing gate: a just-introduced word is NOT due yet (its initial
@@ -1238,7 +1289,7 @@ const Scheduler = {
       // are picked first (frontier-seek ordered); not-due cards are filler only when
       // nothing is due, ordered least-recently-seen — NOT by entropy, which would
       // re-surface the freshly-flashed card (it's stage-0, P≈0.5 = top entropy).
-      const dueItems = vocabItems.filter(it => isDue(it.idx));
+      const dueItems = noRepeat(vocabItems.filter(it => isDue(it.idx)));
       let pick;
       if (dueItems.length) {
         if (FRONTIER_SEEK) {
@@ -1255,7 +1306,7 @@ const Scheduler = {
       } else {
         // Nothing due — filler. Least-recently-seen so a freshly-flashed word is the
         // LAST thing re-served, preserving its initial spacing interval.
-        pick = vocabItems.slice().sort((a, b) => (lastSeen(a.idx) - lastSeen(b.idx)))[0];
+        pick = noRepeat(vocabItems).slice().sort((a, b) => (lastSeen(a.idx) - lastSeen(b.idx)))[0];
       }
       return { type: 'vocab', idx: pick.idx };
     }
