@@ -9831,19 +9831,8 @@ const Scheduler = {
     return { n: 6, grid: reverse ? '1fr 1fr 1fr' : '1fr 1fr' };
   },
 
-  // ─── SRS: record answer ──────────────────────────────────────────────────
-
-  recordAnswer(S, i, axis, isCorrect, responseMs) {
-    // RETIRED (Slice 2b): recordAxisResultNew (data.js) is the SINGLE authoritative
-    // writer of axis state — axisDue / axisStage / axisReps / axisHistory plus the
-    // durable lastReviewAt / reviewLog substrate — and it runs in the drill handler
-    // before this dispatch fires. This function used to ALSO write those fields, which
-    // double-pushed axisHistory (corrupting the accuracy window that drives stage and
-    // graduation) and double-advanced stages. It is now a no-op for axis state: it only
-    // ensures the card exists and returns it so the ANSWER_VOCAB dispatch keeps xp/mult.
-    if (!S.cards[i]) S.cards[i] = this._freshCard();
-    return S.cards[i];
-  },
+  // (Scheduler.recordAnswer — the vocab second-engine — is removed; recordAxisResultNew
+  // in data.js is the sole authoritative writer of vocab axis state.)
 
   // ─── Grammar: record result ──────────────────────────────────────────────
 
@@ -10342,21 +10331,9 @@ const State = {
     const prev = this._s;
     switch(action) {
 
-      case 'ANSWER_VOCAB': {
-        const { idx, axis, isCorrect, responseMs } = payload;
-        const ci = Scheduler.recordAnswer(this._s, idx, axis, isCorrect, responseMs);
-        this._s.cards[idx] = ci;
-        if (isCorrect) {
-          this._s.xp += this._computeXP(payload);
-          this._s.multStreak++;
-          this._advanceMult();
-        } else {
-          this._s.multStreak = 0;
-          this._resetMult();
-        }
-        break;
-      }
-
+      // ANSWER_VOCAB (the second recording engine, Scheduler.recordAnswer → State._s)
+      // is retired — recordAxisResultNew on live S is the sole vocab engine and the
+      // dispatch is no longer fired. Grammar still dispatches (it has no engine-1 path).
       case 'ANSWER_GRAMMAR': {
         const { cat, axis, isCorrect, responseMs, currentMultIdx, defaultMultIdx } = payload;
         Scheduler.recordGrammarAnswer(this._s, cat, axis, isCorrect, responseMs, currentMultIdx, defaultMultIdx);
@@ -10480,24 +10457,10 @@ const State = {
     });
   },
 
-  _computeXP({ isCorrect, currentMultIdx, responseMs }) {
-    if (!isCorrect) return 0;
-    const mult = MULT_STEPS[currentMultIdx || 0] || 1;
-    const speed = responseMs < 1500 ? 1.3 : responseMs < 4000 ? 1.0 : 0.8;
-    return Math.round(10 * mult * speed);
-  },
-
+  // _xpMult is used by the live ANSWER_GRAMMAR case; the vocab-engine helpers
+  // (_computeXP / _advanceMult / _resetMult) were removed with ANSWER_VOCAB.
   _xpMult({ currentMultIdx }) {
     return MULT_STEPS[currentMultIdx || 0] || 1;
-  },
-
-  _advanceMult() {
-    const natural = Math.floor(Math.log2(Math.max(1, this._s.multStreak / 3)));
-    // Handled by UI layer wager control
-  },
-
-  _resetMult() {
-    this._s.multStreak = 0;
   },
 
   _applyProficiency(level) {
@@ -10599,8 +10562,9 @@ const State = {
   // Wire State.dispatch for new code paths
   window.dispatchStudyAction = function(action, payload) {
     State.dispatch(action, payload);
-    // Sync durable card state (axisDue/axisStage/xp from Scheduler.recordAnswer) back
-    // onto legacy S. This is the one sync we keep.
+    // ANSWER_GRAMMAR is the only live dispatch now; sync its grammar/xp writes from
+    // State._s back onto legacy S. (Vocab no longer dispatches — recordAxisResultNew
+    // writes S directly.)
     Object.assign(S, State._s);
 
     // NOTE: we deliberately do NOT sync the session-scoped globals (studyPending,
