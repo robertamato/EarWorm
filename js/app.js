@@ -9485,6 +9485,60 @@ function renderSimTrace(){
   }; });
 }
 if($('debugSimTrace')) $('debugSimTrace').onclick=renderSimTrace;
+
+// ◇ BASIS / 3 AXES — visualize the curriculum cost model: generative basis per
+// construction tier (the dissonance vs Zipf) + the three-axis load (frequency ×
+// generativity × substitution distance). Read-only analysis, no scheduler effect.
+function renderBasisPanel(){
+  var g, t;
+  try{ g=computeGenerativeBasis(); t=computeThreeAxisBasis(); }
+  catch(e){ alert('BASIS: '+e); return; }
+  var ov=document.getElementById('basisOverlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='basisOverlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;background:#0b0e0c;color:#cfe9dd;font-family:monospace;overflow:hidden;';
+    document.body.appendChild(ov); }
+  ov.style.display='flex';
+  var col={transparent:'#6f6','divergent':'#ffb84d','false-friend':'#ff6b6b',unclassified:'#789'};
+  var head='<div style="padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.15);display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0;">'
+    +'<button class="btn" id="basisClose" style="width:auto;font-size:10px;padding:5px 12px;">◄ BACK</button>'
+    +'<span style="font-size:10px;letter-spacing:1px;">BASIS / 3 AXES — freq · generativity · substitution</span></div>'
+    +'<div style="flex:1;overflow-y:auto;padding:10px 12px;font-size:10px;line-height:1.5;">';
+
+  // Section 1 — generative basis tiers (capability ladder + dissonance)
+  var s1='<div style="font-size:9px;opacity:.55;letter-spacing:1.5px;margin:2px 0 6px;">GENERATIVE BASIS — capability ladder (min set-cover per tier)</div>';
+  s1+='<div style="display:flex;font-size:8px;opacity:.5;"><span style="width:118px;flex-shrink:0;">TIER</span><span style="width:34px;flex-shrink:0;">SIZE</span><span style="width:44px;flex-shrink:0;">REACH</span><span>FREQ-DEFERRED</span></div>';
+  g.tiers.forEach(function(ti){
+    s1+='<div style="display:flex;padding:1px 0;"><span style="width:118px;flex-shrink:0;">'+ti.name+'</span>'
+      +'<span style="width:34px;flex-shrink:0;">'+ti.basisSize+'</span>'
+      +'<span style="width:44px;flex-shrink:0;color:'+(ti.reachRatio>=5?'#ffb84d':'#cfe9dd')+'">'+ti.reachRatio+'×</span>'
+      +'<span style="opacity:.7;font-size:13px;line-height:1.2;">'+(ti.deferred.map(function(x){return x.split('#')[0];}).join(' ')||'—')+'</span></div>';
+  });
+
+  // Section 2 — three-axis breakdown of the full basis
+  var s2='<div style="font-size:9px;opacity:.55;letter-spacing:1.5px;margin:16px 0 6px;">THREE AXES — each basis atom (freq · role · substitution)</div>';
+  s2+='<div style="display:flex;font-size:8px;opacity:.5;"><span style="width:30px;flex-shrink:0;">ATOM</span><span style="width:42px;flex-shrink:0;">#FREQ</span><span style="width:92px;flex-shrink:0;">ROLE</span><span style="width:78px;flex-shrink:0;">SUBST</span><span>NOTE</span></div>';
+  t.atoms.forEach(function(a){
+    s2+='<div style="display:flex;padding:2px 0;align-items:baseline;border-bottom:1px solid rgba(255,255,255,.05);">'
+      +'<span style="width:30px;flex-shrink:0;font-size:15px;">'+a.ch+'</span>'
+      +'<span style="width:42px;flex-shrink:0;opacity:.7;">#'+a.freqRank+'</span>'
+      +'<span style="width:92px;flex-shrink:0;opacity:.8;">'+a.role+'</span>'
+      +'<span style="width:78px;flex-shrink:0;color:'+(col[a.subClass]||'#cfe9dd')+'">'+a.subClass.replace('false-friend','f-friend')+(a.dist!=null?' '+a.dist:'')+'</span>'
+      +'<span style="opacity:.55;font-size:9px;line-height:1.3;">'+a.note+'</span></div>';
+  });
+
+  // Section 3 — the real learning load
+  var pct=Math.round((t.effectiveLoad/t.nominalMax)*100);
+  var s3='<div style="font-size:9px;opacity:.55;letter-spacing:2px;margin:16px 0 6px;">REAL LEARNING LOAD (English → Mandarin)</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+    +'<span style="border:1px solid '+col.transparent+';color:'+col.transparent+';padding:3px 8px;">'+t.byClass.transparent+' transparent (~free)</span>'
+    +'<span style="border:1px solid '+col.divergent+';color:'+col.divergent+';padding:3px 8px;">'+t.byClass.divergent+' divergent (new)</span>'
+    +'<span style="border:1px solid '+col['false-friend']+';color:'+col['false-friend']+';padding:3px 8px;">'+t.byClass['false-friend']+' false-friend (un-learn)</span></div>'
+    +'<div style="margin-top:8px;font-size:11px;">basis '+t.basisSize+' atoms · <b>real load '+t.realLoadCount+'</b> (divergent+false-friend) · effective '+t.effectiveLoad+'/'+t.nominalMax+' = '+pct+'% · L1 crutch removes '+(100-pct)+'% · '+t.transparentSharePct+'% transparent</div>';
+
+  ov.innerHTML=head+s1+s2+s3+'</div>';
+  var cb=document.getElementById('basisClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
+}
+if($('debugBasis')) $('debugBasis').onclick=renderBasisPanel;
 // Cutover toggle: flip whether the cold engine drives graduation/selection.
 function updateColdCutoverBtn(){ var b=document.getElementById('debugColdCutover'); if(b) b.textContent='⇄ COLD CUTOVER: '+((typeof S!=='undefined'&&S.coldCutover)?'ON':'OFF'); }
 if($('debugColdCutover')) $('debugColdCutover').onclick=function(){
