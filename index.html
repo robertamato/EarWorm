@@ -522,9 +522,12 @@
     <div id="study-topbar">
       <button id="study-quit">◄ BACK</button>
       <span id="studyXP">XP 0</span>
+      <button id="studyWhyToggle" title="why this card">◉ WHY</button>
       <button id="study-finish">■ FINISH</button>
     </div>
     <div id="studyMode" style="font-size:7px;opacity:.7;letter-spacing:2px;text-align:center;min-height:10px;"></div>
+    <!-- WHY-THIS-CARD panel: in-flow at the top, compresses the card below (not an overlay) -->
+    <div id="studyExplain" style="display:none;flex-shrink:0;background:rgba(8,12,10,.93);color:#9fe0c4;font-family:monospace;font-size:10px;line-height:1.5;padding:8px 12px;border:1px solid rgba(120,220,180,.35);border-radius:2px;max-height:34vh;overflow-y:auto;"></div>
     <!-- Flash sub-panel: reuse #session card but inside study -->
     <div id="studySession" style="flex:1;display:flex;flex-direction:column;gap:10px;">
       <div id="studyCard" style="flex:1;border:5px solid;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:0;padding:18px;cursor:pointer;text-align:center;overflow:hidden;">

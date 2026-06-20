@@ -10525,25 +10525,29 @@ function explainCardSelection(i, mod){
     };
   }catch(e){ return { head:'(why: error)', lines:[String(e)] }; }
 }
+// Renders into the in-flow #studyExplain panel at the TOP of the study view, so it
+// COMPRESSES the card below (flex) instead of overlaying and obscuring it.
 function renderCardExplain(i, mod){
-  if(!window.EXPLAIN_MODE) return;
+  var el = document.getElementById('studyExplain');
+  if(!el) return;
+  if(!window.EXPLAIN_MODE){ el.style.display='none'; el.innerHTML=''; return; }
   var ex = explainCardSelection(i, mod);
-  var el = document.getElementById('cardExplainBar');
-  if(!el){ el=document.createElement('div'); el.id='cardExplainBar';
-    el.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:150;background:rgba(8,12,10,.93);color:#9fe0c4;font-family:monospace;font-size:10px;line-height:1.5;padding:8px 12px;border-top:1px solid rgba(120,220,180,.35);pointer-events:none;max-height:38vh;overflow:hidden;';
-    document.body.appendChild(el); }
   el.style.display='block';
   el.innerHTML='<div style="font-size:11px;color:#dff3ea;letter-spacing:1px;margin-bottom:3px;">◉ WHY ▸ '+ex.head+'</div>'
     +ex.lines.map(function(l){ return '<div style="opacity:.82;">'+l+'</div>'; }).join('');
 }
-function hideCardExplain(){ var el=document.getElementById('cardExplainBar'); if(el) el.style.display='none'; }
-try{ window.explainCardSelection=explainCardSelection; window.renderCardExplain=renderCardExplain; window.hideCardExplain=hideCardExplain; window.EXPLAIN_MODE=false; }catch(e){}
-if($('debugExplain')) $('debugExplain').onclick=function(){
+function hideCardExplain(){ var el=document.getElementById('studyExplain'); if(el){ el.style.display='none'; el.innerHTML=''; } }
+// Single toggle, shared by the home debug button and the in-session button.
+function toggleExplainMode(){
   window.EXPLAIN_MODE=!window.EXPLAIN_MODE;
-  this.textContent='◉ WHY THIS CARD: '+(window.EXPLAIN_MODE?'ON':'OFF');
+  var db=document.getElementById('debugExplain'); if(db) db.textContent='◉ WHY THIS CARD: '+(window.EXPLAIN_MODE?'ON':'OFF');
+  var wb=document.getElementById('studyWhyToggle'); if(wb) wb.style.opacity=window.EXPLAIN_MODE?'1':'0.4';
   if(!window.EXPLAIN_MODE) hideCardExplain();
   else if(typeof activeCardIdx!=='undefined' && activeCardIdx>=0 && typeof lastModality!=='undefined') renderCardExplain(activeCardIdx, lastModality.get(activeCardIdx)||'mc-fwd');
-};
+}
+try{ window.explainCardSelection=explainCardSelection; window.renderCardExplain=renderCardExplain; window.hideCardExplain=hideCardExplain; window.toggleExplainMode=toggleExplainMode; window.EXPLAIN_MODE=false; }catch(e){}
+if($('debugExplain')) $('debugExplain').onclick=toggleExplainMode;
+if($('studyWhyToggle')){ $('studyWhyToggle').onclick=toggleExplainMode; $('studyWhyToggle').style.opacity='0.4'; }
 // Cutover toggle: flip whether the cold engine drives graduation/selection.
 function updateColdCutoverBtn(){ var b=document.getElementById('debugColdCutover'); if(b) b.textContent='⇄ COLD CUTOVER: '+((typeof S!=='undefined'&&S.coldCutover)?'ON':'OFF'); }
 if($('debugColdCutover')) $('debugColdCutover').onclick=function(){
