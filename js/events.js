@@ -760,6 +760,71 @@ function renderBasisPanel(){
   var cb=document.getElementById('basisClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
 }
 if($('debugBasis')) $('debugBasis').onclick=renderBasisPanel;
+
+// ◉ WHY THIS CARD — the SIM's per-card rationale, surfaced LIVE during a session.
+// Same reasoning as the SIM trace, computed from the chosen card's state. Toggle
+// via the debug button; renders a caption bar at the bottom of the study screen.
+// (explainCardSelection is written human-friendly so it can graduate to a learner-
+// facing "why am I seeing this?" later.)
+function explainCardSelection(i, mod){
+  try{
+    var ci = (S.cards && S.cards[i]) || {};
+    var stage = Scheduler._getAxisStage(ci,'meaning');
+    var p = Scheduler._pCorrect(ci,'meaning');
+    var H = Scheduler._entropy(p);
+    var seen = S.totalSeen||0;
+    var dueRaw = (ci.axisDue && ci.axisDue.meaning) || 0;
+    var due = dueRaw>1e9?0:dueRaw;
+    var overdue = seen - due;
+    var introduced = ci.exp>0;
+    var isAcq = introduced && stage<ACQUIRED_STAGE;
+    var inAcq = D.filter(function(_,k){ var c=S.cards[k]; return c && c.exp>0 && Scheduler._getAxisStage(c,'meaning')<ACQUIRED_STAGE; }).length;
+    var frontier = D.filter(function(_,k){ return S.cards[k]&&S.cards[k].exp>0; }).length;
+    var ring = (typeof sessionAnswerRing!=='undefined')?sessionAnswerRing:[];
+    var cap = (function(){ try{ return Scheduler._effectiveCap({sessionAnswerRing:ring}); }catch(e){ return ACQUISITION_CAP; } })();
+    var modWhy = {
+      'flash':'first exposure — admission, never tested yet',
+      'mc-fwd':(stage===0?'first recognition test — one clean correct graduates it':'recognition: character → meaning'),
+      'mc-rev':'production-leaning recall: meaning → character',
+      'cloze':'context: fill the blank in a real sentence',
+      'word-order':'context: assemble the sentence from tiles',
+      'tone':'tone discrimination',
+      'comprehension':'comprehension check'
+    }[mod] || mod;
+    var edge = H>=0.95?'AT THE EDGE (P≈0.5 — max learning)':H>=0.8?'near the edge':(p>=0.85?'easy — well known':(p<=0.3?'hard — model expects a miss':''));
+    var pickWhy = isAcq ? 'picked: in-acquisition, prioritized to consolidate & free a slot'
+                : (overdue>0 ? 'picked: most-overdue (due '+overdue+' cards ago)' : 'picked: due now');
+    var capNote = 'frontier '+frontier+'/'+D.length+' · in-acquisition '+inAcq+'/'+cap+(inAcq>=cap?'  ⚠ CAP FULL — no new word until one graduates':'');
+    return {
+      head: (D[i]?D[i][0]:'?')+' #'+i+' · '+(introduced?'review':'INTRODUCE (flash)')+' · meaning-stage '+stage,
+      lines: [
+        'P(correct) '+(Math.round(p*100)/100)+(edge?'  ·  '+edge:''),
+        pickWhy,
+        'modality '+mod+' — '+modWhy,
+        capNote
+      ]
+    };
+  }catch(e){ return { head:'(why: error)', lines:[String(e)] }; }
+}
+function renderCardExplain(i, mod){
+  if(!window.EXPLAIN_MODE) return;
+  var ex = explainCardSelection(i, mod);
+  var el = document.getElementById('cardExplainBar');
+  if(!el){ el=document.createElement('div'); el.id='cardExplainBar';
+    el.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:150;background:rgba(8,12,10,.93);color:#9fe0c4;font-family:monospace;font-size:10px;line-height:1.5;padding:8px 12px;border-top:1px solid rgba(120,220,180,.35);pointer-events:none;max-height:38vh;overflow:hidden;';
+    document.body.appendChild(el); }
+  el.style.display='block';
+  el.innerHTML='<div style="font-size:11px;color:#dff3ea;letter-spacing:1px;margin-bottom:3px;">◉ WHY ▸ '+ex.head+'</div>'
+    +ex.lines.map(function(l){ return '<div style="opacity:.82;">'+l+'</div>'; }).join('');
+}
+function hideCardExplain(){ var el=document.getElementById('cardExplainBar'); if(el) el.style.display='none'; }
+try{ window.explainCardSelection=explainCardSelection; window.renderCardExplain=renderCardExplain; window.hideCardExplain=hideCardExplain; window.EXPLAIN_MODE=false; }catch(e){}
+if($('debugExplain')) $('debugExplain').onclick=function(){
+  window.EXPLAIN_MODE=!window.EXPLAIN_MODE;
+  this.textContent='◉ WHY THIS CARD: '+(window.EXPLAIN_MODE?'ON':'OFF');
+  if(!window.EXPLAIN_MODE) hideCardExplain();
+  else if(typeof activeCardIdx!=='undefined' && activeCardIdx>=0 && typeof lastModality!=='undefined') renderCardExplain(activeCardIdx, lastModality.get(activeCardIdx)||'mc-fwd');
+};
 // Cutover toggle: flip whether the cold engine drives graduation/selection.
 function updateColdCutoverBtn(){ var b=document.getElementById('debugColdCutover'); if(b) b.textContent='⇄ COLD CUTOVER: '+((typeof S!=='undefined'&&S.coldCutover)?'ON':'OFF'); }
 if($('debugColdCutover')) $('debugColdCutover').onclick=function(){

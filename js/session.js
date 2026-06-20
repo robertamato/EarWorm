@@ -694,6 +694,7 @@ function showStudyCard(i){
     mod='flash';
   }
   lastModality.set(i,mod);
+  try{ if(window.EXPLAIN_MODE && window.renderCardExplain) window.renderCardExplain(i, mod); }catch(e){}  // WHY THIS CARD live caption
   if(mod==='flash'){
     showStudyFlash(i);
   } else if(mod==='convergence'){

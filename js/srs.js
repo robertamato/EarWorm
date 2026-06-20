@@ -48,6 +48,7 @@ function show(view){
   $('summary').style.display=view==='summary'?'flex':'none';
   $('wordSearch').style.display=view==='wordSearch'?'flex':'none';
   if($('stats')) $('stats').style.display=view==='stats'?'flex':'none';
+  try{ if(view!=='study' && typeof hideCardExplain==='function') hideCardExplain(); }catch(e){} // WHY-THIS-CARD caption only during study
 }
 
 function renderStats(){
