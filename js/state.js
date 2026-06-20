@@ -294,7 +294,7 @@ function renderConstellation(){
   function visible(){ return !document.hidden && $('home') && $('home').style.display!=='none'; }
   function loop(){
     if(gen!==_cnGen) return;                  // a newer render replaced us — stop
-    if(visible()){ if(!dragging && pts.size===0) yaw+=0.0030; draw(); }
+    if(visible()){ draw(); }
     requestAnimationFrame(loop);
   }
   function px(e){const r=cv.getBoundingClientRect(); return (e.clientX-r.left)/r.width*Wc;}
