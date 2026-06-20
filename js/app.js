@@ -9109,31 +9109,89 @@ function showWordOrderDrill(i){
 
 function _atomGraduated(i){ try{ return Scheduler._isGraduated((S.cards&&S.cards[i])||{}); }catch(e){ return false; } }
 
-// Build a production task over GRADUATED atoms only (never produce before recognize).
-// Prefers a sentence containing card `i`. Returns {rung,prompt,expected,en,atoms} or null.
-function buildProductionTask(opts){
-  opts=opts||{};
+// Candidate sentences whose EVERY atom has graduated (never produce before recognize).
+function _prodCandidates(){
   const grad=new Set();
   for(let k=0;k<D.length;k++){ if(_atomGraduated(k)) grad.add(D[k][0]); }
   if(grad.size<2) return null;
   let bank; try{ bank=(typeof EXAMPLE_SENTENCES!=='undefined')?EXAMPLE_SENTENCES:null; }catch(e){ bank=null; }
-  if(!bank) return null;
-  const targetCh=(opts.forIdx!=null&&D[opts.forIdx])?D[opts.forIdx][0]:null;
   const cands=[];
-  Object.keys(bank).forEach(function(key){ (bank[key]||[]).forEach(function(s){
+  if(bank) Object.keys(bank).forEach(function(key){ (bank[key]||[]).forEach(function(s){
     const zh=s&&s[0]; if(!zh) return;
     let atoms=[]; try{ atoms=(typeof sentenceAtomsInOrder==='function')?sentenceAtomsInOrder(zh).map(function(a){return a.w;}):[]; }catch(e){ return; }
-    if(atoms.length>=2 && atoms.every(function(w){return grad.has(w);})){
-      cands.push({ zh:zh, en:(s[2]||s[1]||''), atoms:atoms, hasTarget:targetCh?atoms.indexOf(targetCh)>=0:false });
-    }
+    if(atoms.length>=2 && atoms.every(function(w){return grad.has(w);})) cands.push({ zh:zh, en:(s[2]||s[1]||''), atoms:atoms });
   }); });
-  if(!cands.length) return null;
-  const pref=cands.filter(function(c){return c.hasTarget;});
-  const pool=pref.length?pref:cands;
+  return { grad:grad, cands:cands };
+}
+function _langNameUP(){ return ((typeof activeCourse==='function'&&activeCourse())?activeCourse().langName:'the target language').toUpperCase(); }
+function _atomPOS(w){ const di=D.findIndex(function(d){return d[0]===w;}); return di>=0?(D[di][4]||''):''; }
+function _hasRole(w,role){ return _atomPOS(w).split('/').indexOf(role)>=0; }
+
+// R1 — cued translation (L1 → L2): max crutch (the L1 is given). Prefers a sentence
+// containing card `i`.
+function _buildR1Task(ctx, opts){
+  if(!ctx.cands.length) return null;
+  const targetCh=(opts.forIdx!=null&&D[opts.forIdx])?D[opts.forIdx][0]:null;
+  const pref=targetCh?ctx.cands.filter(function(c){return c.atoms.indexOf(targetCh)>=0;}):[];
+  const pool=pref.length?pref:ctx.cands;
   const c=pool[Math.floor(Math.random()*pool.length)];
-  const _langName=(typeof activeCourse==='function'&&activeCourse())?activeCourse().langName:'the target language';
   return { rung:'R1', capability:null, atoms:c.atoms, en:c.en, expected:c.zh,
-           prompt:'Say in '+_langName.toUpperCase()+':  "'+c.en+'"' };
+           prompt:'Say in '+_langNameUP()+':  "'+c.en+'"' };
+}
+
+// R2 — tier transformation (L2 → L2): partial crutch removal, climbs the crutch-fade
+// ladder. v1 = negation (T2 NEGATE & ASK), driven by the course's grammarRoles.negator
+// (language-agnostic). The transformation IS the capability. Excludes the copula as the
+// negation target (negating a copula is its own construction, e.g. VN không phải).
+function _buildR2Task(ctx){
+  const roles=((typeof activeCourse==='function'&&activeCourse())||{}).grammarRoles||{};
+  const negator=roles.negator, copula=roles.copula;
+  if(!negator) return null;
+  const negIdx=D.findIndex(function(d){return d[0]===negator;});
+  if(negIdx<0||!_atomGraduated(negIdx)) return null;          // can only produce graduated atoms
+  const space=(typeof _segMode==='function'&&_segMode()==='space');
+  const isVerb=function(w){ return w!==copula && _hasRole(w,'verb'); };
+  // Cleaner negation targets: skip sentences already carrying aspect or another negator,
+  // where a bare không-insertion would be unidiomatic (e.g. VN "đi rồi" negates to "chưa đi").
+  const skip=[roles.aspect, roles['negator-perf']].filter(Boolean);
+  const pool=ctx.cands.filter(function(c){
+    if(c.atoms.indexOf(negator)>=0) return false;
+    if(skip.some(function(a){ return c.atoms.indexOf(a)>=0; })) return false;
+    return c.atoms.some(isVerb);
+  });
+  if(!pool.length) return null;
+  const c=pool[Math.floor(Math.random()*pool.length)];
+  const verb=c.atoms.filter(isVerb)[0];
+  const expected=_insertBefore(c.zh, negator, verb, space);
+  if(!expected) return null;
+  return { rung:'R2', capability:'NEGATE & ASK', atoms:c.atoms.concat([negator]), en:c.en,
+           expected:expected, prompt:'Make this '+_langNameUP()+' sentence NEGATIVE:  "'+c.zh+'"' };
+}
+
+// Insert `ins` immediately before the first whole-word occurrence of `target`.
+function _insertBefore(zh, ins, target, space){
+  if(space){
+    const parts=String(zh).split(/(\s+)/);   // keep whitespace tokens
+    for(let i=0;i<parts.length;i++){
+      const clean=parts[i].replace(/[^\p{L}\p{M}]/gu,'').toLowerCase();
+      if(clean===String(target).toLowerCase()){ parts.splice(i,0,ins+' '); return parts.join(''); }
+    }
+    return null;
+  }
+  const pos=String(zh).indexOf(target);       // CJK: char-exact
+  return pos<0?null:(zh.slice(0,pos)+ins+zh.slice(pos));
+}
+
+// Dispatcher: R2 (transformation) when buildable and chosen, else R1.
+let PRODUCTION_R2_SHARE=0.5;   // chance of attempting a transformation when rung unspecified
+function buildProductionTask(opts){
+  opts=opts||{};
+  const ctx=_prodCandidates();
+  if(!ctx) return null;
+  const wantR2 = opts.rung==='R2' || (!opts.rung && Math.random()<PRODUCTION_R2_SHARE);
+  if(wantR2){ const t=_buildR2Task(ctx); if(t) return t; }
+  if(opts.rung==='R2') return null;            // explicit R2 requested but unbuildable
+  return _buildR1Task(ctx, opts);
 }
 
 // Injectable grader seam. async: grade(task, response, onDone(verdict)). Verdict carries
