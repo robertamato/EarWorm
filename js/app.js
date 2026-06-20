@@ -9433,11 +9433,20 @@ function simInvariants(r){
   var minGap=gaps.length?Math.min.apply(null,gaps):null;
   var ps=steps.filter(function(s){return s.type!=='introduce'&&s.type!=='grammar'&&typeof s.p==='number';}).map(function(s){return s.p;});
   var meanEdge=ps.length?ps.reduce(function(a,b){return a+Math.abs(b-0.5);},0)/ps.length:null;
-  var MIN_GAP=3, PACE_FLOOR=Math.max(1,Math.round(steps.length*0.15)), EDGE_MAX=0.15;
+  // No-monopoly: the single most-served card must not dominate the run. A livelock
+  // (e.g. the 2-card alternation that froze the frontier) makes one card ~50% of
+  // steps; healthy rotation keeps any single card well under that. Only meaningful
+  // once the run is long enough to have cycled a real working set.
+  var servedCount={}, totalServed=0, maxShare=0;
+  steps.forEach(function(s){ if(s.idx!=null && !s.end && !s.error && s.type!=='grammar'){ servedCount[s.idx]=(servedCount[s.idx]||0)+1; totalServed++; } });
+  Object.keys(servedCount).forEach(function(k){ if(servedCount[k]>maxShare) maxShare=servedCount[k]; });
+  var topShare=totalServed?maxShare/totalServed:0;
+  var MIN_GAP=3, PACE_FLOOR=Math.max(1,Math.round(steps.length*0.15)), EDGE_MAX=0.15, MONOPOLY_MAX=0.35;
   var checks=[
     {name:'never test before flash',     pass:beforeFlash===0,                              detail:beforeFlash+' violation(s)'},
     {name:'initial spacing ≥'+MIN_GAP, pass:(minGap==null||minGap>=MIN_GAP),            detail:'min gap '+minGap},
     {name:'no immediate repeat',         pass:immediateRepeat===0,                          detail:immediateRepeat+' repeat(s)'},
+    {name:'no card monopoly',            pass:(totalServed<30||topShare<=MONOPOLY_MAX),     detail:'top card '+Math.round(topShare*100)+'% of '+totalServed},
     {name:'pace ≥'+PACE_FLOOR,         pass:(r.finalFrontier>=PACE_FLOOR),              detail:'frontier '+r.finalFrontier},
     {name:'edge ≤'+EDGE_MAX,           pass:(meanEdge==null||meanEdge<=EDGE_MAX),       detail:'mean|P-.5| '+(meanEdge==null?'-':meanEdge.toFixed(3))}
   ];
@@ -10197,13 +10206,21 @@ const Scheduler = {
       let pick;
       if (dueItems.length) {
         if (FRONTIER_SEEK) {
-          // Hybrid: in-acquisition cards first (graduation velocity + anti-starvation
-          // freeze fix), then by entropy(P) — nearest P≈0.5 — bucketed so the recency
-          // stamp still rotates fairly within a tier. Pure entropy-first would starve
-          // the almost-graduated (p≈0.6) cards that free a cap slot.
+          // In-acquisition cards come first (graduation velocity + anti-starvation),
+          // but the two sets want DIFFERENT objectives:
+          //   • acquisition set (acqRank 0): the goal is to GRADUATE all of them, so
+          //     use FAIR ROTATION (least-recently-seen). Entropy-seeking here is a
+          //     deadlock: an overdue hard card decays to P≈0.3 → LOWER entropy than the
+          //     fresh P≈0.5 cards → it's never reached → never graduates → jams the cap.
+          //     (Observed live as a 2-card livelock on the highest-entropy stage-0 pair.)
+          //   • review set (acqRank 1): entropy-seek the P≈0.5 learning edge.
           const tier = idx => { const ci = S.cards[idx]; return Math.round(this._entropy(this._pCorrect(ci, 'meaning')) / ENTROPY_BUCKET); };
-          pick = dueItems.slice().sort((a, b) =>
-            (acqRank(a.idx) - acqRank(b.idx)) || (tier(b.idx) - tier(a.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)))[0];
+          pick = dueItems.slice().sort((a, b) => {
+            const ar = acqRank(a.idx) - acqRank(b.idx);
+            if (ar) return ar;
+            if (acqRank(a.idx) === 0) return lastSeen(a.idx) - lastSeen(b.idx);       // acquisition: fair rotation
+            return (tier(b.idx) - tier(a.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)); // review: entropy edge
+          })[0];
         } else {
           pick = dueItems.slice().sort((a, b) => (acqRank(a.idx) - acqRank(b.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)))[0];
         }
