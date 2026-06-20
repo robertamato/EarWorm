@@ -555,7 +555,6 @@ function showStudyPOSStaged(i, axisStage){
   cardShownAtMC=Date.now();
   studyDontKnowAction=()=>{
     if(posLocked) return; posLocked=true;
-    addMastery(i,-0.1);
     studyPending.push({idx:i,mod:'pos-s'+axisStage});
     armTapAdvance($('studyPOS'),()=>nextStudyCard(),1200);
   };
@@ -619,11 +618,9 @@ function showStudyPOSStaged(i, axisStage){
       if(isCorrect){ 
         advanceMult();
         S.xp+=Math.round(computeXP(true,currentMultIdx,posRespMs)*fatigueXPMultiplier());
-        addMastery(i,0.4*posSpeedMult);
       }
       else {
         resetMult();
-        addMastery(i,-0.2*posWagerMult);
         studyPending.push({idx:i,mod:'pos-s'+axisStage});
       }
       save();

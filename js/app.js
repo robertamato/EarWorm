@@ -993,10 +993,8 @@ function shouldIntroduceNewWord(){
 // the breadth-first introduction cap (retention-flexed, counts words below
 // recognition; see shouldIntroduceNewWord) interact with these rates.
 // ─────────────────────────────────────────────────────────────────────────────
-// RETIRED: competence is now axisStage-derived (see masteryScore). Kept as a no-op
-// so the ~20 legacy call sites don't error; they are dead and removed in a follow-up.
-// Progression flows solely through axisStage (recordAxisResultNew's accuracy gate).
-function addMastery(i, delta){ /* no-op — .m accumulator retired */ }
+// (The .m mastery accumulator and its addMastery() nudges are retired — competence
+// is now derived from axisStage; see masteryScore. All call sites removed.)
 
 /* ============ SCHEDULER ============ */
 // Per-axis SRS intervals. Each axis has its own due date.
@@ -1439,7 +1437,6 @@ function rate(i,r){
   ci.seen=true;
   if(r===1){
     ci.reps=0; ci.lapses++; ci.iv=0; ci.due=now+DAY;
-    addMastery(i,-0.5);
   } else {
     ci.reps++;
     const mult=r===2?1.2:r===3?2.5:3.5;
@@ -1447,7 +1444,6 @@ function rate(i,r){
     const adjustedIv=confidenceAdjustedInterval(i,ci.iv);
     ci.due=now+adjustedIv*DAY;
     const mDelta={2:0.25,3:0.5,4:0.75}[r]||0.5;
-    addMastery(i,mDelta);
   }
   save();
 }
@@ -3194,13 +3190,11 @@ function pickMC(btn,chosen,correct){
     const masteryGain=confident?1.2:unsure?0.6:1.0;
     const xpGain=confident?12:unsure?8:10;
     S.xp+=Math.round(xpGain*(mcCombo>=5?2:1)*fatigueXPMultiplier());
-    addMastery(mcCur,masteryGain);
     $('mc-explain').textContent=confident?'':'';
   } else {
     mcCombo=0;
     // Confident+wrong = bigger penalty (overconfidence)
     const masteryLoss=confident?-0.8:unsure?-0.2:-0.5;
-    addMastery(mcCur,masteryLoss);
     const CJKe="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
     const [correctCh,,correctDef]=D[mcCur];
     const isRev=mcReverse;
@@ -4338,7 +4332,6 @@ function showStudyMC(i, reverse, showPosHint){
     if(mcLocked) return; mcLocked=true;
     recordObservation({mod:reverse?'mc-rev':'mc-fwd',comp:null,fg:i,fax:'meaning',ok:false,opt:null});
     recordAxisResultNew(i,'meaning',false,Date.now()-cardShownAtMC);
-    addMastery(i,-0.3);
     studyPending.push({idx:i,mod:reverse?'mc-rev':'mc-fwd'});
     armTapAdvance($('studyMC'),()=>nextStudyCard(),1200);
   };
@@ -4418,7 +4411,7 @@ function pickStudyMC(btn,chosen,correct,i){
     const _won=Math.round(xpGained*fatigueXPMultiplier());
     S.xp+=_won;
     if(!isBusted()){ S.chips=settleWager(S.chips||0,currentMultIdx,defaultMultIdx,true,_won).chips; }
-    addMastery(i,Math.min(2.0,mGain)); rate(i,3);
+    rate(i,3);
     if($('studyMCExplain')) $('studyMCExplain').textContent='';
   } else {
     mcCombo=0;
@@ -4426,13 +4419,7 @@ function pickStudyMC(btn,chosen,correct,i){
     if(!isBusted()){ S.chips=settleWager(S.chips||0,currentMultIdx,defaultMultIdx,false,0).chips; if((S.chips||0)<=0) S.busted=true; }
     // Overconfident wrong (high wager, fast) = bigger loss
     const mLoss2=(sConfident?-0.8:sUnsure?-0.2:-0.5)*wagerMult*(speedMult>1.0?1.2:1.0);
-    addMastery(i,Math.max(-1.5,mLoss2)); rate(i,1); studyPending.push(i);
-    // Regression: if mastery drops low, push back toward flashcard phase
-    if(masteryScore(i)<0.5){
-      const ci=card(i);
-      ci.exp=Math.max(0,(ci.exp||0)-1);
-      save();
-    }
+    rate(i,1); studyPending.push(i);
     const CJKe="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
     const [correctCh,,correctDef]=D[i];
     const el=$('studyMCExplain');
@@ -4638,8 +4625,8 @@ function showStudyTone(i){
       recordWagerDecision(i,firstTry,currentMultIdx,defaultMultIdx,toneMs);
       logAnswer(i,firstTry,'tone',toneMs);
       const tSpeedM=toneMs<1500?1.3:toneMs<4000?1.0:0.8;
-      if(firstTry){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,toneMs)*fatigueXPMultiplier()); addMastery(i,0.25*tSpeedM); }
-      else { resetMult(); addMastery(i,-0.1); studyPending.push(i); }
+      if(firstTry){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,toneMs)*fatigueXPMultiplier()); }
+      else { resetMult(); studyPending.push(i); }
       save();
       $('studyTonePrompt').onclick=null;
       armTapAdvance($('studyTone'),()=>nextStudyCard(),0); // no hold -- they did the work finding the tone
@@ -5012,8 +4999,8 @@ function showStudyPOS(i){
       if(stage===1) $('studyPOSPrompt').appendChild(conf);
 
       logAnswer(i,isCorrect,'pos');
-      if(isCorrect){ S.xp+=Math.round(8*(mcCombo>=5?2:1)*fatigueXPMultiplier()); addMastery(i,0.5); }
-      else { addMastery(i,-0.25); studyPending.push(i); }
+      if(isCorrect){ S.xp+=Math.round(8*(mcCombo>=5?2:1)*fatigueXPMultiplier()); }
+      else { studyPending.push(i); }
       save();
       if(S.sound!=='mute') speak(ch,activeCourse().langCode);
       setTimeout(()=>{ conf.remove(); nextStudyCard(); }, isCorrect?600:1300);
@@ -5710,7 +5697,6 @@ function wsComplete(){
   $('ws-next').style.display='block';
   // Award XP and small mastery boost to target word
   const ti=D.findIndex(([ch])=>ch===wsTarget);
-  if(ti>=0){ addMastery(ti,0.3); }
   S.xp+=Math.round(20*fatigueXPMultiplier()); save();
   if(S.sound!=='mute') speak(wsTarget,activeCourse().langCode);
 }
@@ -6286,7 +6272,6 @@ function showStudyPOSStaged(i, axisStage){
   cardShownAtMC=Date.now();
   studyDontKnowAction=()=>{
     if(posLocked) return; posLocked=true;
-    addMastery(i,-0.1);
     studyPending.push({idx:i,mod:'pos-s'+axisStage});
     armTapAdvance($('studyPOS'),()=>nextStudyCard(),1200);
   };
@@ -6350,11 +6335,9 @@ function showStudyPOSStaged(i, axisStage){
       if(isCorrect){ 
         advanceMult();
         S.xp+=Math.round(computeXP(true,currentMultIdx,posRespMs)*fatigueXPMultiplier());
-        addMastery(i,0.4*posSpeedMult);
       }
       else {
         resetMult();
-        addMastery(i,-0.2*posWagerMult);
         studyPending.push({idx:i,mod:'pos-s'+axisStage});
       }
       save();
@@ -8162,10 +8145,8 @@ function showStudyCloze(i){
       if(isCorrect){
         advanceMult();
         S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier());
-        addMastery(i,0.5*speedM); // cloze is harder — more mastery gain
       } else {
         resetMult();
-        addMastery(i,-0.3);
         studyPending.push({idx:i,mod:'cloze'});
       }
       save();
@@ -8183,7 +8164,6 @@ function showStudyCloze(i){
     if(locked) return; locked=true;
     recordObservation({mod:'cloze',comp:zh,fg:i,fax:'meaning',ok:false,opt:null});
     recordAxisResultNew(i,'meaning',false,Date.now()-cardShownAtMC);
-    addMastery(i,-0.3);
     studyPending.push({idx:i,mod:'cloze'});
     armTapAdvance($('studyMC'),function(){nextStudyCard();},1200);
   };
@@ -8285,8 +8265,8 @@ function showStudyComprehension(i){
       recordWagerDecision(i,isCorrect,currentMultIdx,defaultMultIdx,respMs);
       logAnswer(i,isCorrect,'comprehension',respMs);
       const speedM=respMs<1500?1.3:respMs<4000?1.0:0.8;
-      if(isCorrect){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier()); addMastery(i,0.5*speedM); }
-      else { resetMult(); addMastery(i,-0.3); studyPending.push({idx:i,mod:'comprehension'}); }
+      if(isCorrect){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier()); }
+      else { resetMult(); studyPending.push({idx:i,mod:'comprehension'}); }
       save();
       if(S.sound!=='mute') speak(zh,activeCourse().langCode);
       armTapAdvance($('studyMC'),function(){nextStudyCard();},isCorrect?0:1200);
@@ -8299,7 +8279,6 @@ function showStudyComprehension(i){
     if(locked) return; locked=true;
     recordObservation({mod:'comprehension',comp:zh,fg:i,fax:'meaning',ok:false,opt:null});
     recordAxisResultNew(i,'meaning',false,Date.now()-cardShownAtMC);
-    addMastery(i,-0.3);
     studyPending.push({idx:i,mod:'comprehension'});
     armTapAdvance($('studyMC'),function(){nextStudyCard();},1200);
   };
@@ -8472,11 +8451,9 @@ function showWordOrderDrill(i){
         if(isCorrect){
           advanceMult();
           S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier());
-          addMastery(i,0.6); // highest mastery gain — hardest receptive modality
           if(S.sound!=='mute') speak(zh,activeCourse().langCode);
         } else {
           resetMult();
-          addMastery(i,-0.2);
           studyPending.push({idx:i,mod:'word-order'});
         }
         save();
@@ -8500,7 +8477,6 @@ function showWordOrderDrill(i){
   renderChallengeRings(i,'word-order',$('studyMCPrompt'));
   studyDontKnowAction=function(){
     if(locked) return; locked=true;
-    addMastery(i,-0.2);
     studyPending.push({idx:i,mod:'word-order'});
     armTapAdvance($('studyMC'),function(){nextStudyCard();},1200);
   };
@@ -9656,7 +9632,6 @@ $('mc-dontknow').onclick=()=>{
   hist.push(false);
   mcHistory.set(mcCur,hist);
   rate(mcCur,1);
-  addMastery(mcCur,-0.5);
   mcCombo=0;
   if(S.sound!=='mute') speak(D[mcCur][0],activeCourse().langCode);
   save();

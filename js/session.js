@@ -983,7 +983,6 @@ function showStudyMC(i, reverse, showPosHint){
     if(mcLocked) return; mcLocked=true;
     recordObservation({mod:reverse?'mc-rev':'mc-fwd',comp:null,fg:i,fax:'meaning',ok:false,opt:null});
     recordAxisResultNew(i,'meaning',false,Date.now()-cardShownAtMC);
-    addMastery(i,-0.3);
     studyPending.push({idx:i,mod:reverse?'mc-rev':'mc-fwd'});
     armTapAdvance($('studyMC'),()=>nextStudyCard(),1200);
   };
@@ -1063,7 +1062,7 @@ function pickStudyMC(btn,chosen,correct,i){
     const _won=Math.round(xpGained*fatigueXPMultiplier());
     S.xp+=_won;
     if(!isBusted()){ S.chips=settleWager(S.chips||0,currentMultIdx,defaultMultIdx,true,_won).chips; }
-    addMastery(i,Math.min(2.0,mGain)); rate(i,3);
+    rate(i,3);
     if($('studyMCExplain')) $('studyMCExplain').textContent='';
   } else {
     mcCombo=0;
@@ -1071,13 +1070,7 @@ function pickStudyMC(btn,chosen,correct,i){
     if(!isBusted()){ S.chips=settleWager(S.chips||0,currentMultIdx,defaultMultIdx,false,0).chips; if((S.chips||0)<=0) S.busted=true; }
     // Overconfident wrong (high wager, fast) = bigger loss
     const mLoss2=(sConfident?-0.8:sUnsure?-0.2:-0.5)*wagerMult*(speedMult>1.0?1.2:1.0);
-    addMastery(i,Math.max(-1.5,mLoss2)); rate(i,1); studyPending.push(i);
-    // Regression: if mastery drops low, push back toward flashcard phase
-    if(masteryScore(i)<0.5){
-      const ci=card(i);
-      ci.exp=Math.max(0,(ci.exp||0)-1);
-      save();
-    }
+    rate(i,1); studyPending.push(i);
     const CJKe="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
     const [correctCh,,correctDef]=D[i];
     const el=$('studyMCExplain');
@@ -1283,8 +1276,8 @@ function showStudyTone(i){
       recordWagerDecision(i,firstTry,currentMultIdx,defaultMultIdx,toneMs);
       logAnswer(i,firstTry,'tone',toneMs);
       const tSpeedM=toneMs<1500?1.3:toneMs<4000?1.0:0.8;
-      if(firstTry){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,toneMs)*fatigueXPMultiplier()); addMastery(i,0.25*tSpeedM); }
-      else { resetMult(); addMastery(i,-0.1); studyPending.push(i); }
+      if(firstTry){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,toneMs)*fatigueXPMultiplier()); }
+      else { resetMult(); studyPending.push(i); }
       save();
       $('studyTonePrompt').onclick=null;
       armTapAdvance($('studyTone'),()=>nextStudyCard(),0); // no hold -- they did the work finding the tone
@@ -1657,8 +1650,8 @@ function showStudyPOS(i){
       if(stage===1) $('studyPOSPrompt').appendChild(conf);
 
       logAnswer(i,isCorrect,'pos');
-      if(isCorrect){ S.xp+=Math.round(8*(mcCombo>=5?2:1)*fatigueXPMultiplier()); addMastery(i,0.5); }
-      else { addMastery(i,-0.25); studyPending.push(i); }
+      if(isCorrect){ S.xp+=Math.round(8*(mcCombo>=5?2:1)*fatigueXPMultiplier()); }
+      else { studyPending.push(i); }
       save();
       if(S.sound!=='mute') speak(ch,activeCourse().langCode);
       setTimeout(()=>{ conf.remove(); nextStudyCard(); }, isCorrect?600:1300);
@@ -2355,7 +2348,6 @@ function wsComplete(){
   $('ws-next').style.display='block';
   // Award XP and small mastery boost to target word
   const ti=D.findIndex(([ch])=>ch===wsTarget);
-  if(ti>=0){ addMastery(ti,0.3); }
   S.xp+=Math.round(20*fatigueXPMultiplier()); save();
   if(S.sound!=='mute') speak(wsTarget,activeCourse().langCode);
 }

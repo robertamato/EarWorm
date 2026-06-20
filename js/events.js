@@ -871,7 +871,6 @@ $('mc-dontknow').onclick=()=>{
   hist.push(false);
   mcHistory.set(mcCur,hist);
   rate(mcCur,1);
-  addMastery(mcCur,-0.5);
   mcCombo=0;
   if(S.sound!=='mute') speak(D[mcCur][0],activeCourse().langCode);
   save();

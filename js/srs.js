@@ -785,13 +785,11 @@ function pickMC(btn,chosen,correct){
     const masteryGain=confident?1.2:unsure?0.6:1.0;
     const xpGain=confident?12:unsure?8:10;
     S.xp+=Math.round(xpGain*(mcCombo>=5?2:1)*fatigueXPMultiplier());
-    addMastery(mcCur,masteryGain);
     $('mc-explain').textContent=confident?'':'';
   } else {
     mcCombo=0;
     // Confident+wrong = bigger penalty (overconfidence)
     const masteryLoss=confident?-0.8:unsure?-0.2:-0.5;
-    addMastery(mcCur,masteryLoss);
     const CJKe="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
     const [correctCh,,correctDef]=D[mcCur];
     const isRev=mcReverse;

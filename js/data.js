@@ -993,10 +993,8 @@ function shouldIntroduceNewWord(){
 // the breadth-first introduction cap (retention-flexed, counts words below
 // recognition; see shouldIntroduceNewWord) interact with these rates.
 // ─────────────────────────────────────────────────────────────────────────────
-// RETIRED: competence is now axisStage-derived (see masteryScore). Kept as a no-op
-// so the ~20 legacy call sites don't error; they are dead and removed in a follow-up.
-// Progression flows solely through axisStage (recordAxisResultNew's accuracy gate).
-function addMastery(i, delta){ /* no-op — .m accumulator retired */ }
+// (The .m mastery accumulator and its addMastery() nudges are retired — competence
+// is now derived from axisStage; see masteryScore. All call sites removed.)
 
 /* ============ SCHEDULER ============ */
 // Per-axis SRS intervals. Each axis has its own due date.
@@ -1439,7 +1437,6 @@ function rate(i,r){
   ci.seen=true;
   if(r===1){
     ci.reps=0; ci.lapses++; ci.iv=0; ci.due=now+DAY;
-    addMastery(i,-0.5);
   } else {
     ci.reps++;
     const mult=r===2?1.2:r===3?2.5:3.5;
@@ -1447,7 +1444,6 @@ function rate(i,r){
     const adjustedIv=confidenceAdjustedInterval(i,ci.iv);
     ci.due=now+adjustedIv*DAY;
     const mDelta={2:0.25,3:0.5,4:0.75}[r]||0.5;
-    addMastery(i,mDelta);
   }
   save();
 }

@@ -618,10 +618,8 @@ function showStudyCloze(i){
       if(isCorrect){
         advanceMult();
         S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier());
-        addMastery(i,0.5*speedM); // cloze is harder — more mastery gain
       } else {
         resetMult();
-        addMastery(i,-0.3);
         studyPending.push({idx:i,mod:'cloze'});
       }
       save();
@@ -639,7 +637,6 @@ function showStudyCloze(i){
     if(locked) return; locked=true;
     recordObservation({mod:'cloze',comp:zh,fg:i,fax:'meaning',ok:false,opt:null});
     recordAxisResultNew(i,'meaning',false,Date.now()-cardShownAtMC);
-    addMastery(i,-0.3);
     studyPending.push({idx:i,mod:'cloze'});
     armTapAdvance($('studyMC'),function(){nextStudyCard();},1200);
   };
@@ -741,8 +738,8 @@ function showStudyComprehension(i){
       recordWagerDecision(i,isCorrect,currentMultIdx,defaultMultIdx,respMs);
       logAnswer(i,isCorrect,'comprehension',respMs);
       const speedM=respMs<1500?1.3:respMs<4000?1.0:0.8;
-      if(isCorrect){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier()); addMastery(i,0.5*speedM); }
-      else { resetMult(); addMastery(i,-0.3); studyPending.push({idx:i,mod:'comprehension'}); }
+      if(isCorrect){ advanceMult(); S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier()); }
+      else { resetMult(); studyPending.push({idx:i,mod:'comprehension'}); }
       save();
       if(S.sound!=='mute') speak(zh,activeCourse().langCode);
       armTapAdvance($('studyMC'),function(){nextStudyCard();},isCorrect?0:1200);
@@ -755,7 +752,6 @@ function showStudyComprehension(i){
     if(locked) return; locked=true;
     recordObservation({mod:'comprehension',comp:zh,fg:i,fax:'meaning',ok:false,opt:null});
     recordAxisResultNew(i,'meaning',false,Date.now()-cardShownAtMC);
-    addMastery(i,-0.3);
     studyPending.push({idx:i,mod:'comprehension'});
     armTapAdvance($('studyMC'),function(){nextStudyCard();},1200);
   };
@@ -928,11 +924,9 @@ function showWordOrderDrill(i){
         if(isCorrect){
           advanceMult();
           S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier());
-          addMastery(i,0.6); // highest mastery gain — hardest receptive modality
           if(S.sound!=='mute') speak(zh,activeCourse().langCode);
         } else {
           resetMult();
-          addMastery(i,-0.2);
           studyPending.push({idx:i,mod:'word-order'});
         }
         save();
@@ -956,7 +950,6 @@ function showWordOrderDrill(i){
   renderChallengeRings(i,'word-order',$('studyMCPrompt'));
   studyDontKnowAction=function(){
     if(locked) return; locked=true;
-    addMastery(i,-0.2);
     studyPending.push({idx:i,mod:'word-order'});
     armTapAdvance($('studyMC'),function(){nextStudyCard();},1200);
   };
