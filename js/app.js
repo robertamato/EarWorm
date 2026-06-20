@@ -572,6 +572,56 @@ function computeGenerativeBasis(deck, spec){
 }
 try{ window.computeGenerativeBasis=computeGenerativeBasis; window.GRAMMAR_SPEC_ZH=GRAMMAR_SPEC_ZH; }catch(e){}
 
+// ── SUBSTITUTION DISTANCE — the THIRD cost axis (the L1→L2 diff) ───────────
+// Acquisition isn't learning L2 from zero; the learner owns a generative engine
+// (L1). The real cost of an atom is its SUBSTITUTION DISTANCE from L1, not its
+// frequency or grammatical role. This is the (L1,L2)-PAIR language module —
+// hand-authored here for English→Mandarin (an LLM emits it for arbitrary pairs).
+//   c: 'transparent'  — same concept/role, relabel only (positive transfer, ~free)
+//      'divergent'    — no clean L1 analog / new category (the real learning load)
+//      'false-friend' — looks substitutable but misfires (negative transfer; UN-learn)
+//   d ∈ [0,1] ≈ learning cost.  Effort follows this axis, not frequency.
+const SUBSTITUTION_EN_ZH = {
+  '我':{c:'transparent', d:0.15, n:'I/me — same pronoun role'},
+  '你':{c:'transparent', d:0.15, n:'you'},
+  '他':{c:'transparent', d:0.15, n:'he'},
+  '一':{c:'transparent', d:0.20, n:'one/a — numeral'},
+  '好':{c:'transparent', d:0.20, n:'good — adjective'},
+  '不':{c:'transparent', d:0.30, n:'not (the 不/没 split is divergent)'},
+  '有':{c:'transparent', d:0.35, n:'have (existential use diverges)'},
+  '也':{c:'transparent', d:0.40, n:'also/too (placement differs)'},
+  '上':{c:'transparent', d:0.45, n:'up/on (localizer grammar diverges)'},
+  '和':{c:'false-friend',d:0.55, n:'and — but conjoins NOUNS only, not clauses/verbs'},
+  '很':{c:'false-friend',d:0.70, n:'looks like "very" but OBLIGATORY + bleached before pred. adjectives'},
+  '在':{c:'divergent',   d:0.70, n:'coverb/locative + progressive — no clean analog'},
+  '没':{c:'divergent',   d:0.75, n:'negator for 有/past — the 不/没 split'},
+  '的':{c:'divergent',   d:0.80, n:'possessive + relativizer + modifier — no single analog'},
+  '是':{c:'false-friend',d:0.85, n:'copula, but NOT before adjectives (我很好 not 我是好)'},
+  '吗':{c:'divergent',   d:0.85, n:'Q-particle — English uses inversion/intonation'},
+  '了':{c:'divergent',   d:0.90, n:'aspect particle — English has tense, not aspect'},
+  '个':{c:'divergent',   d:0.90, n:'classifier — English has no obligatory classifier'}
+};
+function substitution(ch){ return SUBSTITUTION_EN_ZH[ch] || null; }
+function substitutionDist(ch){ const s=SUBSTITUTION_EN_ZH[ch]; return s?s.d:null; }
+
+// Fold all three axes over the generative basis: frequency rank × generative role
+// × substitution class → the REAL learning load (transparent atoms are ~free
+// relabels; divergent + false-friend carry it).
+function computeThreeAxisBasis(){
+  const g=computeGenerativeBasis();
+  const atoms=g.basis.map(a=>{ const s=substitution(a.ch); return { ch:a.ch, freqRank:a.rank, role:a.role, subClass:s?s.c:'unclassified', dist:s?s.d:null, note:s?s.n:'' }; });
+  const byClass={transparent:0, divergent:0, 'false-friend':0, unclassified:0};
+  let load=0;
+  atoms.forEach(a=>{ byClass[a.subClass]=(byClass[a.subClass]||0)+1; if(a.dist!=null) load+=a.dist; });
+  return { basisSize:g.basisSize, byClass:byClass,
+    effectiveLoad:Math.round(load*100)/100,                       // sum of substitution distance
+    nominalMax:g.basisSize,                                       // if every atom were brand-new
+    realLoadCount:(byClass.divergent + byClass['false-friend']),  // atoms with no crutch
+    transparentSharePct:Math.round((byClass.transparent/g.basisSize)*100),
+    atoms:atoms };
+}
+try{ window.SUBSTITUTION_EN_ZH=SUBSTITUTION_EN_ZH; window.computeThreeAxisBasis=computeThreeAxisBasis; }catch(e){}
+
 // ── FRONTIER MODEL ──────────────────────────────────────────────
 // Words enter one at a time in strict frequency order.
 // A word is INTRODUCED when it has been shown as a flashcard (seen:true).
