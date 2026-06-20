@@ -804,12 +804,27 @@ function explainCardSelection(i, mod){
     var pickWhy = isAcq ? 'picked: in-acquisition, prioritized to consolidate & free a slot'
                 : (overdue>0 ? 'picked: most-overdue (due '+overdue+' cards ago)' : 'picked: due now');
     var capNote = 'frontier '+frontier+'/'+D.length+' · in-acquisition '+inAcq+'/'+cap+(inAcq>=cap?'  ⚠ CAP FULL — no new word until one graduates':'');
+    // Substitution (σ) — the L1→L2 cost, and (when SUBST_GATING is on) its live effect
+    // on the graduation bar: transparent grads a rep sooner, divergent/false-friend a rep later.
+    var subNote = '';
+    try {
+      var sub = (typeof substitution==='function') ? substitution(D[i][0]) : null;
+      if (sub) {
+        var gate = (typeof SUBST_GATING!=='undefined' && SUBST_GATING)
+          ? (sub.c==='transparent' ? ' → graduates FASTER (−1 rep)' : (sub.c==='divergent'||sub.c==='false-friend') ? ' → needs MORE consolidation (+1 rep)' : '')
+          : ' (gating off)';
+        subNote = 'substitution: '+sub.c+' (σ '+sub.d+')'+gate+' — '+sub.n;
+      } else {
+        subNote = 'substitution: unclassified';
+      }
+    } catch(e){}
     return {
       head: (D[i]?D[i][0]:'?')+' #'+i+' · '+(introduced?'review':'INTRODUCE (flash)')+' · meaning-stage '+stage,
       lines: [
         'P(correct) '+(Math.round(p*100)/100)+(edge?'  ·  '+edge:''),
         pickWhy,
         'modality '+mod+' — '+modWhy,
+        subNote,
         capNote
       ]
     };

@@ -1470,6 +1470,23 @@ const AXIS_ADVANCE_WINDOW={
   meaning:[2,4,4,5,5,4],
 };
 
+// SUBSTITUTION GATING (the first LIVE wiring of the σ axis): effort follows
+// substitution distance. A transparent atom is a relabel of a concept the learner
+// already owns → graduate FAST (fewer reps). A divergent / false-friend atom is
+// genuinely new (or actively misleading) → needs MORE consolidation. This modulates
+// the meaning-axis stage-advance window by the atom's substitution class, so the
+// learner blows through 水/书/吃 and dwells on 了/个/是 — exactly where effort belongs.
+// Flag-gated so it can be A/B'd against pure frequency. Surfaced in the WHY caption.
+let SUBST_GATING = true;
+try{ window.setSubstGating=function(on){ SUBST_GATING=!!on; return SUBST_GATING; }; }catch(e){}
+// window delta by class: transparent graduates a rep sooner, divergent/false-friend a rep later.
+function substWindowDelta(ch){
+  if(!SUBST_GATING || typeof substitution!=='function') return 0;
+  const s=substitution(ch);
+  if(!s) return 0;
+  return s.c==='transparent' ? -1 : (s.c==='divergent'||s.c==='false-friend') ? +1 : 0;
+}
+
 function recordAxisResultNew(i, axis, isCorrect, responseMs){
   logAxisReview(i, axis, isCorrect, responseMs);
   recordAxisHistory(i, axis, isCorrect);
@@ -1498,7 +1515,8 @@ function recordAxisResultNew(i, axis, isCorrect, responseMs){
   // Stage advancement: accuracy window threshold
   const hist=ci.axisHistory[axis]||[];
   const _w=AXIS_ADVANCE_WINDOW[axis]&&AXIS_ADVANCE_WINDOW[axis][currentStage];
-  const baseWindow=(_w==null)?5:_w;   // explicit null-check: a legit window of 0/low must NOT coerce to 5
+  let baseWindow=(_w==null)?5:_w;   // explicit null-check: a legit window of 0/low must NOT coerce to 5
+  if(axis==='meaning') baseWindow=Math.max(1, baseWindow + substWindowDelta(D[i]&&D[i][0]));  // σ gating: transparent grad faster, divergent/false-friend slower
   // Wager above default compresses the stage gate (max -3 from window)
   const _wBonus=(typeof currentMultIdx!=='undefined'&&typeof defaultMultIdx!=='undefined')
     ?Math.min(3,Math.max(0,currentMultIdx-defaultMultIdx)):0;
@@ -9658,12 +9676,27 @@ function explainCardSelection(i, mod){
     var pickWhy = isAcq ? 'picked: in-acquisition, prioritized to consolidate & free a slot'
                 : (overdue>0 ? 'picked: most-overdue (due '+overdue+' cards ago)' : 'picked: due now');
     var capNote = 'frontier '+frontier+'/'+D.length+' · in-acquisition '+inAcq+'/'+cap+(inAcq>=cap?'  ⚠ CAP FULL — no new word until one graduates':'');
+    // Substitution (σ) — the L1→L2 cost, and (when SUBST_GATING is on) its live effect
+    // on the graduation bar: transparent grads a rep sooner, divergent/false-friend a rep later.
+    var subNote = '';
+    try {
+      var sub = (typeof substitution==='function') ? substitution(D[i][0]) : null;
+      if (sub) {
+        var gate = (typeof SUBST_GATING!=='undefined' && SUBST_GATING)
+          ? (sub.c==='transparent' ? ' → graduates FASTER (−1 rep)' : (sub.c==='divergent'||sub.c==='false-friend') ? ' → needs MORE consolidation (+1 rep)' : '')
+          : ' (gating off)';
+        subNote = 'substitution: '+sub.c+' (σ '+sub.d+')'+gate+' — '+sub.n;
+      } else {
+        subNote = 'substitution: unclassified';
+      }
+    } catch(e){}
     return {
       head: (D[i]?D[i][0]:'?')+' #'+i+' · '+(introduced?'review':'INTRODUCE (flash)')+' · meaning-stage '+stage,
       lines: [
         'P(correct) '+(Math.round(p*100)/100)+(edge?'  ·  '+edge:''),
         pickWhy,
         'modality '+mod+' — '+modWhy,
+        subNote,
         capNote
       ]
     };
