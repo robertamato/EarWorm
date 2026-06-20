@@ -1332,6 +1332,44 @@ function recordAxisHistory(i, axis, isCorrect){
   if(ci.axisHistory[axis].length>20) ci.axisHistory[axis].shift();
 }
 
+// ── CONFUSION GRAPH — the negative space (THEORY.md) ────────────────────────
+// Language is a system of differences (Saussure): an atom is pinned by what it is
+// NOT. Every wrong answer writes a directed edge correct→chosen with its error type;
+// the graph is the learner's live boundary-fuzziness — the dealer's edge, and the
+// organ that contrastive scheduling, distinctiveness-color, and the double-down read.
+// Directed correct→chosen (saw correct's prompt, picked chosen); decays as resolved.
+function recordConfusion(correctIdx, chosenIdx, type){
+  if(correctIdx==null||chosenIdx==null||correctIdx<0||chosenIdx<0||correctIdx===chosenIdx) return;
+  if(!S.confusion) S.confusion={};
+  if(!S.confusion[correctIdx]) S.confusion[correctIdx]={};
+  const e=S.confusion[correctIdx][chosenIdx]||{n:0,type:type||'random',lastAt:0};
+  e.n=Math.min(20,e.n+1); e.type=type||e.type; e.lastAt=S.totalSeen||0;
+  S.confusion[correctIdx][chosenIdx]=e;
+}
+// A correct encounter with idx resolves some of its confusions (both directions).
+function decayConfusion(idx){
+  if(!S.confusion||idx==null||idx<0) return;
+  const drop=(a,b)=>{ const m=S.confusion[a]; if(m&&m[b]){ m[b].n-=1; if(m[b].n<=0){ delete m[b]; if(!Object.keys(m).length) delete S.confusion[a]; } } };
+  if(S.confusion[idx]) Object.keys(S.confusion[idx]).forEach(b=>drop(idx,+b));
+  Object.keys(S.confusion).forEach(a=>drop(+a, idx));
+}
+// Symmetric confusion strength between two atoms.
+function confusionWeight(a,b){
+  let w=0;
+  try{ if(S.confusion&&S.confusion[a]&&S.confusion[a][b]) w+=S.confusion[a][b].n; }catch(e){}
+  try{ if(S.confusion&&S.confusion[b]&&S.confusion[b][a]) w+=S.confusion[b][a].n; }catch(e){}
+  return w;
+}
+// All live confusion edges touching atom i (both directions), strongest first.
+function confusionEdges(i){
+  const out=[];
+  if(!S.confusion) return out;
+  if(S.confusion[i]) Object.keys(S.confusion[i]).forEach(b=>{ const e=S.confusion[i][b]; out.push({a:i,b:+b,n:e.n,type:e.type,lastAt:e.lastAt}); });
+  Object.keys(S.confusion).forEach(a=>{ if(+a!==i && S.confusion[a][i]){ const e=S.confusion[a][i]; out.push({a:+a,b:i,n:e.n,type:e.type,lastAt:e.lastAt}); } });
+  return out.sort((x,y)=>y.n-x.n);
+}
+try{ window.recordConfusion=recordConfusion; window.decayConfusion=decayConfusion; window.confusionWeight=confusionWeight; window.confusionEdges=confusionEdges; }catch(e){}
+
 // Durable real-time review instrumentation. ADDITIVE measurement substrate: the
 // count-based scheduler (axisDue) does NOT read these fields, so this changes no
 // behavior. We log wall-clock timing + outcome + latency now because that data

@@ -955,6 +955,7 @@ function showStudyMC(i, reverse, showPosHint){
       b.style.cssText='font-size:'+fsize+';border-color:'+fg+';color:'+fg+';padding:8px 4px;';
       b.textContent=choice.toUpperCase();
     }
+    b._choice=choice;
     b.onclick=()=>pickStudyMC(b,choice,correct,i);
     box.appendChild(b);
   });
@@ -1025,22 +1026,23 @@ function pickStudyMC(btn,chosen,correct,i){
   const isCorrect=chosen===correct;
   const hist=mcHistory.get(i)||[]; hist.push(isCorrect); mcHistory.set(i,hist);
 
-  document.querySelectorAll('#studyMCChoices .choice').forEach(b=>{
-    const match=mcReverse?(b.textContent===correct):(b.textContent===correct.toUpperCase());
-    if(match) b.classList.add('correct');
-    else if(b===btn&&!isCorrect) b.classList.add('wrong');
-    b.style.pointerEvents='none';
-  });
+  if(isCorrect){
+    document.querySelectorAll('#studyMCChoices .choice').forEach(b=>{ if(b===btn) b.classList.add('correct'); b.style.pointerEvents='none'; });
+  } else {
+    btn.classList.add('wrong'); btn.dataset.resolved='1';
+  }
 
   const responseMs=Date.now()-cardShownAtMC;
   logAnswer(i,isCorrect, mcReverse?'mc-rev':'mc-fwd', responseMs);
   if(!isCorrect){
     if(typeof beepError==='function') beepError();
     // Classify distractor error for targeted re-scheduling
-    const errType=classifyDistractorError(i,chosen);
+    const chosenIdx=mcReverse?D.findIndex(d=>d[0]===chosen):D.findIndex(d=>d[2]===chosen);
+    const errType=(chosenIdx>=0)?classifyDistractorError(i,D[chosenIdx][2]):'random';
     const ci2=card(i);
     if(!ci2.lastErrorType) ci2.lastErrorType={};
     ci2.lastErrorType.meaning=errType;
+    if(typeof recordConfusion==='function') recordConfusion(i, chosenIdx, errType);  // negative-space organ
     // Opposite errors = more urgent re-review (user has polarity inverted)
     if(errType==='opposite') { setAxisDue(i,'meaning',false,responseMs); }
   }
@@ -1074,6 +1076,7 @@ function pickStudyMC(btn,chosen,correct,i){
     S.xp+=_won;
     if(!isBusted()){ S.chips=settleWager(S.chips||0,currentMultIdx,defaultMultIdx,true,_won).chips; }
     rate(i,3);
+    if(typeof decayConfusion==='function') decayConfusion(i);  // a clean hit resolves confusion
     if($('studyMCExplain')) $('studyMCExplain').textContent='';
   } else {
     mcCombo=0;
@@ -1082,32 +1085,69 @@ function pickStudyMC(btn,chosen,correct,i){
     // Overconfident wrong (high wager, fast) = bigger loss
     const mLoss2=(sConfident?-0.8:sUnsure?-0.2:-0.5)*wagerMult*(speedMult>1.0?1.2:1.0);
     rate(i,1); studyPending.push(i);
-    const CJKe="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
-    const [correctCh,,correctDef]=D[i];
-    const el=$('studyMCExplain');
-    if(el){
-      if(!mcReverse){
-        el.textContent='✗ '+chosen.toUpperCase()+' → ✓ '+correctDef.toUpperCase();
-        el.style.fontFamily='inherit';
-      } else {
-        el.textContent='✗ '+chosen+' → ✓ '+correctCh;
-        el.style.fontFamily=charFont().split(':')[1].trim();
-      }
-    }
   }
   save();
   $('studyXP').textContent=studyHudText();
 
-  // Arm tap immediately — don't wait for TTS to finish
-  armTapAdvance($('studyMC'),()=>nextStudyCard(),isCorrect?0:1200);
-  // TTS plays in parallel
-  if(S.sound!=='mute') speak(D[i][0],activeCourse().langCode);
   // Make character tappable post-answer to open dictionary
   const ptEl=$('studyMCPromptText');
   if(ptEl&&!mcReverse){
     ptEl.style.cursor='pointer';
     ptEl.onclick=(e)=>{ e.stopPropagation(); openCharDetail(D[i][0],0,i); };
   }
+
+  if(isCorrect){
+    armTapAdvance($('studyMC'),()=>nextStudyCard(),0);
+    if(S.sound!=='mute') speak(D[i][0],activeCourse().langCode);
+  } else {
+    enterMCCorrection(i, correct, btn);
+  }
+}
+
+// MC CORRECTION MOMENT — wrong pick reveals what the chosen option ACTUALLY was,
+// holds the other glosses, and requires a manual selection of the correct answer
+// (active retrieval through the negative space). Clicking a held wrong reveals it too.
+function _mcCounterpart(choiceText){
+  const idx=mcReverse?D.findIndex(d=>d[0]===choiceText):D.findIndex(d=>d[2]===choiceText);
+  if(idx<0) return null;
+  return { idx:idx, char:D[idx][0], def:D[idx][2] };
+}
+function _annotateChoice(b){
+  if(!b||b._annotated) return; b._annotated=true;
+  const cp=_mcCounterpart(b._choice); if(!cp) return;
+  const span=document.createElement('span');
+  if(mcReverse){
+    span.textContent='= '+cp.def.toLowerCase();
+    span.style.cssText='display:block;font-size:9px;opacity:.85;margin-top:3px;letter-spacing:.5px;';
+  } else {
+    span.textContent='= '+cp.char;
+    span.style.cssText='display:block;font-size:15px;opacity:.9;margin-top:3px;'+charFont();
+  }
+  b.appendChild(span);
+}
+function enterMCCorrection(i, correct, chosenBtn){
+  const box=$('studyMCChoices');
+  if(!box){ armTapAdvance($('studyMC'),()=>nextStudyCard(),1200); return; }
+  const fg=getComputedStyle(document.body).color;
+  _annotateChoice(chosenBtn);
+  const el=$('studyMCExplain');
+  if(el){ el.textContent='NOT QUITE — NOW CHOOSE THE RIGHT ONE'; el.style.color=fg; el.style.fontFamily='inherit'; }
+  const buttons=[].slice.call(box.querySelectorAll('.choice'));
+  buttons.forEach(b=>{
+    b.style.pointerEvents='auto';
+    b.onclick=()=>{
+      if(b._done) return;
+      if(b._choice===correct){
+        b._done=true; b.classList.add('correct'); _annotateChoice(b);
+        buttons.forEach(x=>{ x.style.pointerEvents='none'; });
+        if(el) el.textContent='';
+        if(S.sound!=='mute') speak(D[i][0],activeCourse().langCode);
+        armTapAdvance($('studyMC'),()=>nextStudyCard(),0);
+      } else {
+        b.classList.add('wrong'); _annotateChoice(b);
+      }
+    };
+  });
 }
 
 /* --- Study Tone Interjection --- */
