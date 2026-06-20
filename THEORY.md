@@ -332,9 +332,129 @@ line `P_algo`, the user bets `P_user`, and the measured/rewarded quantity is the
 `Δ(P_user, P_algo)` under a proper scoring rule — a language-agnostic skill game that
 survives mastery of L₂.
 
+### 9.1 The wager collapse — one line, two scales
+
+The system carried **two** multipliers, and only one is justifiable.
+
+- **Streak multiplier** (`S.mult`, `naturalMultIdx`): XP scaled by consecutive-correct.
+  *Anti-coupled and to be removed.* Consecutive-correct correlates with *easy* cards,
+  so it pays most for the lowest-information answers — fighting the edge bonus in
+  `computeXP`, which (correctly) pays for *beating a low line*. Two reward signals
+  pointing opposite ways; this one points wrong.
+- **Wager slider** (`currentMultIdx`, anchored to `houseLineIdx`): justifiable, but its
+  job is **measurement, not reward**. It elicits `P_user` against the house's `P_algo`;
+  `currentMultIdx − defaultMultIdx = Δ(P_user, P_algo)` is the calibration signal.
+  Framing a measurement instrument as a reward amplifier is the reward≠measurement
+  violation (§11.0). Its reward role is already subsumed by the losable chip stake.
+
+**Collapse:** one slider = *post your line*. It sets a losable chip stake, scored by a
+**symmetric** proper rule (credits calibration in both directions — correctly betting
+*below* a high line, "I know that I don't know this", is half of calibration and the
+one-sided `edge = max(0, w−def)` misses it). No streak multiplier; XP, if kept, is flat
+or information-weighted, never streak-multiplied. The same market re-appears at the
+capability scale as the Title Defense (§11.3).
+
 ---
 
-## 10. Implementation pointers
+## 10. Measurement renders — the estimator and its projections
+
+The features we keep "discovering" — a diminishing-returns curve, capability badges, a
+title-defense challenge — are not three subsystems. They are three **renders of one
+object**: the model's posterior over the learner's latent state, and its information
+gradient. The ingredients already exist but scattered (`_pCorrect`, `retrievability`,
+axis stage, `axisDue`); §10 names the single thing they compose and reads everything
+off it. One source of truth ⇒ the badge and the curve cannot tell different stories.
+
+### 10.0 Two guardrails (inherited)
+
+- **reward ≠ measurement.** Every object below *measures* retained capability. None may
+  become a reward target, or it is Goodharted exactly as the old daily-goal quota was.
+- **hot-log / cold-infer.** Live, session-local quantities (the micro yield curve) may
+  be computed on the fly; anything that persists or drives scheduling (tenure, ripening)
+  is a **cold inference** over the evidence log — never a live double-written counter.
+
+### 10.1 The Yield Curve (session render)
+
+For a card `i` served at session-position `n`, realized learning gain is a product of
+two non-increasing factors:
+
+```
+ρ(n) = φ(n) · v(c_n)
+```
+
+- `φ(n)` — encoding quality (fatigue), 1 → floor over the session (`fatigueXPMultiplier`).
+- `v(i)` — the card's instantaneous value, **the scheduler's own selection criterion**:
+  `v(i) = P_i · ΔS_i(R_i) + g₀·[first exposure]`, where `ΔS` (stability jump on success)
+  rises as retrievability `R` falls but `P` falls with it ⇒ product peaks at intermediate
+  `R` (desirable-difficulty / the P≈0.5 edge the frontier-seek already targets).
+
+The scheduler serves greedily by `v`, so `v(c₁) ≥ v(c₂) ≥ …`; times non-increasing
+`φ` ⇒ cumulative `V(N) = Σ ρ(n)` is **concave with a knee** near `n ≈ D + M` (the
+genuinely-due set plus the cap-limited introduceable atoms). **The diminishing-returns
+plot is literally the running integral of the scheduler's value function being depleted**
+— no new model.
+
+Uses, not just a readout: (1) **self-terminating sessions** — stop when `ρ(n) < τ`;
+(2) the **window is predictable at session start** (count cards with `R` in the
+productive band + introduceable atoms), so the whole curve and the learner's live
+position can be drawn ahead of time; (3) the **macro cadence is free** — overnight `R`
+decay refills the due set, so "≈14 ripe tomorrow" is computable. This *replaces the
+daily-goal bar*: a rising/flattening curve whose flattening is the honest "come back
+tomorrow", never a quota. It is also the **dose-test instrument** (§9): you cannot pass
+a dose test without a dose-response curve.
+
+### 10.2 Capability milestones (lattice render)
+
+The old milestones were frequency-rank counts (`[10,50,…]`, labels like "advanced") —
+they report *how many words*, never *what you can do*. Replace with the generative-basis
+tiers (`GRAMMAR_SPEC_ZH`, §2): each tier is the min set-cover closing a clause template,
+i.e. *a capability*. A **capability badge fires on a filter-crossing in the poset** — the
+tier's basis atoms **graduated** (not merely seen) — and is the right milestone unit.
+
+| Badge | Tier | Capability | Now-producible |
+|---|---|---|---|
+| PREDICATE | T1 | say what something *is / is like / does* | 我是人 · 我很好 |
+| NEGATE & ASK | T2 | deny, ask yes/no | 我不是学生 · 你好吗 |
+| MODIFY & COUNT | T3 | possess, modify, quantify | 我的书 · 一个人 |
+| PLACE & ASPECT | T4 | locate, mark completion | 我在学校 · 我去了 |
+| CONNECT | T5 | join clauses | 我也去 |
+
+Each badge carries: a *true* capability name; one concrete now-producible sentence;
+**effort-to-next = σ-weighted effective load** of the next tier's un-graduated atoms
+(`computeThreeAxisBasis`, *not* a raw count — 3 transparent atoms ≪ 3 false-friends);
+and the next tier's capability line. **Production-gated:** the badge requires not just
+graduation but ≥1 successful *production* at the tier — otherwise it is a recognition
+badge masquerading as capability (the coupling failure of §12). A quiet secondary
+**coverage** track keeps the frequency counts, reframed to a defensible Zipf claim
+("≈X% of running text"). Capability (sparse, loud) + coverage (smooth, quiet) renders
+the basis-vs-frequency dissonance (§4) as the curriculum it is.
+
+### 10.3 Title Defense (uncertainty render) — the macro calibration market
+
+Badges do **not decay** (the trophy is permanent), yet the *claim* stays honest, because
+the house can **challenge** it. We re-measure, we do not revoke — the reward≠measurement
+split made diegetic. It is the §9 calibration market lifted to the capability scale:
+
+- The house tracks **tenure** = P(capability still held), a *cold* inference over the
+  tier's atoms' forgetting curves. When tenure crosses a threshold (the model is willing
+  to post the bet that you've regressed) it issues a **Title Defense**: a short bout of
+  the tier's atoms at production modalities — a proof, not a re-grind.
+- **Win** ⇒ reaffirmed, tenure resets, the decayed atoms re-consolidate (the defense *is*
+  the optimally-timed spaced review); badge gains a gleam. **Decline/lose** ⇒ a visible
+  **CONTESTED** state (still held, marked), re-issued later. **Never a lockout** — study
+  is never gated behind the meta-game.
+- Chips may *optionally* ride a defense (house posts odds = its P_regressed); declining
+  never blocks the bout. Preemptive "defend now" is allowed (user-initiated spaced
+  review), but the core trigger stays house-initiated — the SRS knows when review is due.
+
+The deep payoff: the defense **calibrates the engine**, not only the user. A challenge
+the user trivially wins means the forgetting model fired too early — a tuning signal
+validating `retrievability` predictions against ground-truth retrieval. It is a
+measurement pointed at the cold engine, closing a loop the cold-infer layer needs.
+
+---
+
+## 11. Implementation pointers
 
 | Concept | Symbol/object | Code |
 |---|---|---|
@@ -346,4 +466,32 @@ survives mastery of L₂.
 | Modality evidence/difficulty | ev, diff | `MODALITY_PROFILE` |
 | Invariant battery | — | `simInvariants` / `window.simCheck` |
 | Wager / coupling | Δ(P_user,P_algo) | `houseLine*`, `computeXP`, chips |
+| Latent-state renders | posterior + ∇ | §10 (yield curve, badges, defense) |
 | Engine internals | — | ENGINE.md |
+
+---
+
+## 12. The load-bearing unbuilt thing — the production bar
+
+Every honest claim in §10 — a capability badge, a Title Defense verdict — is gated on a
+**production** measurement. The top production modality today is tile-assembly
+(word-order), which §4 flags as **exposed to the Duolingo trap**: rearranging tiles with
+the L₁ gloss visible can be passed without the productive system closing or the L₁ crutch
+fading (§3). So the system is poised to mint true-*looking* capability certificates, and
+stage gym battles to defend them, on an asset that may not back the claim. The badge says
+"you can negate"; the bout it survived was tile-shuffling with the answer in view.
+
+This is the **highest-leverage work**, above any render in §10: make the production bar
+real — free production, L₁-crutch *faded* — because it is the latent variable every other
+feature attests to. None of the §10 renders currently measure crutch-independence; they
+measure retained recognition and *call* it capability. The realistic grader for free
+production (and the only honest "house" for the wager) is the **LLM backend** (build
+plan): design the production bar assuming that grader, not a tile proxy we will discard.
+
+**Sequencing consequence.** Per §9 (coupling before dopamine): ship the
+honest-measurement renders now — the **Yield Curve** and **capability *labels*** as
+projections of the §10 estimator. Hold the **game layer** — Title Defense and the wager
+market — *behind* the production bar. Build the sport before the gym that scores it. The
+build order is therefore: (1) name the estimator + ship its measurement renders;
+(2) make the production modality real (LLM-graded free production, crutch-fade metric);
+(3) only then the Title Defense + collapsed wager that sit on it.

@@ -7,16 +7,9 @@
   const ll=$('courseId');
   if(ll&&course){ ll.textContent=course.langName.toUpperCase()+'  ▾'; ll.style.cursor='pointer'; }
 
-  // Daily progress bar
-  const today=new Date().toDateString();
-  const dailyCount=(S.dailyDate===today)?S.dailyCards:0;
-  const dailyPct=Math.min(100,Math.round(dailyCount/OPTIMAL_CARDS*100));
-  $('dailyProgFill').style.width=dailyPct+'%';
-  $('dailyProgFill').style.background=fg;
-  $('dailyProgLabel').textContent=dailyCount+' / '+OPTIMAL_CARDS;
-  $('dailyProgNote').textContent=dailyCount>=OPTIMAL_CARDS?'optimal window reached — rest and return tomorrow':'optimal window: '+OPTIMAL_CARDS+' cards';
-  $('dailyProgTrack').style.borderColor=fg;
-  $('dailyProgWrap').style.borderColor=fg; $('dailyProgWrap').style.color=fg;
+  // Yield Curve (replaces the daily-goal quota bar) — the diminishing-returns render
+  try{ renderYieldCurve(fg); }catch(e){}
+  const yw=$('yieldWrap'); if(yw){ yw.style.borderColor=fg; yw.style.color=fg; }
 
   // Milestone progress bar
   const MILESTONES=[10,50,100,200,500,1000,2000,5000];
@@ -33,6 +26,120 @@
   $('muteBtn').textContent='SOUND: '+S.sound.toUpperCase();
   const toneDBtn=$('startTone');
   if(toneDBtn) toneDBtn.style.display=(course&&course.hasTone)?'':'none';
+}
+
+// ── ESTIMATOR — the single latent-state read-layer (THEORY.md §10) ──────────
+// One object the home renders project from: per-atom posterior + the session's
+// information gradient. Pure read-layer over existing scattered signals
+// (_pCorrect, retrievability, axisStage, axisDue) — NO writes, NO scheduling
+// effect, NO reward (reward≠measurement). The Yield Curve, capability badges and
+// (later) Title Defense are renders of THIS object, not separate subsystems.
+const Estimator = {
+  G0_INTRO: 1.0,        // value of a first exposure (max)
+  TAIL_VALUE: 0.08,     // premature-review yield past the productive window
+  FATIGUE_FLOOR: 0.40,  // encoding quality floors here, never 0
+  FATIGUE_SCALE: 45,    // cards-scale of fatigue decay
+  INTRO_TURNOVER: 2.5,  // session intro budget ≈ cap × this (cascade as slots free)
+
+  _fatigue(n){ return this.FATIGUE_FLOOR + (1-this.FATIGUE_FLOOR)*Math.exp(-(n-1)/this.FATIGUE_SCALE); },
+  _P(i){ try{ return (typeof Scheduler!=='undefined'&&Scheduler._pCorrect)?Scheduler._pCorrect((S.cards&&S.cards[i])||{},'meaning'):0.5; }catch(e){ return 0.5; } },
+  _R(i){ try{ return (typeof retrievability==='function')?retrievability(i,'meaning'):0; }catch(e){ return 0; } },
+
+  // per-atom latent snapshot
+  atom(i){
+    const ci=(S.cards&&S.cards[i])||{};
+    const seen=!!ci.seen;
+    const due=seen&&typeof isCardDue==='function'&&isCardDue(i);
+    const ripe=seen&&typeof isWallClockRipe==='function'&&isWallClockRipe(i);
+    return { i, seen, P:this._P(i), R:this._R(i),
+             stage:(typeof getAxisStage==='function')?getAxisStage(i,'meaning'):0,
+             due:!!due, ripe:!!ripe };
+  },
+
+  // v(i): instantaneous learning value. Intro = max; due/ripe peak at mid-R
+  // (P·(1−R) = landing prob × consolidation gain); idle = low premature-review floor.
+  value(a){
+    if(!a.seen) return this.G0_INTRO;
+    if(a.due||a.ripe) return Math.max(0, a.P*(1-a.R));
+    return this.TAIL_VALUE;
+  },
+
+  // The session's productive pool + today's predicted window W.
+  pools(){
+    // Iterate the active deck (not isUnlocked — that gates on already-introduced,
+    // which would zero the introduceable supply for a fresh deck).
+    let idxs;
+    try{ idxs=(typeof activeDeckIndices==='function')?activeDeckIndices():null; }catch(e){ idxs=null; }
+    if(!idxs||!idxs.length){ const N=(typeof D!=='undefined')?D.length:0; idxs=[]; for(let i=0;i<N;i++) idxs.push(i); }
+    let introUnseen=0, due=0, ripe=0, idle=0; const dueVals=[];
+    idxs.forEach(i=>{
+      const ci=(S.cards&&S.cards[i])||{};
+      if(!ci.seen){ introUnseen++; return; }
+      const a=this.atom(i);
+      if(a.due){ due++; dueVals.push(this.value(a)); }
+      else if(a.ripe){ ripe++; dueVals.push(this.value(a)); }
+      else idle++;
+    });
+    // intro budget cascades as slots free → ≈ cap × turnover, capped by supply
+    let cap=6; try{ if(typeof Scheduler!=='undefined'&&Scheduler._effectiveCap) cap=Scheduler._effectiveCap({sessionAnswerRing:[]})||6; }catch(e){}
+    const introBudget=Math.min(introUnseen, Math.round(cap*this.INTRO_TURNOVER));
+    const window=introBudget+due+ripe;
+    return { introUnseen, introBudget, due, ripe, idle, window, dueVals, cap };
+  },
+
+  // The Yield Curve: cumulative retained value V(n) over a session, knee at the
+  // productive window. Sorted productive values × fatigue, cumulative — this is the
+  // running integral of the scheduler's own value function depleting (THEORY.md §10.1).
+  curve(maxN){
+    const p=this.pools();
+    maxN=maxN||Math.max(24, Math.round(p.window*1.5));
+    const vals=[];
+    for(let k=0;k<p.introBudget;k++) vals.push(this.G0_INTRO);
+    p.dueVals.forEach(v=>vals.push(v));
+    vals.sort((a,b)=>b-a);
+    const points=[]; let V=0;
+    for(let n=1;n<=maxN;n++){
+      const v=(n<=vals.length)?vals[n-1]:this.TAIL_VALUE;
+      const rho=this._fatigue(n)*v;
+      V+=rho; points.push({ n, V:Math.round(V*1000)/1000, rho:Math.round(rho*1000)/1000 });
+    }
+    return { points, knee:p.window, window:p.window, pools:p, maxN };
+  }
+};
+try{ window.Estimator=Estimator; }catch(e){}
+
+// Yield Curve render (replaces the daily-goal quota bar). Rising/cumulative; the
+// FLATTENING past the knee is the honest "diminishing returns — come back tomorrow",
+// never a goal to hit. Dose-test instrument (THEORY.md §9).
+function renderYieldCurve(fg){
+  const host=document.getElementById('yieldCurve'); if(!host) return;
+  const c=Estimator.curve();
+  const pts=c.points, maxN=c.maxN, knee=Math.max(1,Math.min(maxN,c.knee||1));
+  const Vmax=pts[pts.length-1].V||1;
+  const today=new Date().toDateString();
+  const doneToday=(S.dailyDate===today)?(S.dailyCards||0):0;
+  const W=320, H=54, padL=3, padR=3, padT=7, padB=8;
+  const x=n=>padL+(maxN<=1?0:(n-1)/(maxN-1))*(W-padL-padR);
+  const y=V=>padT+(1-V/Vmax)*(H-padT-padB);
+  let d=''; pts.forEach((p,k)=>{ d+=(k===0?'M':'L')+x(p.n).toFixed(1)+' '+y(p.V).toFixed(1)+' '; });
+  const kneeX=x(knee).toFixed(1);
+  const dn=Math.max(1,Math.min(maxN,doneToday||1));
+  const dotX=x(dn).toFixed(1), dotY=y(pts[dn-1].V).toFixed(1);
+  const past=doneToday>=knee;
+  const dim='rgba(125,255,192,0.30)';
+  const note = past ? (c.pools.idle>0 ? "today's high-value window spent — the rest is low-yield"
+                                      : "today's window spent — rest and return tomorrow")
+                    : (doneToday>0 ? Math.max(0,knee-doneToday)+' high-value cards left today'
+                                   : '~'+knee+' high-value cards today');
+  host.innerHTML =
+    '<div style="display:flex;justify-content:space-between;font-size:7px;letter-spacing:1.5px;opacity:.7;margin-bottom:3px;">'
+      +'<span>YIELD</span><span>'+doneToday+' DONE · KNEE '+knee+'</span></div>'
+    +'<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px;display:block;overflow:visible;">'
+      +'<line x1="'+kneeX+'" y1="0" x2="'+kneeX+'" y2="'+H+'" stroke="'+dim+'" stroke-width="1" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>'
+      +'<path d="'+d.trim()+'" fill="none" stroke="'+fg+'" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke" opacity="0.92"/>'
+      +'<circle cx="'+dotX+'" cy="'+dotY+'" r="3.5" fill="'+fg+'"/>'
+    +'</svg>'
+    +'<div style="font-size:7px;letter-spacing:1px;opacity:.55;margin-top:2px;">'+note.toUpperCase()+'</div>';
 }
 
 function show(view){
