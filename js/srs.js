@@ -807,6 +807,10 @@ function pickCharDistractors(targetIdx, n){
   const [correctCh,,, targetRads, targetPos] = D[targetIdx];
   const usedChars = new Set([correctCh]);
 
+  // CONFUSION GRAPH first — contrastive distractors (the pairs the learner actually blurs)
+  const confChars=[];
+  confusionDistractorIdx(targetIdx,n).forEach(j=>{ const ch=D[j][0]; if(ch&&!usedChars.has(ch)){ confChars.push(ch); usedChars.add(ch); } });
+
   const scored = D.map((_,i) => {
     if(i === targetIdx) return null;
     if(!(S.cards[i]&&S.cards[i].seen)) return null;  // introduced (flashed) only — never-test-before-flash invariant
@@ -821,7 +825,7 @@ function pickCharDistractors(targetIdx, n){
   const pool = scored.slice(0, poolSize);
   shuffle(pool);
 
-  const out = [];
+  const out = confChars.slice(0, n);   // confusion distractors lead; pool fills the rest
   for(const cand of pool){
     if(usedChars.has(cand.ch)) continue;
     out.push(cand.ch);

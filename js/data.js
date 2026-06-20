@@ -1368,7 +1368,20 @@ function confusionEdges(i){
   Object.keys(S.confusion).forEach(a=>{ if(+a!==i && S.confusion[a][i]){ const e=S.confusion[a][i]; out.push({a:+a,b:i,n:e.n,type:e.type,lastAt:e.lastAt}); } });
   return out.sort((x,y)=>y.n-x.n);
 }
-try{ window.recordConfusion=recordConfusion; window.decayConfusion=decayConfusion; window.confusionWeight=confusionWeight; window.confusionEdges=confusionEdges; }catch(e){}
+// Seen atoms confusable with the target (strongest first) — for CONTRASTIVE distractors:
+// the dealer deals you the exact pairs you blur, so the test trains the discrimination you
+// need and feeds the correction moment → decay loop.
+function confusionDistractorIdx(targetIdx, n){
+  const out=[];
+  try{
+    confusionEdges(targetIdx).forEach(e=>{
+      const j=(e.a===targetIdx)?e.b:e.a;
+      if(j!==targetIdx && S.cards[j] && S.cards[j].seen && out.indexOf(j)<0) out.push(j);
+    });
+  }catch(e){}
+  return out.slice(0, n||99);
+}
+try{ window.recordConfusion=recordConfusion; window.decayConfusion=decayConfusion; window.confusionWeight=confusionWeight; window.confusionEdges=confusionEdges; window.confusionDistractorIdx=confusionDistractorIdx; }catch(e){}
 
 // Durable real-time review instrumentation. ADDITIVE measurement substrate: the
 // count-based scheduler (axisDue) does NOT read these fields, so this changes no

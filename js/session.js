@@ -1981,52 +1981,42 @@ function getSemanticField(idx){
 // Pick distractors for meaning stage
 function pickMeaningDistractors(targetIdx, n, stage){
   const [ch,,correctDef,,targetPos]=D[targetIdx];
-
-  // Get introduced characters for semantic lookup
   const introChs=D.filter((_,i)=>S.cards[i]&&S.cards[i].seen).map(d=>d[0]);
 
-  // Try semantic distractors first — always preferred over random
-  const semantic=getSemanticDistractors(targetIdx, n, introChs);
+  // CONFUSION GRAPH first — deal the meanings the learner actually blurs (contrastive).
+  const result=[]; const used=new Set([correctDef]);
+  confusionDistractorIdx(targetIdx, n).forEach(j=>{ const d=D[j][2]; if(d&&!used.has(d)&&result.length<n){ result.push(d); used.add(d); } });
 
-  // Pad with fallback pool if semantic doesn't fill n slots
-  if(semantic.length<n){
-    const needed=n-semantic.length;
-    const semSet=new Set(semantic);
-    semSet.add(correctDef);
+  // then predefined semantic relations
+  getSemanticDistractors(targetIdx, n, introChs).forEach(d=>{ if(!used.has(d)&&result.length<n){ result.push(d); used.add(d); } });
 
-    // Fallback pool — scored by stage
+  // then the stage-scored fallback pool
+  if(result.length<n){
+    const needed=n-result.length;
     const pool=D.map((_,i)=>i).filter(i=>{
       if(i===targetIdx||!(S.cards[i]&&S.cards[i].seen)) return false;
-      if(D[i][2]===correctDef||semSet.has(D[i][2])) return false;
+      if(used.has(D[i][2])) return false;
       return true;
     });
-
     const scored=pool.map(i=>{
       const [,,,, pos2]=D[i];
       let score=Math.random();
       if(stage<=1){
-        // Early stage: prefer same category for productive confusion
         if(pos2&&POS_LOGICAL[pos2]&&POS_LOGICAL[targetPos]&&
            POS_LOGICAL[pos2].cat===POS_LOGICAL[targetPos].cat) score+=2;
-        // Also prefer nearby frequency rank (common words confusable)
         score+=Math.max(0, 3-Math.abs(i-targetIdx)/5);
       } else if(stage>=3){
-        // Later stage: same POS = harder discrimination
         if(pos2===targetPos) score+=3;
         score+=Math.max(0, 4-Math.abs(i-targetIdx)/3);
       } else {
-        // Mid stage: same broad category
         if(pos2&&POS_LOGICAL[pos2]&&POS_LOGICAL[targetPos]&&
            POS_LOGICAL[pos2].cat===POS_LOGICAL[targetPos].cat) score+=2;
       }
       return {i,score};
     }).sort((a,b)=>b.score-a.score);
-
-    const fallback=shuffle(scored.slice(0,needed*3)).slice(0,needed).map(s=>D[s.i][2]);
-    return [...semantic,...fallback];
+    shuffle(scored.slice(0,needed*3)).slice(0,needed).forEach(s=>{ const d=D[s.i][2]; if(!used.has(d)&&result.length<n){ result.push(d); used.add(d); } });
   }
-
-  return semantic.slice(0,n);
+  return result.slice(0,n);
 }
 
 // Confidence mechanic state
