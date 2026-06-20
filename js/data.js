@@ -392,9 +392,13 @@ function applyAnswer(i, isCorrect, modality, latencyMs){
       frontier:frontier(),
       stage:(i>=0?(getAxisStage(i,'meaning')||0):null)
     });
-    if(pol && i>=0 && window.dispatchStudyAction){
-      try{ window.dispatchStudyAction('ANSWER_VOCAB',{idx:i,axis:'meaning',isCorrect:!!isCorrect,responseMs:(typeof latencyMs==='number'?latencyMs:null)}); }catch(e){}
-    }
+    // ENGINE-2 RETIRED (hardening 2026-06-19): the ANSWER_VOCAB dispatch ran a SECOND
+    // recording engine (Scheduler.recordAnswer → State._s) whose card/xp writes were
+    // already overwritten by recordAxisResultNew (engine 1) and the answer handler via
+    // call ordering — pure redundancy plus the fragile early Object.assign(S, State._s)
+    // on the vocab path (the dual-state drift that caused the frontier-freeze class of
+    // bugs). recordAxisResultNew on live S is now the SOLE vocab engine. Grammar still
+    // uses dispatch (ANSWER_GRAMMAR) — it has no engine-1 equivalent.
     save();
   }catch(e){ try{ if(window.EW&&EW.obs) EW.obs.captureError(e,{phase:'applyAnswer'}); }catch(_){} }
 }
