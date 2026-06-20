@@ -926,7 +926,7 @@ function showStudyMC(i, reverse, showPosHint){
       charSpan.style.cssText='font-size:28px;line-height:1;'+CJKf;
       b.appendChild(charSpan);
       const mIdx=D.findIndex(d=>d[0]===choice);
-      if(mIdx>=0&&D[mIdx][1].length){
+      if(mIdx>=0&&D[mIdx][1].length&&!(typeof _readingRedundant==='function'&&_readingRedundant())){
         const pyWrap=document.createElement('span');
         pyWrap.style.cssText='font-size:9px;display:flex;gap:3px;font-family:\'Noto Sans\',Arial,sans-serif;';
         D[mIdx][1].forEach(([s,t])=>{

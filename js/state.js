@@ -171,22 +171,24 @@ function macroPOS(p){
 }
 // Co-occurrence edges, derived once from EXAMPLE_SENTENCES. Two atoms
 // share a fiber if they appear together in any example sentence.
-let _fiberCache=null,_fiberCacheN=-1;
+let _fiberCache=null,_fiberCacheD=null;
 function constellationFibers(){
-  if(_fiberCache&&_fiberCacheN===D.length) return _fiberCache;
+  if(_fiberCache&&_fiberCacheD===D) return _fiberCache;   // cache keyed on the active deck (course-safe)
   const sents=(typeof EXAMPLE_SENTENCES!=='undefined')?EXAMPLE_SENTENCES:{};
   const seen={},pairs=[];
   for(const key in sents){
     (sents[key]||[]).forEach(function(s){
-      const text=(s&&s[0])||'',present=[];
-      for(let i=0;i<D.length;i++){ if(text.indexOf(D[i][0])>=0) present.push(i); }
+      const text=(s&&s[0])||'';
+      // decomposeSentence is segmentation-aware (substring for CJK, word-boundary
+      // for space-delimited) — never re-implement the substring match here.
+      const present=(typeof decomposeSentence==='function')?decomposeSentence(text):[];
       for(let a=0;a<present.length;a++)for(let b=a+1;b<present.length;b++){
         const pk=present[a]+'-'+present[b];
         if(!seen[pk]){seen[pk]=1;pairs.push([present[a],present[b]]);}
       }
     });
   }
-  _fiberCache=pairs;_fiberCacheN=D.length;return pairs;
+  _fiberCache=pairs;_fiberCacheD=D;return pairs;
 }
 let _cnGen=0;
 function renderConstellation(){

@@ -286,6 +286,35 @@ let D_AR=[
   ["إذا",[["i",0],["dhaa",0]],"if",[],"particle"],
 ];
 
+/* ============ VIETNAMESE — the generative SEED (16 atoms) ============ */
+// First space-delimited course to actually run sentences (Arabic has no sentence
+// content yet) — i.e. the first real exercise of the segmentation seam. Schema
+// matches D_MANDARIN. Slot 1 holds the syllabic form with tone=0 (Vietnamese tone
+// is carried IN the orthography by diacritic — hasTone:false for now; tone-as-
+// diacritic drilling is a deferred refinement, see MIGRATION lessons). Slot 3
+// (radicals) empty — no ideographic decomposition. ORDER = introduction order:
+// chosen so early atoms compose into sentences (tôi/đi/là before the particles).
+// This IS the seed measured by computeSeedDelta() — see SEED_VI / THEORY.md §2.1.
+// ⚠ single-author, unvalidated Vietnamese.
+let D_VI=[
+  ["tôi",   [["tôi",0]],            "I, me",                       [],"pronoun"],
+  ["đi",    [["đi",0]],             "to go",                       [],"verb"],
+  ["là",    [["là",0]],             "to be (copula)",              [],"verb"],
+  ["người", [["người",0]],          "person, people",              [],"noun"],
+  ["tốt",   [["tốt",0]],            "good",                        [],"adjective"],
+  ["rất",   [["rất",0]],            "very",                        [],"adverb"],
+  ["không", [["không",0]],          "not; (yes/no question)",      [],"adverb"],
+  ["một",   [["một",0]],            "one; a",                      [],"numeral"],
+  ["cái",   [["cái",0]],            "general classifier",          [],"measure word"],
+  ["của",   [["của",0]],            "of, 's (possessive)",         [],"particle"],
+  ["và",    [["và",0]],             "and",                         [],"conjunction"],
+  ["cũng",  [["cũng",0]],           "also, too",                   [],"adverb"],
+  ["ở",     [["ở",0]],              "to be at, in",                [],"verb/prep"],
+  ["rồi",   [["rồi",0]],            "already (perfective)",        [],"particle"],
+  ["chưa",  [["chưa",0]],           "not yet",                     [],"adverb"],
+  ["à",     [["à",0]],              "(yes/no question particle)",  [],"particle"],
+];
+
 
 /* ============ STATE ============ */
 // KEY is the ACTIVE course's localStorage key — reassigned by switchCourse().
@@ -855,12 +884,20 @@ function addUserWords(entries){
 // Uses .seen (set in showStudyFlash) rather than .exp, which can be >0 from
 // migration artifacts without the user having actually seen the flashcard.
 function sentenceAllIntroduced(zh){
-  // Two conditions, both required:
-  //  (1) No UNSEEN D-atom appears in the sentence (original guard).
-  //  (2) Every CJK character belongs to a SEEN D-atom that appears in the
-  //      sentence. This closes the gap where a character in NO D-atom at all
-  //      (content not in the deck) would render as untaught context — the core
-  //      invariant must never expose a character the learner hasn't been taught.
+  // Same two conditions in BOTH segmentation modes — only "what is a unit" differs:
+  //  (1) No UNSEEN deck atom appears in the sentence.
+  //  (2) Every unit of the sentence is covered by a SEEN deck atom (no untaught
+  //      context — the core invariant must never expose an atom not yet taught).
+  if(_segMode()==='space'){
+    // space-mode: tokenize on word boundaries; every word must map to a seen atom.
+    const toks=_tokenizeSpace(_spaceWords(zh));
+    for(const t of toks){
+      if(t.idx<0) return false;                                   // (2) uncovered word
+      if(!(S.cards[t.idx]&&S.cards[t.idx].seen)) return false;    // (1) unseen atom present
+    }
+    return true;
+  }
+  // cjk-mode (unchanged): substring presence + per-CJK-char coverage.
   // Non-CJK (punctuation/latin) is ignored. Literal CJK range is the house style
   // (matches hasPhoneticContent); safe because the build is bash `cat`, never
   // PowerShell (see CLAUDE.md build rule).
@@ -1342,7 +1379,48 @@ var _ewAudioEndAt=null;  // ms the last TTS clip finished — for latency decont
 
 // Decompose a sentence into the D[] atom indices it contains (compounds atomic).
 // Mirrors the constituent scan in sentenceAllIntroduced.
+// ── SEGMENTATION SEAM — the one Mandarin-specific assumption ────────────────
+// The engine originally conflated "atom" with "CJK character": sentences were
+// decomposed by SUBSTRING search (zh.indexOf(headword)). That is correct only for
+// scripts with no word delimiters — every substring that equals a deck headword IS
+// present, and sub-atoms (吃 inside 吃饭) legitimately count as present too. For a
+// space-delimited Latin script (Vietnamese, Arabic) it is catastrophic: the
+// Q-particle "à" is a substring of "nhà"/"cà", "đi" sits inside "điện". So the
+// segmentation strategy is a per-course property: course.segment, default 'cjk'.
+//   'cjk'   — no word boundaries; an atom is present iff it appears as a substring.
+//   'space' — whitespace-delimited; an atom (which may span multiple syllables) is
+//             present iff it appears as a whole-word run. Tokenization is GREEDY
+//             longest-match so multi-syllable atoms win over their parts.
+function _segMode(){ try{ const c=(typeof activeCourse==='function')&&activeCourse(); return (c&&c.segment)||'cjk'; }catch(e){ return 'cjk'; } }
+// Split a space-delimited sentence into normalized word tokens: strip edge
+// punctuation (keep letters + combining diacritics), lowercase for matching.
+function _spaceWords(s){
+  if(!s) return [];
+  return String(s).split(/\s+/)
+    .map(w=>w.replace(/^[^\p{L}\p{M}]+|[^\p{L}\p{M}]+$/gu,'').toLowerCase())
+    .filter(Boolean);
+}
+// Greedy longest-match tokenizer over the active lexicon for space-mode.
+// Returns [{idx, surface, len}]; idx<0 = a word covered by no deck atom.
+function _tokenizeSpace(words){
+  const out=[]; let maxLen=1;
+  for(let j=0;j<D.length;j++){ const l=String(D[j][0]).trim().split(/\s+/).length; if(l>maxLen) maxLen=l; }
+  let i=0;
+  while(i<words.length){
+    let matched=false;
+    for(let k=Math.min(maxLen, words.length-i); k>=1; k--){
+      const cand=words.slice(i,i+k).join(' ');
+      let idx=-1;
+      for(let j=0;j<D.length;j++){ if(String(D[j][0]).toLowerCase()===cand){ idx=j; break; } }
+      if(idx>=0){ out.push({idx, surface:cand, len:k}); i+=k; matched=true; break; }
+    }
+    if(!matched){ out.push({idx:-1, surface:words[i], len:1}); i++; }
+  }
+  return out;
+}
+
 function decomposeSentence(zh){
+  if(_segMode()==='space') return _tokenizeSpace(_spaceWords(zh)).filter(t=>t.idx>=0).map(t=>t.idx);
   var out=[];
   if(!zh) return out;
   for(var j=0;j<D.length;j++){
@@ -1350,6 +1428,48 @@ function decomposeSentence(zh){
   }
   return out;
 }
+
+// The central membership predicate: does this exact atom occur in the sentence?
+// EVERY drill's "sentence contains word" test must go through here, never a raw
+// indexOf — that is the bug that put an 'à' tile into 'và'. cjk: substring (no word
+// boundaries exist). space: the atom (possibly multi-syllable) appears as a whole-
+// word run.
+function sentenceContainsAtom(zh, headword){
+  if(!zh||!headword) return false;
+  if(_segMode()!=='space') return String(zh).indexOf(headword)>=0;
+  const words=_spaceWords(zh), hw=_spaceWords(headword);
+  if(!hw.length) return false;
+  for(let i=0;i+hw.length<=words.length;i++){
+    let m=true; for(let k=0;k<hw.length;k++){ if(words[i+k]!==hw[k]){ m=false; break; } }
+    if(m) return true;
+  }
+  return false;
+}
+// Deck-backed atoms of a sentence in LEFT-TO-RIGHT order (for word-order tiles +
+// ordering). space: tokenizer order. cjk: known headwords by first occurrence
+// (preserves the legacy Mandarin tile behavior — substring + indexOf sort).
+function sentenceAtomsInOrder(zh){
+  if(_segMode()==='space') return _tokenizeSpace(_spaceWords(zh)).filter(t=>t.idx>=0).map(t=>({idx:t.idx,w:D[t.idx][0]}));
+  const out=[];
+  for(let j=0;j<D.length;j++){ const w=D[j][0]; const at=String(zh).indexOf(w); if(at>=0) out.push({idx:j,w:w,at:at}); }
+  out.sort((a,b)=>a.at-b.at);
+  return out.map(o=>({idx:o.idx,w:o.w}));
+}
+// Replace the atom occurrence with `blank`, word-boundary aware so blanking 'à'
+// never eats the à inside 'là'. cjk: first substring (unchanged). space: first
+// whole-word run.
+function blankAtom(zh, headword, blank){
+  if(_segMode()!=='space') return String(zh).replace(headword, blank);
+  const esc=String(headword).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  try{
+    const re=new RegExp('(^|\\s)'+esc+'(?=$|\\s|[^\\p{L}\\p{M}])','u');
+    if(re.test(zh)) return String(zh).replace(re,'$1'+blank);
+  }catch(e){}
+  // No whole-word match → the atom is not present AS A WORD. Return unchanged;
+  // never fall back to a substring replace (that is the bug that ate à inside là).
+  return String(zh);
+}
+try{ window.sentenceContainsAtom=sentenceContainsAtom; window.sentenceAtomsInOrder=sentenceAtomsInOrder; window.blankAtom=blankAtom; }catch(e){}
 
 // Snapshot per-atom mastery-at-time (§4a mu). MUST run before the answer mutates
 // state. Compact: { atomIdx: [meaningStage, posStage, toneStage] }. Retrievability-
@@ -2011,7 +2131,12 @@ function _playStaticAudio(src, onDone){
   }catch(e){ return false; }
 }
 
+// True when the course's reading slot just duplicates the displayed word — i.e. the
+// orthography already encodes pronunciation (Vietnamese). Distinct from segment mode:
+// Arabic is also space-delimited but its romanization IS useful, so it stays false.
+function _readingRedundant(){ try{ const c=(typeof activeCourse==='function')&&activeCourse(); return !!(c&&c.readingIsWord); }catch(e){ return false; } }
 function renderSyls(el, syls, fg){
+  if(_readingRedundant()) return;   // the word already IS its reading — don't print it twice
   const rtl=activeCourse&&activeCourse().script==='rtl';
   if(rtl){
     const sp=document.createElement('span');

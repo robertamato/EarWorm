@@ -105,7 +105,9 @@
 // Keyed by character. Each sentence: [mandarin, pinyin, english_gloss]
 // Used for cloze questions and word order drills.
 // Sentences use high-frequency vocabulary where possible.
-const EXAMPLE_SENTENCES={
+// `let` (not const): repointed per-course by applyCoursePointers via the bank
+// wired onto each course object at the bottom of this section.
+let EXAMPLE_SENTENCES={
   "的":[["我的书在哪里？","wǒ de shū zài nǎlǐ?","Where is my book?"],["这是我的。","zhè shì wǒ de.","This is mine."],["好的人很多。","hǎo de rén hěn duō.","There are many good people."]],
   "我":[["我是学生。","wǒ shì xuésheng.","I am a student."],["我不知道。","wǒ bù zhīdào.","I don't know."],["我很好。","wǒ hěn hǎo.","I am fine."]],
   "你":[["你好！","nǐ hǎo!","Hello!"],["你是谁？","nǐ shì shéi?","Who are you?"],["你去哪里？","nǐ qù nǎlǐ?","Where are you going?"]],
@@ -150,6 +152,40 @@ const EXAMPLE_SENTENCES={
   "只":[["只有我。","zhǐ yǒu wǒ.","Only me."],["只是。","zhǐ shì.","It's just that."]],
   "大":[["大学。","dàxué.","University."],["很大。","hěn dà.","Very big."],["大家好！","dàjiā hǎo!","Hello everyone!"]],
 };
+// Capture the Mandarin bank so applyCoursePointers can repoint EXAMPLE_SENTENCES back.
+const EXAMPLE_SENTENCES_ZH=EXAMPLE_SENTENCES;
+
+// VIETNAMESE example sentences — built STRICTLY from the 16 seed atoms (every word
+// is a seed headword, so sentenceAllIntroduced/tokenizer cover them once seen). Slot
+// 1 (the "reading") repeats the orthography: Vietnamese IS its own reading. Thinness
+// of cái/ở examples is a real seed lesson — the clause-template seed has no concrete
+// inanimate/place noun, so a playable course would seed a couple alongside it.
+const EXAMPLE_SENTENCES_VI={
+  "tôi":   [["tôi đi.","tôi đi.","I go."],["tôi là người tốt.","tôi là người tốt.","I am a good person."],["tôi rất tốt.","tôi rất tốt.","I am very well."]],
+  "đi":    [["tôi đi rồi.","tôi đi rồi.","I already went."],["tôi chưa đi.","tôi chưa đi.","I haven't gone yet."],["tôi không đi.","tôi không đi.","I'm not going."]],
+  "là":    [["tôi là người.","tôi là người.","I am a person."],["tôi là người tốt.","tôi là người tốt.","I am a good person."],["tôi cũng là người tốt.","tôi cũng là người tốt.","I am also a good person."]],
+  "người": [["một người tốt.","một người tốt.","A good person."],["người rất tốt.","người rất tốt.","A very good person."],["người của tôi.","người của tôi.","My person."]],
+  "tốt":   [["rất tốt.","rất tốt.","Very good."],["người tốt.","người tốt.","A good person."],["tôi tốt.","tôi tốt.","I am well."]],
+  "rất":   [["tôi rất tốt.","tôi rất tốt.","I am very well."],["một người rất tốt.","một người rất tốt.","A very good person."],["rất tốt.","rất tốt.","Very good."]],
+  "không": [["tôi không đi.","tôi không đi.","I'm not going."],["tôi không tốt.","tôi không tốt.","I'm not well."],["tôi đi không?","tôi đi không?","Am I going?"]],
+  "một":   [["một người.","một người.","One person."],["một người tốt.","một người tốt.","One good person."],["một cái của tôi.","một cái của tôi.","One of mine."]],
+  "cái":   [["cái của tôi.","cái của tôi.","Mine (the one of mine)."],["một cái.","một cái.","One (of them)."],["cái của tôi rất tốt.","cái của tôi rất tốt.","Mine is very good."]],
+  "của":   [["của tôi.","của tôi.","Mine."],["cái của tôi.","cái của tôi.","Mine."],["người của tôi.","người của tôi.","My person."]],
+  "và":    [["tôi đi và người đi.","tôi đi và người đi.","I go and the person goes."],["tôi và người tốt.","tôi và người tốt.","I and the good person."],["tôi tốt và người tốt.","tôi tốt và người tốt.","I am good and the person is good."]],
+  "cũng":  [["tôi cũng đi.","tôi cũng đi.","I also go."],["tôi cũng là người tốt.","tôi cũng là người tốt.","I am also a good person."],["người cũng tốt.","người cũng tốt.","The person is also good."]],
+  "ở":     [["tôi ở.","tôi ở.","I stay."],["tôi không ở.","tôi không ở.","I'm not staying."],["tôi cũng ở.","tôi cũng ở.","I'm staying too."]],
+  "rồi":   [["tôi đi rồi.","tôi đi rồi.","I already went."],["tôi tốt rồi.","tôi tốt rồi.","I'm well now."],["người đi rồi.","người đi rồi.","The person already left."]],
+  "chưa":  [["tôi chưa đi.","tôi chưa đi.","I haven't gone yet."],["tôi chưa tốt.","tôi chưa tốt.","I'm not well yet."],["người chưa đi.","người chưa đi.","The person hasn't gone yet."]],
+  "à":     [["tôi đi à?","tôi đi à?","Oh, I'm going?"],["người tốt à?","người tốt à?","A good person, huh?"],["tôi tốt à?","tôi tốt à?","Am I well?"]],
+};
+// Wire each bank onto its course object so applyCoursePointers can swap them.
+// Runs at script-eval time, after COURSES (grammar.js) and both banks exist.
+try{
+  if(typeof COURSES!=='undefined'){
+    if(COURSES['mandarin'])   COURSES['mandarin'].sentences=EXAMPLE_SENTENCES_ZH;
+    if(COURSES['vietnamese']) COURSES['vietnamese'].sentences=EXAMPLE_SENTENCES_VI;
+  }
+}catch(e){}
 
 
 /* ============ CLOZE MODALITY ============ */
@@ -277,9 +313,12 @@ try{ window.generateSentencesForWord=generateSentencesForWord; window.commitAppr
 var _genRequested={};  // in-session rate-limit: ch -> true (don't re-fire per atom)
 function _validateGenerated(zh, targetCh){
   if(typeof zh!=='string'||!zh) return false;
-  var n=0; for(var k=0;k<zh.length;k++){ if(/[一-鿿]/.test(zh[k])) n++; }
-  if(n<3||n>12) return false;                 // sane sentence length (CJK atoms)
-  if(zh.indexOf(targetCh)<0) return false;     // the target must actually appear
+  // sane sentence length, counted per segmentation mode (CJK atoms vs words)
+  var n=(typeof _segMode==='function'&&_segMode()==='space')
+    ? _spaceWords(zh).length
+    : (function(){ var c=0; for(var k=0;k<zh.length;k++){ if(/[一-鿿]/.test(zh[k])) c++; } return c; })();
+  if(n<3||n>12) return false;
+  if(!sentenceContainsAtom(zh,targetCh)) return false; // the target must actually appear (word-boundary aware)
   return sentenceAllIntroduced(zh);            // hard gate: only seen scaffold
 }
 // Pull a legal sentence for atom i: returns cached if one exists, else generates,
@@ -342,14 +381,14 @@ function getPuzzleSentences(i){
     // without generating new content.
     Object.keys(EXAMPLE_SENTENCES).forEach(function(key){
       (EXAMPLE_SENTENCES[key]||[]).forEach(function(s){
-        if(s[0].indexOf(ch)<0) return;
+        if(!sentenceContainsAtom(s[0],ch)) return;   // word-boundary aware (no à-in-và)
         if(!seen[s[0]]){ seen[s[0]]=true; results.push(s); }
       });
     });
     if(_sentenceCache){
       Object.keys(_sentenceCache).forEach(function(key){
         (_sentenceCache[key]||[]).forEach(function(s){
-          if(s[0].indexOf(ch)<0) return;
+          if(!sentenceContainsAtom(s[0],ch)) return;
           if(!seen[s[0]]){ seen[s[0]]=true; results.push(s); }
         });
       });
@@ -475,9 +514,10 @@ function showStudyCloze(i){
     else { setTimeout(()=>{ if(activeCardIdx===_clozeCard) speakWithBlank(zh,ch,activeCourse().langCode); },30); }
   }
 
-  // Create cloze: replace target word with blank
+  // Create cloze: replace target word with blank (word-boundary aware so 'à' does
+  // not blank the à inside 'là')
   const blank='___';
-  const clozeZH=zh.replace(ch,blank);
+  const clozeZH=blankAtom(zh,ch,blank);
 
   $('studyMode').textContent='CLOZE · FILL THE BLANK';
   cardShownAtMC=Date.now();
@@ -591,7 +631,10 @@ function showStudyCloze(i){
     charSpan.style.cssText='font-size:36px;line-height:1;'+CJKf;
     b.appendChild(charSpan);
     const optIdx=D.findIndex(function(d){return d[0]===opt;});
-    if(optIdx>=0&&D[optIdx][1].length){
+    // Skip the reading row when it just duplicates the word (Vietnamese), so it
+    // doesn't print "àà". Arabic (space, but distinct romanization) keeps it.
+    const _showReadingC=!(typeof _readingRedundant==='function'&&_readingRedundant());
+    if(_showReadingC&&optIdx>=0&&D[optIdx][1].length){
       const pyWrap=document.createElement('span');
       pyWrap.style.cssText='font-size:9px;display:flex;gap:2px;font-family:\'Noto Sans\',Arial,sans-serif;';
       D[optIdx][1].forEach(function([s,t]){
@@ -788,16 +831,17 @@ function showWordOrderDrill(i){
   const sent=validSentsWO[Math.floor(Math.random()*validSentsWO.length)];
   const [zh,py,en]=sent;
 
-  // Extract words — split on common boundaries
-  // Simple tokenizer: split on punctuation, keep CJK chars grouped by known words
-  // Use .seen (not .exp) — .seen is set only when the flashcard is actually displayed,
-  // guarding against migration artifacts where exp>0 but the word was never shown.
-  const introduced=D.filter(function(_,idx){return S.cards[idx]&&S.cards[idx].seen;}).map(function(d){return d[0];});
-  // Find 3-4 known words that appear in this sentence
-  const wordsInSent=introduced.filter(function(w){return zh.includes(w)&&w.length>0;});
-  if(wordsInSent.length<3){ showStudyMC(i,false); return; }
-  // Take up to 4 words, ensure target word is included
-  let drillWords=[ch,...wordsInSent.filter(function(w){return w!==ch;}).slice(0,3)];
+  // Extract words via the segmentation layer (word-boundary aware — never a raw
+  // substring match, which would put an 'à' tile into 'và'). Distinct atoms in
+  // left-to-right sentence order, with first-occurrence rank for the correct order.
+  const ordAtoms=sentenceAtomsInOrder(zh);
+  const orderPos={}; const distinct=[];
+  ordAtoms.forEach(function(a,k){ if(!(a.w in orderPos)){ orderPos[a.w]=k; distinct.push(a.w); } });
+  // Use .seen (not .exp) — only words actually shown as a flashcard can be tiles.
+  const seenDistinct=distinct.filter(function(w){ const wi=D.findIndex(function(d){return d[0]===w;}); return wi>=0&&S.cards[wi]&&S.cards[wi].seen; });
+  if(seenDistinct.length<3){ showStudyMC(i,false); return; }
+  // Target + up to 3 others, capped at 4.
+  let drillWords=[ch].concat(seenDistinct.filter(function(w){return w!==ch;}).slice(0,3));
   if(drillWords.length<3){ showStudyMC(i,false); return; }
   drillWords=drillWords.slice(0,4);
   // Invariant check: every tile must have been properly seen as a flashcard.
@@ -809,16 +853,19 @@ function showWordOrderDrill(i){
     }
   });
 
-  // Correct order: words as they appear in zh
+  // Correct order: first-occurrence rank from the tokenizer (never zh.indexOf,
+  // which mis-orders on repeated/substring words).
   const correctOrder=drillWords.slice().sort(function(a,b){
-    return zh.indexOf(a)-zh.indexOf(b);
+    return (orderPos[a]==null?999:orderPos[a])-(orderPos[b]==null?999:orderPos[b]);
   });
   const shuffledWords=shuffle(drillWords.slice());
 
   activeCardIdx=i;
   rollBg();
   const fg=getComputedStyle(document.body).color;
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  // Tiles only force the CJK face for ideographic courses; space-delimited scripts
+  // (Vietnamese, Arabic) inherit the body font so diacritics render correctly.
+  const CJKf=(typeof _segMode==='function'&&_segMode()==='space')?'':"font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 
   $('studyMode').textContent='WORD ORDER';
   cardShownAtMC=Date.now();
@@ -835,9 +882,10 @@ function showWordOrderDrill(i){
 
   // Show English prompt
   const promptEl=$('studyMCPromptText');
+  const _langName=(typeof activeCourse==='function'&&activeCourse())?activeCourse().langName:'Mandarin';
   promptEl.innerHTML='<div style="font-size:12px;opacity:.8;text-align:center;line-height:1.5;margin-bottom:8px;">'+
     en.toUpperCase()+'</div>'+
-    '<div style="font-size:8px;opacity:.5;letter-spacing:1px;">ARRANGE THESE WORDS IN MANDARIN ORDER</div>';
+    '<div style="font-size:8px;opacity:.5;letter-spacing:1px;">ARRANGE THESE WORDS IN '+_langName.toUpperCase()+' ORDER</div>';
   $('studyMCPinyin').innerHTML='';
 
   // Answer slots — user taps words into slots
@@ -872,7 +920,10 @@ function showWordOrderDrill(i){
     wCharSpan.textContent=w; wCharSpan.style.cssText='font-size:32px;line-height:1;'+CJKf;
     b.appendChild(wCharSpan);
     const wIdx=D.findIndex(function(d){return d[0]===w;});
-    if(wIdx>=0&&D[wIdx][1].length){
+    // Skip the reading row when it just duplicates the word (Vietnamese). Arabic
+    // (distinct romanization) keeps it.
+    const _showReading=!(typeof _readingRedundant==='function'&&_readingRedundant());
+    if(_showReading&&wIdx>=0&&D[wIdx][1].length){
       const wPy=document.createElement('span');
       wPy.style.cssText='font-size:9px;display:flex;gap:2px;font-family:\'Noto Sans\',Arial,sans-serif;';
       D[wIdx][1].forEach(function([s,t]){

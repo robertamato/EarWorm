@@ -68,6 +68,33 @@ basis μ(T₅) = **16 atoms**, deepest rank 75, **reach ratio 4.69×**, frequenc
 milestones arrive far before frequency milestones. Mandarin is the *low-dissonance*
 (isolating) baseline; reach ratio is expected to grow in fusional/agglutinative L₂.
 
+### 2.1 The seed — the canonical minimal generative deck
+
+The smallest deck that satisfies the *production* requirement is not a frequency deck —
+it is the generative basis itself: **the seed**.
+
+> **seed(L) = a tie-broken minimum set-cover over the universal role set** — one filler
+> per obligatory role across the construction tiers (~6 atoms for basic predication,
+> ~16 for complex sentences).
+
+Three levels, which must not be conflated:
+- **The role set is universal and unique.** The obligatory roles (referent, predicate,
+  copula, negator, classifier, Q-marker, …) are the pre-linguistic categories (§3) — the
+  *dimensions*. Every language's seed covers the same roles.
+- **The cover's *size* is canonical** per language (the min cardinality).
+- **The *membership* is NOT unique.** Many minimum covers exist (several atoms can fill a
+  role); the seed is one *representative* of that equivalence class, fixed by a TIE-BREAK.
+
+**The tie-break is where the three axes negotiate.** A φ-tie-broken seed takes the most
+*frequent* filler per role; a σ-tie-broken seed takes the *cheapest-to-learn* (lowest
+substitution distance) filler. So "the seed" is not a single object until you name the
+tie-break, and different tie-breaks yield different optimal seeds (frequency-optimal vs.
+effort-optimal). The role structure is the invariant; the membership is the optimization.
+
+So the seed is the **first target of language instantiation** (generate the seed, not a
+deck), the **unit of cross-language comparison** (compare seeds like-for-like), and the
+categorical opposite of "the top-N frequent words" (the seed-vs-post-knee distinction, §6).
+
 ---
 
 ## 3. Axis 3 — Substitution distance σ (the L₁→L₂ diff)

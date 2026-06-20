@@ -884,6 +884,7 @@ const COURSES={
     langName:'Levantine Arabic',
     langNameNative:'عربي شامي',
     script:'rtl',
+    segment:'space',   // space-delimited: atoms matched on word boundaries, not substrings
     hasTone:false,
     lexicon:D_AR,
     storageKey:'earworm-arabic-levantine-v1',
@@ -948,6 +949,18 @@ const COURSES={
     storageKey:'earworm-japanese-v1',
     hasGrammar:false,
   },
+  'vietnamese':{
+    langCode:'vi-VN',
+    langName:'Vietnamese',
+    langNameNative:'Tiếng Việt',
+    script:'ltr',
+    segment:'space',     // FIRST space-delimited course with sentence content — exercises the tokenizer seam
+    hasTone:false,       // tone is in the diacritic; tone-as-diacritic drilling deferred
+    readingIsWord:true,  // Latin orthography already encodes pronunciation — no separate reading row
+    lexicon:D_VI,
+    storageKey:'earworm-vietnamese-v1',
+    hasGrammar:false,
+  },
 };
 const ACTIVE_COURSE_PREF='earworm-active-course';
 let ACTIVE_COURSE_KEY='mandarin';
@@ -960,6 +973,10 @@ function applyCoursePointers(key){
   ACTIVE_COURSE_KEY=key;
   D=COURSES[key].lexicon;
   KEY=COURSES[key].storageKey;
+  // Repoint the active sentence bank too (defined in drills.js, wired onto the
+  // course object there). Mirrors the D/KEY repointing — keeps cloze/word-order
+  // sourcing from the right language. Guarded: EXAMPLE_SENTENCES is a later global.
+  try{ if(typeof EXAMPLE_SENTENCES!=='undefined') EXAMPLE_SENTENCES=COURSES[key].sentences||{}; }catch(e){}
 }
 
 // Called once at startup — restore the last-used course from localStorage.
