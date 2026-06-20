@@ -724,6 +724,70 @@ function computeThreeAxisBasis(){
 }
 try{ window.SUBSTITUTION_EN_ZH=SUBSTITUTION_EN_ZH; window.computeThreeAxisBasis=computeThreeAxisBasis; }catch(e){}
 
+// ── THE SEED — the canonical minimal generative deck (THEORY.md §2.1) ───────
+// seed(L) = a tie-broken minimum set-cover over the UNIVERSAL role set: one filler
+// per obligatory role across the construction tiers. The role set is universal and
+// the size is canonical (~16 for complex sentences); MEMBERSHIP is not unique — the
+// tie-break is the three-axis negotiation (φ most-frequent filler, σ cheapest-to-learn).
+//
+// SEED_VI is the Vietnamese (L2) seed for an ENGLISH (L1) learner — the first
+// non-Mandarin instantiation, authored to MIRROR the Mandarin tier structure so the
+// two are σ-comparable. It carries its OWN substitution module inline (the EN→VN map):
+// the σ-classes are derived by the SAME rubric (THEORY.md §3.1) as EN→ZH, which is what
+// makes computeSeedDelta() a legitimate measurement rather than a relabeling.
+//
+// ⚠ SINGLE-AUTHOR, UNVALIDATED. My Vietnamese is best-effort; freq ranks are ordinal
+// estimates, the σ-classes/d-scalars are one judged pass. This is the MEASUREMENT
+// ARTIFACT for the EN→VN vs EN→ZH experiment, not a playable course (which additionally
+// needs tokenization generalization, tone-as-diacritic, TTS — see roadmap).
+//   role : the universal generative role this atom fills (parallel to GRAMMAR_SPEC_ZH)
+//   zh   : the Mandarin atom that fills the SAME role (the typological twin pairing)
+//   c/d/n: substitution class / within-class cost / note (same schema as EN→ZH)
+const SEED_VI = [
+  // T1 predication
+  {w:'tôi',   role:'referent',    tier:'T1', zh:'我', c:'transparent', d:0.15, n:'I/me — same pronoun role (VN has rich pronoun-by-relation system, but tôi is the neutral default)'},
+  {w:'đi',    role:'lexical-verb',tier:'T1', zh:'去', c:'transparent', d:0.30, n:'go (deictic motion; also a hortative/imperative particle — that use diverges)'},
+  {w:'là',    role:'copula',      tier:'T1', zh:'是', c:'false-friend',d:0.80, n:'copula, but NOT before predicate adjectives (tôi tốt, not tôi là tốt) — the SAME false-friend trap as 是'},
+  {w:'người', role:'nominal',     tier:'T1', zh:'人', c:'transparent', d:0.20, n:'person/people (no plural inflection; also a classifier for humans)'},
+  {w:'tốt',   role:'adjective',   tier:'T1', zh:'好', c:'transparent', d:0.30, n:'good — predicative adjective stands ALONE (no obligatory degree word — unlike 好/很)'},
+  {w:'rất',   role:'degree',      tier:'T1', zh:'很', c:'transparent', d:0.30, n:'very — but OPTIONAL and truly intensifying (English "very" instinct WORKS), unlike obligatory bleached 很. KEY EN→VN vs EN→ZH difference'},
+  // T2 negation / question
+  {w:'không', role:'negator',     tier:'T2', zh:'不', c:'transparent', d:0.35, n:'not (pre-verbal negator; same morpheme doubles as the yes/no Q-frame — see below)'},
+  {w:'chưa',  role:'negator-perf',tier:'T2', zh:'没', c:'divergent',   d:0.60, n:'not-yet / not-done — the aspectual negation split (chưa vs không) English lacks, mirrors 没/不'},
+  {w:'à',     role:'Q-particle',  tier:'T2', zh:'吗', c:'divergent',   d:0.70, n:'sentence-final yes/no question particle (also the …không…? frame) — English uses inversion/intonation, like 吗'},
+  // T3 modify / quantify
+  {w:'của',   role:'modifier',    tier:'T3', zh:'的', c:'divergent',   d:0.60, n:'possessive marker — HEAD-INITIAL (sách của tôi = book of me), narrower than the do-everything prenominal 的'},
+  {w:'một',   role:'numeral',     tier:'T3', zh:'一', c:'transparent', d:0.20, n:'one/a — numeral; obligatory classifier after, like 一'},
+  {w:'cái',   role:'classifier',  tier:'T3', zh:'个', c:'divergent',   d:0.85, n:'general classifier — English has no obligatory measure word; the SAME divergence as 个'},
+  // T4 adjunct / aspect
+  {w:'ở',     role:'coverb',      tier:'T4', zh:'在', c:'divergent',   d:0.65, n:'locative coverb/verb "be at" — coverb construction English lacks, mirrors 在'},
+  {w:'rồi',   role:'aspect',      tier:'T4', zh:'了', c:'divergent',   d:0.80, n:'sentence-final perfective/change-of-state "already" — aspect-not-tense, mirrors 了'},
+  // T5 complex
+  {w:'và',    role:'conjunction', tier:'T5', zh:'和', c:'transparent', d:0.35, n:'and — but conjoins CLAUSES and verbs too (broader than nouns-only 和); English "and" instinct works AND over-covers → no misfire. KEY EN→VN vs EN→ZH difference'},
+  {w:'cũng',  role:'additive-adv',tier:'T5', zh:'也', c:'transparent', d:0.40, n:'also/too — fixed PRE-verbal position (tôi cũng đi), like 也'}
+];
+// Compare the EN→VN seed against the live EN→ZH generative basis: same role set,
+// same σ rubric → the class distribution and effective-load DELTA is the experiment's
+// readout (does the L1 crutch transfer MORE for the typological twin pair?).
+function computeSeedDelta(){
+  const cls={transparent:0,divergent:0,'false-friend':0};
+  let load=0; SEED_VI.forEach(a=>{ cls[a.c]=(cls[a.c]||0)+1; load+=a.d; });
+  const vi={ size:SEED_VI.length, byClass:cls, effectiveLoad:Math.round(load*100)/100,
+    realLoadCount:cls.divergent+cls['false-friend'],
+    transparentSharePct:Math.round((cls.transparent/SEED_VI.length)*100),
+    crutchRemovesPct:Math.round((1-load/SEED_VI.length)*100) };
+  let zh=null; try{ const z=computeThreeAxisBasis();
+    zh={ size:z.basisSize, byClass:z.byClass, effectiveLoad:z.effectiveLoad,
+      realLoadCount:z.realLoadCount, transparentSharePct:z.transparentSharePct,
+      crutchRemovesPct:Math.round((1-z.effectiveLoad/z.basisSize)*100) }; }catch(e){}
+  const delta=zh?{ effectiveLoad:Math.round((vi.effectiveLoad-zh.effectiveLoad)*100)/100,
+    falseFriends:vi.byClass['false-friend']-zh.byClass['false-friend'],
+    transparentSharePct:vi.transparentSharePct-zh.transparentSharePct,
+    verdict:(vi.effectiveLoad<zh.effectiveLoad?'EN→VN lighter (twin crutch transfers more)':'EN→VN heavier') }:null;
+  return { vi:vi, zh:zh, delta:delta };
+}
+try{ window.SEED_VI=SEED_VI; window.computeSeedDelta=computeSeedDelta; }catch(e){}
+
 // ── FRONTIER MODEL ──────────────────────────────────────────────
 // Words enter one at a time in strict frequency order.
 // A word is INTRODUCED when it has been shown as a flashcard (seen:true).
