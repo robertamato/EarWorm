@@ -2168,10 +2168,16 @@ function renderSyls(el, syls, fg){
   }
 }
 
+// The display typeface for the HEADWORD (the language being learned) — authentic per
+// script, like print. Per-course `displayFont` wins; else by script. The pixel UI font
+// (Press Start 2P) lacks most Latin diacritics, so Latin-diacritic courses (Vietnamese)
+// must NOT inherit it — they get a full Latin-Extended face instead.
+const LATIN_DIACRITIC_FONT="'Be Vietnam Pro','Segoe UI','Noto Sans','Helvetica Neue',Arial,sans-serif";
 function charFont(){
   const c=activeCourse?activeCourse():null;
+  if(c&&c.displayFont) return "font-family:"+c.displayFont;
   if(c&&c.script==='rtl') return "font-family:'Aref Ruqaa','Noto Naskh Arabic','Arabic Typesetting','Arial Unicode MS',sans-serif;font-weight:700";
-  if(typeof _segMode==='function'&&_segMode()==='space') return "font-family:inherit";
+  if(typeof _segMode==='function'&&_segMode()==='space') return "font-family:"+LATIN_DIACRITIC_FONT;
   return "font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 }
 

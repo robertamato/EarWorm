@@ -865,7 +865,7 @@ function showWordOrderDrill(i){
   const fg=getComputedStyle(document.body).color;
   // Tiles only force the CJK face for ideographic courses; space-delimited scripts
   // (Vietnamese, Arabic) inherit the body font so diacritics render correctly.
-  const CJKf=(typeof _segMode==='function'&&_segMode()==='space')?'':"font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=(typeof charFont==='function')?charFont():"font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";  // authentic per-script display face
 
   $('studyMode').textContent='WORD ORDER';
   cardShownAtMC=Date.now();
@@ -1222,7 +1222,7 @@ function showStudyProduction(i){
   const box=$('studyMCChoices'); box.innerHTML=''; box.style.display='block';
   const inp=document.createElement('input');
   inp.type='text'; inp.autocapitalize='off'; inp.autocomplete='off'; inp.setAttribute('autocorrect','off'); inp.spellcheck=false;
-  inp.style.cssText='width:100%;box-sizing:border-box;font-size:22px;padding:12px;background:rgba(255,255,255,0.06);border:2px solid '+fg+';color:'+fg+';font-family:inherit;text-align:center;border-radius:2px;';
+  inp.style.cssText='width:100%;box-sizing:border-box;font-size:22px;padding:12px;background:rgba(255,255,255,0.06);border:2px solid '+fg+';color:'+fg+';'+_segFontProd()+'text-align:center;border-radius:2px;';
   const submit=document.createElement('button'); submit.className='btn'; submit.textContent='SUBMIT';
   submit.style.cssText='margin-top:10px;font-size:12px;';
   const verdict=document.createElement('div'); verdict.style.cssText='margin-top:10px;text-align:center;font-size:13px;min-height:20px;'+_segFontProd();
@@ -1249,7 +1249,7 @@ function showStudyProduction(i){
   submit.onclick=go;
   inp.addEventListener('keydown', function(e){ if(e.key==='Enter') go(); });
 }
-function _segFontProd(){ try{ return (typeof _segMode==='function'&&_segMode()==='space')?'':"font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif;"; }catch(e){ return ''; } }
+function _segFontProd(){ try{ return (typeof charFont==='function')?charFont()+';':''; }catch(e){ return ''; } }
 try{ window.buildProductionTask=buildProductionTask; window.showStudyProduction=showStudyProduction; }catch(e){}
 
 
