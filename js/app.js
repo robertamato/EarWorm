@@ -10155,6 +10155,56 @@ function renderColdVsLive(){
   var cb=document.getElementById('coldLiveClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
 }
 if($('debugColdLive')) $('debugColdLive').onclick=renderColdVsLive;
+
+// Production evidence (PRODUCTION.md): watch graded productions accumulate so the
+// Step-4 decision (enable / raise feedback weight / flip the gate) is made on data, not
+// faith. Read-only. Shows the knob state, per-tier production status (the gate signal),
+// pass/crutch rates, and the recent log.
+function renderProductionLog(){
+  var ov=document.getElementById('prodLogOverlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='prodLogOverlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;background:#0c0f0d;color:#cfe9dd;font-family:monospace;overflow:hidden;';
+    document.body.appendChild(ov); }
+  ov.style.display='flex';
+  var log=(S.productionLog||[]), tp=S.tierProduced||{};
+  var n=log.length, pass=0, crutch=0, accSum=0, accN=0;
+  log.forEach(function(e){ if(e.ok) pass++; if(e.l1) crutch++; if(e.acc!=null){ accSum+=e.acc; accN++; } });
+  var passPct=n?Math.round(pass/n*100):0, crutchPct=n?Math.round(crutch/n*100):0, avgAcc=accN?Math.round(accSum/accN):null;
+  var enabled='?',gate='?',fw='?';
+  try{ enabled=PRODUCTION_ENABLED; }catch(e){}
+  try{ gate=(typeof Estimator!=='undefined')?Estimator.PRODUCTION_GATE:'?'; }catch(e){}
+  try{ fw=PRODUCTION_FEEDBACK_WEIGHT; }catch(e){}
+  var tiers=[]; try{ tiers=(computeGenerativeBasis().tiers)||[]; }catch(e){}
+  var onoff=function(b){ return b?'<span style="color:#6f6">ON</span>':'OFF'; };
+  var head='<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.15);flex-wrap:wrap;flex-shrink:0;">'
+    +'<button class="btn" id="prodLogClose" style="width:auto;font-size:10px;padding:5px 12px;">◄ BACK</button>'
+    +'<span style="font-size:11px;letter-spacing:1px;">PRODUCTION EVIDENCE</span>'
+    +'<span style="font-size:10px;opacity:.8;">'+n+' graded · pass '+passPct+'% · <span style="color:#fbbf24;">crutch '+crutchPct+'%</span>'+(avgAcc!=null?' · avg '+avgAcc+'%':'')+'</span>'
+    +'<span style="margin-left:auto;font-size:9px;opacity:.75;">ENABLED '+onoff(enabled)+' · GATE '+onoff(gate)+' · FEEDBACK '+fw+'</span></div>';
+  var tierHtml='<div style="padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;">';
+  if(!tiers.length) tierHtml+='<span style="font-size:9px;opacity:.5;">(no basis tiers for this course)</span>';
+  tiers.forEach(function(t){ var done=!!tp[t.name];
+    tierHtml+='<span style="font-size:9px;padding:2px 7px;border:1px solid '+(done?'#6f6':'rgba(255,255,255,.2)')+';color:'+(done?'#6f6':'rgba(255,255,255,.5)')+';">'+(done?'✓ ':'')+(t.cap||t.name)+'</span>'; });
+  tierHtml+='</div>';
+  var body='<div style="flex:1;overflow-y:auto;padding:8px 12px;font-size:11px;line-height:1.5;">';
+  if(!n) body+='<div style="opacity:.6;padding:12px">no productions yet — run the PRODUCTION drill (DRILL ISOLATION) to accumulate evidence.</div>';
+  log.slice().reverse().forEach(function(e){
+    var col=e.ok?'#6f6':'#ff6b6b';
+    body+='<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05);">'
+      +'<span style="width:34px;flex-shrink:0;color:'+col+';font-weight:700;">'+(e.acc!=null?e.acc+'%':(e.ok?'✓':'✗'))+'</span>'
+      +'<span style="width:26px;flex-shrink:0;opacity:.6;">'+(e.rung||'')+'</span>'
+      +'<span style="width:96px;flex-shrink:0;opacity:.7;">'+(e.cap||'—')+'</span>'
+      +'<span style="opacity:.85;">'+(e.atoms||[]).join(' ')+'</span>'
+      +(e.l1?'<span style="color:#fbbf24;font-size:8px;margin-left:6px;">L1</span>':'')
+      +(e.capMet?'<span style="color:#6f6;font-size:8px;margin-left:6px;">CAP</span>':'')
+      +'</div>';
+  });
+  body+='</div>';
+  ov.innerHTML=head+tierHtml+body;
+  var cb=document.getElementById('prodLogClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
+}
+if($('debugProdLog')) $('debugProdLog').onclick=renderProductionLog;
+
 // Card browser: the full rank-ordered ranking 0→N with per-card scheduler state
 // and the INTRODUCTION GATE diagnostic (why the frontier is/isn't advancing).
 function renderCardBrowser(){
