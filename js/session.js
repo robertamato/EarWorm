@@ -1841,7 +1841,7 @@ function clearCardState(){
 
 function goHome(){
   if(window.WaveViz) try{ WaveViz.clear(); }catch(e){}
-  // Strategic-interval cold recompute (ACQUISITION_MODEL §7-bis, shadow mode).
+  // Strategic-interval cold recompute (ENGINE §7-bis, shadow mode).
   try{ if(typeof coldRecompute==='function'){ coldRecompute(); save(); } }catch(e){}
   // Backfill frontier-legal context for already-introduced atoms (bounded; the
   // intro hook only covers new introductions). Background, no-op without a key.

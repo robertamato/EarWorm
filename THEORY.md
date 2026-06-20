@@ -5,7 +5,7 @@
 > basis, substitution, the production-gate definition of knowing, the framing lenses, and
 > the **language-instantiation recipe** (§7 — the spec for adding a language).
 > **Plain-language version:** [VISION.md](VISION.md). · **The engine that executes this**
-> (state, measurement, scheduling): [ACQUISITION_MODEL.md](ACQUISITION_MODEL.md).
+> (state, measurement, scheduling): [ENGINE.md](ENGINE.md).
 
 ---
 
@@ -152,7 +152,7 @@ prior card (these are encoded as standing invariants, `simInvariants()`).
 **Graduation = evidence-channel filter-crossing.** Channels are ordered
 recall < discrimination < incidental; a correct on a harder modality carries more
 evidence (`MODALITY_PROFILE.ev`) and advances progression faster. (Full SRS engine,
-cold/hot split, and the evidence log: ACQUISITION_MODEL.md.)
+cold/hot split, and the evidence log: ENGINE.md.)
 
 **Adaptive load.** The count of simultaneously in-acquisition atoms is capped
 (working-memory bound); the cap flexes with recent accuracy. *Known open problem:*
@@ -264,4 +264,4 @@ survives mastery of L₂.
 | Modality evidence/difficulty | ev, diff | `MODALITY_PROFILE` |
 | Invariant battery | — | `simInvariants` / `window.simCheck` |
 | Wager / coupling | Δ(P_user,P_algo) | `houseLine*`, `computeXP`, chips |
-| Engine internals | — | ACQUISITION_MODEL.md |
+| Engine internals | — | ENGINE.md |

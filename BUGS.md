@@ -17,12 +17,12 @@ external-review severities as candidates, not verdicts.
 ### Scheduler: v2 path ignores wall-clock ripe; lastReviewAt not written under v2
 **Symptom:** Cards that decay between sessions (retrievability `R < ~0.85`) are never resurfaced under the active (v2) scheduler; many cards never become "ripe."
 **Root cause:** `Scheduler._dueVocab`/`_pickFromPools`/`next`/`modality` are count-only (`axisDue`/`totalSeen`). `isWallClockRipe` is read only by legacy `buildStudyQueue`, not the v2 path. `lastReviewAt` is written by `recordAxisResultNew` (still runs) but not by `Scheduler.recordAnswer`, and selection never reads it.
-**Status:** OPEN — this is the **Slice 2b** cutover. `coldRecompute` built in shadow mode (`data.js`), not yet driving selection. Deeper resolution (hot-log / cold-infer, dissolves the dual-engine double-write) in `ACQUISITION_MODEL.md` §7-bis/§8.
+**Status:** OPEN — this is the **Slice 2b** cutover. `coldRecompute` built in shadow mode (`data.js`), not yet driving selection. Deeper resolution (hot-log / cold-infer, dissolves the dual-engine double-write) in `ENGINE.md` §7-bis/§8.
 
 ### State export/import: misses generated sentences + user words; import destructive
 **Symptom:** Export → import roundtrip loses LLM-generated sentences and user-added words; importing can corrupt across courses.
 **Root cause:** `exportState` snapshots `S` (card signals incl. `lastReviewAt`) but not `_sentenceCache`, `drills.js` `_pending*`, or the separate `earworm-user-words-v1` store. `importState` is destructive, ignores `_export.course`, no confirm/preview, silent errors.
-**Status:** OPEN. See `ACQUISITION_MODEL.md` §9-bis (scheduling vs fitting retention tiers; export is the durable seam).
+**Status:** OPEN. See `ENGINE.md` §9-bis (scheduling vs fitting retention tiers; export is the durable seam).
 
 ### Observability: no proctor visibility for generation/curator/ripe
 **Symptom:** PROCTOR summary + VIOLATIONS see only legacy `tts:`/`answer`/`firstFlash`/`violation` events. Sentence generation, curator approve/reject/commit, ripe rate/R, eligibility health, and LLM quality are invisible.
@@ -32,7 +32,7 @@ external-review severities as candidates, not verdicts.
 ### Multi-language: LLM/curator/eligibility/sentence paths hardcode Mandarin
 **Symptom:** On a non-Mandarin course (e.g. Arabic), sentence generation produces wrong/zero output; `sentenceAllIntroduced` is a no-op (CJK-only regex); curator/elig/exception UIs assume CJK fonts.
 **Root cause:** `generateSentencesForWord` prompt hardcodes Mandarin/CJK/pinyin; `sentenceAllIntroduced` CJK regex; no course/script awareness.
-**Status:** OPEN — deliberately deferred until the Arabic course is built (`ACQUISITION_MODEL.md` §9: per-language-module params).
+**Status:** OPEN — deliberately deferred until the Arabic course is built (`ENGINE.md` §9: per-language-module params).
 
 ### LLM output not validated post-parse
 **Symptom:** A generated sentence could be committed that doesn't contain the target word, is out of length bounds, or has characters beyond the `.seen` set.
@@ -68,7 +68,7 @@ external-review severities as candidates, not verdicts.
 **Symptom:** EXPLORE repeatedly showed the same atom with the same modality/difficulty one after another (no rotation).
 **Root cause:** `buildSessionState` read `sessionRecentCards` from `State._s._session` (preferred when it is an array) — but that copy is an empty array that is **never kept in sync** with the live module `sessionRecentCards` (which `showStudyCard` pushes to on every card). So the recency window the v2 scheduler saw was always empty → `_pickFromPools` always picked the lowest-index card with no rotation → atom 0 forever. **Same root pattern as the EXPLORE-crash bug below** — `buildSessionState` trusting an unsynced `State._s._session` copy.
 **Fix (two parts — Slice 2b increment 1):** (1) `buildSessionState` now reads **all** session globals (`studyPending`, `sessionGrammarAnswered`, `studyEncounters`, `sessionRecentCards`, `sessionAnswerRing`) from the live module — never the `State._s._session` mirror. (2) `dispatchStudyAction` no longer syncs the `_session` mirror **back into** the module globals — that read-back clobbered the recency push on every answer (and risked dropping freshly-queued pending). Module globals are now authoritative end-to-end. Verified across the full answer loop (dispatch on every card): rotation `0,1,2,…` with zero consecutive same-atom / exact-probe repeats. Also makes the `new Set` non-iterable crash (below) impossible via this path. `f33481c`+
-**Watch for:** The bridge still mirrors module→`State._s._session` after dispatch (harmless, now unread) and the dead `window.save` proxy never runs (`save` is a function declaration, not `window.save`). The essential card-state sync `Object.assign(S, State._s)` on dispatch remains. Full bridge removal is the Slice 2b endgame (hot-log/cold-infer split in ACQUISITION_MODEL.md).
+**Watch for:** The bridge still mirrors module→`State._s._session` after dispatch (harmless, now unread) and the dead `window.save` proxy never runs (`save` is a function declaration, not `window.save`). The essential card-state sync `Object.assign(S, State._s)` on dispatch remains. Full bridge removal is the Slice 2b endgame (hot-log/cold-infer split in ENGINE.md).
 
 ---
 

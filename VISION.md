@@ -3,7 +3,7 @@
 > **Scope — the pitch.** Why Earworm exists and what makes it different, in plain
 > language, in one sitting. No math.
 > **The formal framework** (what to teach, for whom): [THEORY.md](THEORY.md). · **The
-> engine** (how it runs): [ACQUISITION_MODEL.md](ACQUISITION_MODEL.md).
+> engine** (how it runs): [ENGINE.md](ENGINE.md).
 
 ---
 

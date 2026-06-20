@@ -1,4 +1,4 @@
-# Earworm — The Acquisition Model
+# Earworm — The Acquisition Engine
 
 > **Scope — the engine.** *How* the system represents what a learner knows, turns answers
 > into evidence, and decides when to show what. Canonical for the state fibration, the

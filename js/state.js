@@ -149,7 +149,7 @@ let activeCardIdx=-1; // always tracks current card regardless of modality
 // (un-committed; promote to a real variable later with no layout move).
 // BRIGHTNESS = mastery (state). The frontier is a glowing radius.
 // FIBERS = sentence co-occurrence (the morphism graph from
-// ACQUISITION_MODEL.md). Camera: turntable orbit (yaw) about the
+// ENGINE.md). Camera: turntable orbit (yaw) about the
 // vertical axis ⟂ the disc, viewed from a fixed elevation — no pan, no
 // roll. The lift dimension is genuinely vertical (terrain, not toward-
 // camera). Glyphless + audible: tap a star to hear

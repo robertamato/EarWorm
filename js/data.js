@@ -788,7 +788,7 @@ function introUnlockBias(S, D){
     // deviation isn't worth breaking the rank invariant. The generativity bias is
     // only justified where the valley is DEEP (agglutinative/polysynthetic, or via
     // frequency fragmentation). A course opts in with `introBias:true`. Re-evaluate
-    // per language — measure valley depth first — before enabling (ACQUISITION_MODEL
+    // per language — measure valley depth first — before enabling (ENGINE
     // §8-ter). No active course sets the flag today.
     if(!(typeof activeCourse==='function' && activeCourse() && activeCourse().introBias)) return -1;
     function intro(i){ return !!(S.cards[i] && S.cards[i].exp>0); }
@@ -1170,7 +1170,7 @@ function isWallClockRipe(i){
 }
 try{ window.retrievability=retrievability; }catch(e){}
 
-// ── OBSERVATION LOG — ACQUISITION_MODEL.md §4a ─────────────────────────────
+// ── OBSERVATION LOG — ENGINE.md §4a ─────────────────────────────
 // Append-only ring of OBSERVED interaction records: the non-retrofittable
 // substrate the cold inference engine (Slice 2) will read. This is hot-path,
 // pure-observable capture only — NO inference, NO channel/necessity attribution
@@ -1233,7 +1233,7 @@ function recordObservation(opts){
 }
 try{ window.recordObservation=recordObservation; window.dumpObsLog=function(){return (typeof S!=='undefined'&&S.obsLog)||[];}; }catch(e){}
 
-// ── COLD INFERENCE ENGINE — ACQUISITION_MODEL.md §7-bis ────────────────────
+// ── COLD INFERENCE ENGINE — ENGINE.md §7-bis ────────────────────
 // Pure function of (obsLog, now). Attributes channels/background/necessity (§4b),
 // aggregates measurement σ (§5), evaluates graduation (§7). Equal to a full replay
 // of the log (purity-as-invariant). SHADOW MODE: writes S.coldState only — it does
