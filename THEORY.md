@@ -498,3 +498,71 @@ market — *behind* the production bar. Build the sport before the gym that scor
 build order is therefore: (1) name the estimator + ship its measurement renders;
 (2) make the production modality real (LLM-graded free production, crutch-fade metric);
 (3) only then the Title Defense + collapsed wager that sit on it.
+
+---
+
+## 13. The negative space — contrast, the confusion graph, and the dealer
+
+Everything above is positive: which atoms to teach (§2), how well each is held (§10). But
+acquisition itself is **differential**. Saussure: *"in language there are only differences
+without positive terms."* An atom has no positive essence; its value is its position in the
+web of contrasts — *what it is not*. The learner doesn't store `tôi` as a thing; they pin
+it by its boundaries against `đi`, `là`, everything else. **The thing being learned is the
+difference-structure.**
+
+So the **confusion graph is the spine, not error-handling.** Every wrong answer writes a
+directed edge `correct → chosen · type` (`opposite`/`neighbor`/`false-friend`); a clean hit
+decays it. The graph is the learner's *live boundary-fuzziness* — and it's the one organ the
+rest read from: the **correction moment** writes it; **contrastive scheduling** interleaves
+the pairs it lists; **distinctiveness-color** separates them; the **dealer** presses them;
+the **estimator** reads error *type* (an `opposite` error is polarity inverted; a
+`false-friend` error is L1 interference — different latent states than a binary miss).
+Code: `recordConfusion`/`decayConfusion`/`confusionWeight`/`confusionEdges`, `S.confusion`.
+
+**Contrast grain, not contrast presence.** Contrast is always the mechanism; what refines
+is its *grain* — coarse category boundaries at bootstrapping (binary disambiguation, where
+a first atom can't exist without a not-it), microscopic within-category distinctions at
+mastery (near-synonyms, register). The grain is most salient/effortful at the two ends. The
+`choiceCount` ladder (2→4→6) and the dealer's escalations *are* the contrast-grain axis.
+
+### 13.1 The correction moment
+
+A wrong pick is the highest-value encoding moment (hypercorrection effect — Metcalfe 2017),
+wasted if rushed past. The moment: reveal **what the chosen option actually was** (the
+boundary blurred — "person, people = người"), **hold** every other gloss, and require a
+**manual selection of the correct answer** (active retrieval, riding the ERN window).
+Clicking a held wrong reveals *it* too — learning by elimination, the negative space made
+literal. The meta-game sting (chip loss) is quarantined and supplemental, never overriding
+the teaching (coupling test, §9) — opt-in via the wager, the two layers semi-independent.
+
+### 13.2 The dealer frame
+
+The app is a **dealer betting against you knowing the card** (the analogy is exact — it
+deals flashcards). The **house line** is `_pCorrect`; the **confusion graph is the dealer's
+card-counting** — its private read on your weak boundaries. Crucially, *"maximize winnings"
+resolves to good pedagogy*: a real house profits on **volume × edge**, keeping players at
+the table losing *just* often enough to stay — which is P≈0.5, the exact frontier where
+learning information is maximal. **The house's greed and the learner's growth are the same
+objective when the edge is the learning edge** — the coupling test isn't imposed, it's the
+dealer's profit motive. The **double-down** (a rare consumable: an extra high-confusion
+distractor pulled from the graph, or *none-of-the-above* stripping the recognition crutch)
+is the house pressing a read — and its **rarity is structural**: over-pressing empties the
+table, so the dealer self-limits to keep you in the productive zone. **That is the dose test
+(§9), made diegetic and self-enforcing.**
+
+### 13.3 Color as distinctiveness, never meaning
+
+The free card background routes a second perceptual channel into the trace — manufactured
+synesthesia (trained grapheme-color association improves memory; Bor/Rothen/Seth 2014) +
+dual coding (Paivio) + isolation (von Restorff). The design: **per-atom hue, consistent
+within a session, randomized between** — within-session binding for distinctiveness,
+between-session variation for encoding-variability (Bjork) that forces a context-independent
+representation and forbids a durable crutch (synesthesia-as-scaffold, not -as-crutch). The
+guardrail dissolves a tension: color must be **distinctiveness-only, never semantic** — a
+semantic hue (POS-color) *carries decodable content* and so can mislead and be crutched;
+a distinctiveness hue asserts nothing, so it has no error vector. And the **confusion graph
+assigns it**: give maximally-separated hues to the atoms you actively confuse, so the
+incidental channel disambiguates exactly the live-fuzzy boundaries — recall aid and
+no-confusion guardrail in one. Measurement stays clean: graduation requires context
+/production (color-independent) and survival across the nightly shuffle, so durable
+capability can't be color-cued.
