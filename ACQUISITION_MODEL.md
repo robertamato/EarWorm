@@ -655,6 +655,76 @@ surface lexicalization and grammar spec.
 
 ---
 
+## 13. The three cost axes — and substitution (the L1→L2 diff)
+
+The working paradigm: an atom is scored on **three orthogonal axes**, and they answer
+different questions.
+
+1. **Frequency** (Zipf) — *what unlocks comprehension* (how much text this lets you understand).
+2. **Generativity** (§12) — *what unlocks production* (does it close a clause template's role).
+3. **Substitution distance** — *what's actually new* vs. what transfers from the learner's L1.
+
+The first two are properties of **the language**; the third is a property of **the
+learner**, and it is the one that decides where *effort* actually goes.
+
+### 13.1 Substitution — acquisition is a DIFF, not a rebuild
+
+The learner already owns a complete generative engine: their L1. We do not rebuild
+it — we teach the **transformation** from L1's basis to L2's. Every L2 atom/cluster
+has one of three relationships to L1:
+
+- **Transparent** — same concept, role, and combination; only label+sound differ
+  (水 = water). *Positive transfer.* L1 is a perfect crutch; teaching a relabeling,
+  not a concept. (Transparent-to-bootstrap only: polysemy/collocation diverge off the
+  core sense — corrected later.)
+- **Divergent** — no clean L1 analog: a category L1 lacks, or a different structure.
+  **The real learning load.** No crutch.
+- **False-friend** — looks substitutable and isn't (是 ≈ "to be" *except before
+  adjectives*). *Negative transfer* — the L1 instinct misfires; the highest-value
+  teaching is to **un-learn** the reflex. Carries a first-class *"do NOT substitute"*
+  marker and gets contrastive correction, never scaffolding.
+
+So the **effective basis to teach = the divergent + false-friend subset**; transparent
+atoms are nearly free.
+
+### 13.2 Measured (English → Mandarin, 16-atom complex-sentence basis)
+
+`computeThreeAxisBasis()` / `SUBSTITUTION_EN_ZH` in `data.js`:
+
+| substitution class | count | atoms |
+|---|---|---|
+| transparent (~free) | 7 (44%) | 我 你‑role, 一, 好, 不, 有, 也, 上 |
+| divergent (new) | 6 | 的, 了, 个, 吗, 在, 没 |
+| false-friend (un-learn) | 3 | 是, 很, 和 |
+
+- **Real learning load = 9 atoms** (divergent + false-friend); effective load **9.05 /
+  16** nominal — exploiting L1 removes **~43%** of the apparent work.
+- The dissonance metric (§12) measured cost-to-**cover**; substitution distance measures
+  cost-to-**learn** — different numbers, and effort follows the latter.
+
+### 13.3 The product consequence: curriculum = f(L1, L2) pair
+
+Substitution distance is **L1-specific** — the same L2 has a different diff per L1
+(Vietnamese→Mandarin ≪ English→Mandarin). The universal core (pre-linguistic
+categories) is the shared substrate; the **language module is the L1→L2 substitution
+map**, personalized to what the user already has. Most apps ship one identical course
+per L2 for the whole planet; computing the diff ("we don't teach you Mandarin, we
+transform your English into Mandarin") is the moat — and it is LLM-computable for the
+same reason Zipf is (the model holds both languages). Aggregate substitution distance
+over the basis ≈ typological distance ≈ predicts time-to-fluency and informs
+second-course selection.
+
+### 13.4 The crutch must fade (ties to the production gate)
+
+L1-scaffolded (code-switched) production is the humane on-ramp to the production gate:
+let the learner produce a real utterance with L2 where they can and L1 where they
+cannot yet ("我 want 水"), so owned slots are practiced *inside a real production act*.
+But the L1 portion must **fade** — each acquired substitution removes a crutch — and
+the gate must eventually require full L2. A scaffold that never comes down is the
+Duolingo trap; false-friends are exempt from the crutch entirely.
+
+---
+
 *Relates to: `CLAUDE.md` (invariants), `ROADMAP.md`, the product thesis
 (Zipf-graded universal core), the context-pivot timescale philosophy
 (count-within / time-between), and the aptitude/IRT measurement vision
