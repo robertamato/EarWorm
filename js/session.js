@@ -1936,6 +1936,7 @@ function clearCardState(){
 
 
 function goHome(){
+  if(typeof resetAtomColors==='function') resetAtomColors();  // session ended → reshuffle atom hues (never persisted)
   if(window.WaveViz) try{ WaveViz.clear(); }catch(e){}
   // Strategic-interval cold recompute (ENGINE §7-bis, shadow mode).
   try{ if(typeof coldRecompute==='function'){ coldRecompute(); save(); } }catch(e){}

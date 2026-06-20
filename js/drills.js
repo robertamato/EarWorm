@@ -1236,9 +1236,10 @@ function showStudyProduction(i){
     verdict.style.color=fg; verdict.textContent='grading…';
     _productionGrader(task, resp, function(v){
       recordProduction(i, task, v, resp);
-      const col=v.ok?'#4ade80':'#f87171';
+      // Monochrome + graphical (✓/✗ glyph + the % itself) — no red/green; hue is the
+      // atom-identity channel. Auditory feedback carries correct/wrong too.
       verdict.innerHTML=
-        '<div style="font-size:18px;font-weight:700;color:'+col+';">'+(v.accuracy!=null?v.accuracy+'%':(v.ok?'✓':'✗'))+'</div>'
+        '<div style="font-size:18px;font-weight:700;color:'+fg+';">'+(v.ok?'✓ ':'✗ ')+(v.accuracy!=null?v.accuracy+'%':'')+'</div>'
         +(v.explanation?'<div style="font-size:9px;opacity:.8;line-height:1.4;margin-top:2px;">'+_esc(v.explanation)+'</div>':'')
         +'<div style="font-size:13px;margin-top:3px;'+_segFontProd()+'">'+_esc(task.expected)+'</div>'
         +(v.usedL1?'<div style="font-size:8px;color:#fbbf24;letter-spacing:1px;margin-top:1px;">⚠ L1 CRUTCH</div>':'');

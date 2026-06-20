@@ -98,8 +98,12 @@
     background:transparent; cursor:pointer; line-height:1.6; text-align:center;
   }
   .choice:active { transform:translate(2px,2px); }
-  .choice.correct { background:rgba(0,180,0,.25); }
-  .choice.wrong   { background:rgba(220,0,0,.25); }
+  /* Correct/wrong are GRAPHICAL + monochrome — hue is reserved for the atom-identity
+     (synesthesia) channel, so answer-feedback never uses red/green. Correct = solid ink
+     fill (lights up); wrong = dimmed + dashed (recedes). Auditory feedback carries the rest. */
+  .choice.correct { background:var(--fg) !important; font-weight:900; }
+  .choice.correct, .choice.correct * { color:var(--bg) !important; }
+  .choice.wrong   { opacity:.4 !important; border-style:dashed !important; }
   #mc-streak { font-size:8px; text-align:center; min-height:12px; }
   #mc-explain { font-size:8px; line-height:1.8; min-height:32px; text-align:center; padding:4px; opacity:.9; }
   #mc-submode { display:flex; gap:8px; }
@@ -144,8 +148,9 @@
   #tone-choices { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
   .tone-btn { font-family:inherit; font-size:10px; padding:14px 4px; border:4px solid; background:transparent; cursor:pointer; text-align:center; line-height:1.5; }
   .tone-btn:active { transform:translate(2px,2px); }
-  .tone-btn.correct { background:rgba(0,180,0,.3); }
-  .tone-btn.wrong   { background:rgba(220,0,0,.3); }
+  .tone-btn.correct { background:var(--fg) !important; font-weight:900; }
+  .tone-btn.correct, .tone-btn.correct * { color:var(--bg) !important; }
+  .tone-btn.wrong   { opacity:.4 !important; border-style:dashed !important; }
   #tone-mode { font-size:7px; text-align:center; }
   #tone-streak { font-size:8px; text-align:center; min-height:12px; }
   #tone-submode { display:flex; gap:8px; }
