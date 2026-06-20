@@ -1006,6 +1006,19 @@ const Scheduler = {
       // Stage 0: always MC-forward (first MC after flash)
       if (meanStg === 0) return 'mc-fwd';
 
+      // POS axis (fibration: gated behind meaning — grammatical role is meaningless on
+      // an un-comprehended word). Once a word is recognized (meaning ≥ 1), interleave
+      // occasional pos drills when the pos axis is due, so the role axis actually
+      // progresses (it was dormant — the v2 modality scheduler never wired it in).
+      // Comprehensible stages only: capped at pos-s3, deferring the stage-4 Mandarin
+      // metalanguage drill. The drill records the pos axis (grammar.js showStudyPOSStaged).
+      const posStg = this._getAxisStage(ci, 'pos');
+      const POS_MOD_CAP = 3;
+      if (meanStg >= 1 && posStg < POS_MOD_CAP && D[i] && D[i][4] &&
+          this._isAxisDue(ci, 'pos') && Math.random() < 0.25) {
+        return 'pos-s' + Math.min(POS_MOD_CAP, posStg + 1);
+      }
+
       // Convergence: grammar + vocab both ready
       if (this._convergenceUnlocked(S, D, i) && this._isCardDue(ci)) {
         if (this._mostOverdueAxis(ci) === 'pos') return 'convergence';
