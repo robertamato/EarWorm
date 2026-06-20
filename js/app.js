@@ -3983,16 +3983,38 @@ function rollBg(){
 // a per-session random permutation. NEXT: confusion-graph-driven separation of the
 // live-confusable pairs (confusionEdges() is ready).
 let _sessionHueOffset=Math.random()*360;
-let _atomHueOrder=null;
-function resetAtomColors(){ _sessionHueOffset=Math.random()*360; _atomHueOrder=null; }
-function _ensureHueOrder(){
-  if(_atomHueOrder) return;
-  _atomHueOrder={};
-  const idx=D.map((_,k)=>k);
-  for(let a=idx.length-1;a>0;a--){ const b=Math.floor(Math.random()*(a+1)); const t=idx[a]; idx[a]=idx[b]; idx[b]=t; }
-  idx.forEach((id,rank)=>{ _atomHueOrder[id]=rank; });
+let _atomHueMap=null;
+function resetAtomColors(){ _sessionHueOffset=Math.random()*360; _atomHueMap=null; }
+// Frozen per-session hue map: golden-angle spread over a random permutation
+// (distinctiveness), then a repulsion relaxation that pushes ACTIVELY-CONFUSED pairs apart
+// (THEORY.md §13.3 — the confusion graph assigns the color so it separates the exact
+// live-fuzzy boundaries). Snapshotted at session start from accumulated S.confusion, so
+// each atom's hue stays consistent within the session; new confusions shape NEXT session.
+function _buildHueMap(){
+  const n=D.length, order=D.map((_,k)=>k);
+  for(let a=n-1;a>0;a--){ const b=Math.floor(Math.random()*(a+1)); const t=order[a]; order[a]=order[b]; order[b]=t; }
+  const hue={}; order.forEach((id,rank)=>{ hue[id]=(_sessionHueOffset+rank*GA)%360; });
+  const edges=[];
+  try{ if(S.confusion) Object.keys(S.confusion).forEach(a=>Object.keys(S.confusion[a]).forEach(b=>{ if(+a!==+b) edges.push([+a,+b,S.confusion[a][b].n||1]); })); }catch(e){}
+  if(edges.length){
+    const TARGET=120, ITER=30;
+    for(let it=0;it<ITER;it++){
+      edges.forEach(e=>{
+        const a=e[0],b=e[1],w=e[2];
+        if(hue[a]==null||hue[b]==null) return;
+        const diff=((hue[a]-hue[b]+540)%360)-180;   // signed shortest, (-180,180]
+        const dist=Math.abs(diff)||0.001;
+        if(dist<TARGET){
+          const force=(TARGET-dist)*0.15*Math.min(1.5,w/2), dir=diff>=0?1:-1;
+          hue[a]=(hue[a]+dir*force+360)%360;
+          hue[b]=(hue[b]-dir*force+360)%360;
+        }
+      });
+    }
+  }
+  _atomHueMap=hue;
 }
-function atomHue(i){ _ensureHueOrder(); const r=(_atomHueOrder[i]!=null)?_atomHueOrder[i]:i; return (_sessionHueOffset + r*GA) % 360; }
+function atomHue(i){ if(!_atomHueMap) _buildHueMap(); return (_atomHueMap[i]!=null)?_atomHueMap[i]:((_sessionHueOffset+i*GA)%360); }
 function setAtomBg(i){
   const h=atomHue(i);
   bgHue=h;  // keep bgHue in sync so toneColor()/constellation offsets stay consistent
