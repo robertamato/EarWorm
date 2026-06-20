@@ -9123,23 +9123,83 @@ function buildProductionTask(opts){
            prompt:'Say in '+_langName.toUpperCase()+':  "'+c.en+'"' };
 }
 
-// Injectable grader seam. Default = deterministic normalized string-match (no LLM).
-// The haiku grader (step 2) swaps _productionGrader for judgment + crutch detection.
+// Injectable grader seam. async: grade(task, response, onDone(verdict)). Verdict carries
+// a single accuracy % (the computed number), a diff (provided vs expected), an explanation
+// (the perceived dissonance), and usedL1 (the crutch signal). ok/capabilityMet derive from
+// accuracy + crutch. Default = the haiku grader, which falls back to the offline string-
+// match when there is no key — so a session NEVER blocks on the network.
+const PRODUCTION_PASS=80;   // conservative pass threshold (accuracy %) — "require a clear pass"
 function _normProd(s){ return String(s||'').toLowerCase().trim().replace(/[.,!?;:。，！？]/g,'').replace(/\s+/g,' '); }
-function gradeProductionMatch(task, response){
-  const ok=_normProd(response)===_normProd(task.expected);
-  return { ok:ok, capabilityMet:ok, usedL1:false, rung:task.rung,
-           errors: ok?[]:[{type:'mismatch'}], feedback: ok?'✓':('expected: '+task.expected) };
+function _prodSim(a,b){
+  a=_normProd(a); b=_normProd(b);
+  if(a===b) return 1; if(!a||!b) return 0;
+  const sa=a.split(' '), setB={}; b.split(' ').forEach(w=>{ setB[w]=1; });
+  const uniq=sa.filter((w,i)=>sa.indexOf(w)===i);
+  let inter=0; uniq.forEach(w=>{ if(setB[w]) inter++; });
+  const uni=Object.keys(setB).length + uniq.length - inter;
+  return uni?inter/uni:0;
 }
-let _productionGrader=gradeProductionMatch;
-try{ window.setProductionGrader=function(fn){ _productionGrader=fn||gradeProductionMatch; }; }catch(e){}
+// Offline grader — deterministic, no LLM. accuracy = 100 on normalized match, else token overlap.
+function gradeProductionMatch(task, response, onDone){
+  const exact=_normProd(response)===_normProd(task.expected);
+  const acc=exact?100:Math.round(_prodSim(response,task.expected)*100);
+  const ok=acc>=PRODUCTION_PASS;
+  const v={ accuracy:acc, ok:ok, capabilityMet:ok, usedL1:false, rung:task.rung,
+    diff: exact?'(exact match)':('expected "'+task.expected+'", got "'+(response||'∅')+'"'),
+    explanation: exact?'matches the reference':'(offline string-match — no semantic judgement)' };
+  if(onDone) onDone(v); return v;
+}
+// Haiku grader — accepts valid variation (the reference is ONE answer); returns the diff,
+// the perceived-dissonance explanation, and a single accuracy %. usedL1 = the learner's
+// answer fell back to L1 (the crutch signal that gates capabilityMet).
+function gradeProductionLLM(task, response, onDone){
+  const key=getAnthropicKey();
+  if(!key) return gradeProductionMatch(task, response, onDone);
+  const lang=(typeof activeCourse==='function'&&activeCourse())?activeCourse().langName:'the target language';
+  const prompt='You are grading a language learner\'s PRODUCTION in '+lang+'.\n\n'
+    +'Task the learner was given:\n'+task.prompt+'\n\n'
+    +'A reference answer (ONE valid answer, not the only one):\n'+task.expected+'\n\n'
+    +'The learner produced:\n'+(response||'(blank)')+'\n\n'
+    +'Judge how well the learner satisfied the task in '+lang+'. Accept any correct, natural '
+    +'variation; do not punish a different-but-valid phrasing. Penalise: answering in the '
+    +'learner\'s first language, ungrammatical '+lang+', wrong meaning, or missing the '
+    +'structure the task required.\n\n'
+    +'Reply with ONLY this JSON, no markdown:\n'
+    +'{"accuracy": <integer 0-100>, "diff": "<how the response differs from the reference, brief>", '
+    +'"explanation": "<one sentence: the perceived dissonance and why it matters>", '
+    +'"usedL1": <true if the learner\'s OWN answer fell back to English/their L1 instead of '+lang+', else false>}';
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{ 'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true' },
+    body:JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:250, temperature:0, messages:[{role:'user',content:prompt}] })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.error) throw new Error(data.error.message||'api error');
+    const text=(data.content&&data.content[0]&&data.content[0].text)||'';
+    const j=JSON.parse(text.replace(/```[a-z]*\n?/gi,'').replace(/```/g,'').trim());
+    const acc=Math.max(0,Math.min(100,Math.round(Number(j.accuracy))));
+    const ok=acc>=PRODUCTION_PASS;
+    if(onDone) onDone({ accuracy:acc, ok:ok, capabilityMet:ok&&!j.usedL1, usedL1:!!j.usedL1,
+      rung:task.rung, diff:String(j.diff||''), explanation:String(j.explanation||'') });
+  })
+  .catch(function(e){
+    const v=gradeProductionMatch(task, response);   // never block a session on the network
+    v.explanation='(grader offline: '+String(e).slice(0,40)+')';
+    if(onDone) onDone(v);
+  });
+}
+let _productionGrader=gradeProductionLLM;
+try{ window.setProductionGrader=function(fn){ _productionGrader=fn||gradeProductionLLM; };
+     window.gradeProductionMatch=gradeProductionMatch; window.gradeProductionLLM=gradeProductionLLM; }catch(e){}
 
 // Hot log + cold-infer tierProduced (read by Estimator._tierProduced). Feedback into
 // scheduling is behind PRODUCTION_FEEDBACK_WEIGHT (0 ⇒ logs but moves nothing).
 function recordProduction(i, task, verdict, response){
   if(!S.productionLog) S.productionLog=[];
   S.productionLog.push({ idx:i, atoms:task.atoms, rung:task.rung, cap:task.capability,
-    ok:verdict.ok?1:0, capMet:verdict.capabilityMet?1:0, l1:verdict.usedL1?1:0, ts:Date.now() });
+    ok:verdict.ok?1:0, capMet:verdict.capabilityMet?1:0, l1:verdict.usedL1?1:0,
+    acc:(verdict.accuracy!=null?verdict.accuracy:null), ts:Date.now() });
   if(S.productionLog.length>200) S.productionLog.shift();
   coldInferTierProduced();
   try{ logAnswer(i, verdict.ok, 'production', 0); }catch(e){}
@@ -9193,13 +9253,20 @@ function showStudyProduction(i){
   let done=false;
   const go=function(){
     if(done) return; done=true;
-    const v=_productionGrader(task, inp.value);
-    recordProduction(i, task, v, inp.value);
-    verdict.style.color=v.ok?'#4ade80':'#f87171';
-    verdict.textContent=(v.ok?'✓  ':'✗  ')+task.expected;
+    const resp=inp.value;
     inp.disabled=true; submit.disabled=true;
-    if(S.sound!=='mute') speak(task.expected, activeCourse().langCode);
-    armTapAdvance($('studyMC'), function(){ nextStudyCard(); }, v.ok?500:1400);
+    verdict.style.color=fg; verdict.textContent='grading…';
+    _productionGrader(task, resp, function(v){
+      recordProduction(i, task, v, resp);
+      const col=v.ok?'#4ade80':'#f87171';
+      verdict.innerHTML=
+        '<div style="font-size:18px;font-weight:700;color:'+col+';">'+(v.accuracy!=null?v.accuracy+'%':(v.ok?'✓':'✗'))+'</div>'
+        +(v.explanation?'<div style="font-size:9px;opacity:.8;line-height:1.4;margin-top:2px;">'+_esc(v.explanation)+'</div>':'')
+        +'<div style="font-size:13px;margin-top:3px;'+_segFontProd()+'">'+_esc(task.expected)+'</div>'
+        +(v.usedL1?'<div style="font-size:8px;color:#fbbf24;letter-spacing:1px;margin-top:1px;">⚠ L1 CRUTCH</div>':'');
+      if(S.sound!=='mute') speak(task.expected, activeCourse().langCode);
+      armTapAdvance($('studyMC'), function(){ nextStudyCard(); }, v.ok?700:1600);
+    });
   };
   submit.onclick=go;
   inp.addEventListener('keydown', function(e){ if(e.key==='Enter') go(); });
