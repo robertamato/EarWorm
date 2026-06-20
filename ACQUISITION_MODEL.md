@@ -548,180 +548,27 @@ be rebuilt against the past.
 
 ---
 
-## 12. Bases — the frequency/generativity dissonance (CORE PROBLEM)
+## 12. Bases & the frequency/generativity dissonance → see THEORY.md
 
-Zipf is only **one** ordering principle, and on its own it is the wrong one for a
-tool whose goal is *production*, not just comprehension. There are (at least) two
-distinct **bases** — spanning sets — over the same atom inventory, optimizing
-different things:
+The frequency basis (Zipf) vs. the generative basis (minimum set-cover over clause-template
+roles), the capability ladder, and the dissonance metrics (reach ratio, frequency-deferred
+fraction) are **curriculum** theory and now live canonically in **[THEORY.md](THEORY.md)
+§1–2**. Measured Mandarin baseline: complex-sentence basis = 16 atoms, reach ratio 4.69×,
+38% frequency-deferred. Code: `computeGenerativeBasis`, `GRAMMAR_SPEC_ZH`.
 
-- **Frequency basis (Zipf):** rank by comprehension utility — each atom, in order,
-  unlocks the most text. "How much will this let me *understand*."
-- **Generative basis:** the minimum set of atoms that **closes the grammar's clause
-  templates** — one filler per obligatory grammatical role. "What lets me *build* a
-  sentence." Frequency does not care whether you've covered the copula, a negator,
-  a classifier, or a question particle, so the top-N frequent words are **not**
-  guaranteed to form a sentence.
+## 13. The three cost axes & substitution → see THEORY.md
 
-**The dissonance between these two bases is a core problem of the project.** A
-pure-Zipf curriculum can leave the learner "knowing" N words yet unable to produce
-a single grammatical clause.
+The three orthogonal measures (frequency φ, generativity γ, **substitution distance σ** =
+the L₁→L₂ diff), the substitution typology (transparent / divergent / false-friend), the
+curriculum operator `C(L₁, L₂)`, and the lattice of bases live canonically in
+**[THEORY.md](THEORY.md) §1–3, §6**. Measured EN→Mandarin: real load 9/16, L₁ crutch
+removes ~43%. Code: `computeThreeAxisBasis`, `SUBSTITUTION_EN_ZH`. The two-axes framing
+(what-to-teach vs. production-gated knowing, §4), the framing lenses (§8), and the
+engagement-coupling rule (§9) are likewise in THEORY.md.
 
-### 12.1 Formalizing the generative basis
-
-Model a language as a sequence of **construction tiers** `T1…Tk` ordered by
-structural complexity, each a set of clause templates over obligatory **roles**
-(closed-class functions + open POS slots). The minimum generative basis for a tier is
-
-> **μ(Tᵢ) = minimum-cardinality set S such that every obligatory role in Tᵢ's
-> templates has ≥1 filler in S** — a set-cover / hitting-set problem.
-
-The capability ladder is the nested sequence `μ(T1) ⊆ μ(T2) ⊆ … ⊆ μ(Tk)`; `|μ(Tᵢ)|`
-is each milestone's size (the formal underpinning of the M0–M7 ladder, §8-ter).
-The set-cover **algorithm is language-general**; the per-language **grammar spec**
-(templates → roles) is the language module (deck-gen Phase 0). Tie-break the cover
-toward **high-Zipf fillers** — that tie-break is where the two bases reconcile:
-generativity decides *which roles*, frequency decides *which atom per role*.
-
-Crucially this is no more expensive than Zipf: the same LLM that yields frequency
-rank yields the grammar spec and role tags. Implemented as
-`computeGenerativeBasis(deck, spec)` / `GRAMMAR_SPEC_ZH` in `data.js`.
-
-### 12.2 Measured on the Mandarin deck (2026-06-19)
-
-Tiers T1…T5 (predication → transitive/neg/Q → modify/quantify → adjunct/aspect →
-complex), computed against the 114-atom deck:
-
-| Tier | basis size | deepest Zipf rank | reach ratio | freq-deferred |
-|---|---|---|---|---|
-| T1 basic predication | 6 | 69 | 11.5× | — |
-| T5 **complex sentences** | **16** | **75** | **4.69×** | 好,没,上,很,也,和 |
-
-- **The whole ladder to complex sentences is 16 atoms** — far below the deck, and in
-  a real corpus far below the Zipf knee (hundreds). *Production capability is cheap;
-  comprehension breadth is expensive.* Generative milestones arrive long before
-  frequency milestones.
-- **Reach ratio 4.69×** = the 16-atom basis must dip to frequency rank 75 to close.
-  This single number **is** the dissonance.
-- **~38% of the basis (6/16) is frequency-deferred** — a pure-Zipf learner of the top
-  16 words would *lack* 很(69, degree adv), 也(74), 和(75, conjunction) and could not
-  say "我很好" or conjoin clauses. That is the production gap of a frequency-only
-  curriculum, measured.
-
-Mandarin is the **low-dissonance** baseline (isolating → function words stay
-frequent). The reach ratio is expected to blow up in fusional/agglutinative families
-where required morphology is rare relative to its structural necessity — the
-abstraction to learn at the first non-isolating language (Arabic). The metric is the
-transferable instrument; the absolute ranks are deck-specific.
-
-### 12.3 Product consequences
-
-- **Principled "when to break Zipf":** deviate from frequency order exactly enough to
-  complete the current tier's minimum cover — and no more. This is the rigorous
-  version of front-loading (previously gated off as arbitrary). It makes the learner
-  *productive within the first session* — a "win" becomes "I made a sentence," which
-  is the engagement coupling (see engagement-ethics).
-- **Generative basis gates modality availability:** cloze / word-order / sentence
-  modalities (the higher-evidence channels, `MODALITY_PROFILE`) are only *possible*
-  once their tier's basis is covered. `sentenceAllIntroduced` is the crude current
-  proxy; the basis is the principled gate.
-- **Seed vs post-knee deck, defined:** the seed deck ≈ the union of the small bases
-  (generative ∪ phonological ∪ pragmatic), Zipf-tie-broken; the post-knee deck is the
-  Zipf long tail.
-
-### 12.4 The lattice of bases (other spanning sets)
-
-The curriculum is a scheduling over a **lattice of bases**, each a different
-optimization on the same atoms — generalize across families by composing them:
-
-1. **Frequency** (Zipf) — comprehension utility.
-2. **Generative** (grammatical role cover, tiered) — production capability. *(§12.1)*
-3. **Phonological / orthographic** — min atoms covering the phoneme/tone inventory and
-   writing-system primitives (Mandarin radical/component set; Arabic letterforms).
-4. **Morphological** — min morphemes/affixes that close inflection (trivial for
-   isolating Mandarin; load-bearing at Arabic).
-5. **Semantic-field covering** — min atoms to refer across core domains ("survival vocab").
-6. **Pragmatic / discourse** — speech-act + politeness primitives (greet, affirm/deny,
-   request, question) — minimum to *participate in an exchange*.
-7. **Construction / dependency** — atoms covering the most distinct bigram/dependency
-   constructions (the information-theoretic cousin of #2; better empirical generativity proxy).
-
-The **pre-linguistic categories** (SELF/OTHER, EXISTENCE/IDENTITY, NEGATION, QUANTITY,
-DEIXIS, core predicates/entities) are the shared scaffold that bases 2, 5, and 6 project
-onto: they *are* the role-dimensions, the generative basis is one lexeme per category,
-and this is the concrete mechanism behind the "universal core + pluggable language
-module" thesis — language-agnostic at the category level, language-specific only in
-surface lexicalization and grammar spec.
-
----
-
-## 13. The three cost axes — and substitution (the L1→L2 diff)
-
-The working paradigm: an atom is scored on **three orthogonal axes**, and they answer
-different questions.
-
-1. **Frequency** (Zipf) — *what unlocks comprehension* (how much text this lets you understand).
-2. **Generativity** (§12) — *what unlocks production* (does it close a clause template's role).
-3. **Substitution distance** — *what's actually new* vs. what transfers from the learner's L1.
-
-The first two are properties of **the language**; the third is a property of **the
-learner**, and it is the one that decides where *effort* actually goes.
-
-### 13.1 Substitution — acquisition is a DIFF, not a rebuild
-
-The learner already owns a complete generative engine: their L1. We do not rebuild
-it — we teach the **transformation** from L1's basis to L2's. Every L2 atom/cluster
-has one of three relationships to L1:
-
-- **Transparent** — same concept, role, and combination; only label+sound differ
-  (水 = water). *Positive transfer.* L1 is a perfect crutch; teaching a relabeling,
-  not a concept. (Transparent-to-bootstrap only: polysemy/collocation diverge off the
-  core sense — corrected later.)
-- **Divergent** — no clean L1 analog: a category L1 lacks, or a different structure.
-  **The real learning load.** No crutch.
-- **False-friend** — looks substitutable and isn't (是 ≈ "to be" *except before
-  adjectives*). *Negative transfer* — the L1 instinct misfires; the highest-value
-  teaching is to **un-learn** the reflex. Carries a first-class *"do NOT substitute"*
-  marker and gets contrastive correction, never scaffolding.
-
-So the **effective basis to teach = the divergent + false-friend subset**; transparent
-atoms are nearly free.
-
-### 13.2 Measured (English → Mandarin, 16-atom complex-sentence basis)
-
-`computeThreeAxisBasis()` / `SUBSTITUTION_EN_ZH` in `data.js`:
-
-| substitution class | count | atoms |
-|---|---|---|
-| transparent (~free) | 7 (44%) | 我 你‑role, 一, 好, 不, 有, 也, 上 |
-| divergent (new) | 6 | 的, 了, 个, 吗, 在, 没 |
-| false-friend (un-learn) | 3 | 是, 很, 和 |
-
-- **Real learning load = 9 atoms** (divergent + false-friend); effective load **9.05 /
-  16** nominal — exploiting L1 removes **~43%** of the apparent work.
-- The dissonance metric (§12) measured cost-to-**cover**; substitution distance measures
-  cost-to-**learn** — different numbers, and effort follows the latter.
-
-### 13.3 The product consequence: curriculum = f(L1, L2) pair
-
-Substitution distance is **L1-specific** — the same L2 has a different diff per L1
-(Vietnamese→Mandarin ≪ English→Mandarin). The universal core (pre-linguistic
-categories) is the shared substrate; the **language module is the L1→L2 substitution
-map**, personalized to what the user already has. Most apps ship one identical course
-per L2 for the whole planet; computing the diff ("we don't teach you Mandarin, we
-transform your English into Mandarin") is the moat — and it is LLM-computable for the
-same reason Zipf is (the model holds both languages). Aggregate substitution distance
-over the basis ≈ typological distance ≈ predicts time-to-fluency and informs
-second-course selection.
-
-### 13.4 The crutch must fade (ties to the production gate)
-
-L1-scaffolded (code-switched) production is the humane on-ramp to the production gate:
-let the learner produce a real utterance with L2 where they can and L1 where they
-cannot yet ("我 want 水"), so owned slots are practiced *inside a real production act*.
-But the L1 portion must **fade** — each acquired substitution removes a crutch — and
-the gate must eventually require full L2. A scaffold that never comes down is the
-Duolingo trap; false-friends are exempt from the crutch entirely.
+This document stays focused on what only it covers: the engine — the state fibration (§2),
+the observed-vs-attributed evidence morphism (§4), the evidence channels (§6), graduation
+as filter-crossing (§7), the two-clock timing model (§8), and the mapping to code (§11).
 
 ---
 
