@@ -473,6 +473,9 @@ measurement pointed at the cold engine, closing a loop the cold-infer layer need
 
 ## 12. The load-bearing unbuilt thing — the production bar
 
+> Full v1 spec: [PRODUCTION.md](PRODUCTION.md) — the production *modality* (the Build
+> consumer), inline in study, R1+R2, haiku-graded, gate-off and feedback-weight-low.
+
 Every honest claim in §10 — a capability badge, a Title Defense verdict — is gated on a
 **production** measurement. The top production modality today is tile-assembly
 (word-order), which §4 flags as **exposed to the Duolingo trap**: rearranging tiles with
