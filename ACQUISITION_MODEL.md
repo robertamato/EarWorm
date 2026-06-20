@@ -1,5 +1,12 @@
 # Earworm — The Acquisition Model
 
+> **Scope — the engine.** *How* the system represents what a learner knows, turns answers
+> into evidence, and decides when to show what. Canonical for the state fibration, the
+> observed-vs-attributed evidence morphism, the three evidence channels, graduation-as-
+> filter-crossing, the two clocks, and the mapping to code (§11).
+> **What to teach (the framework):** [THEORY.md](THEORY.md). · **Plain-language version:**
+> [VISION.md](VISION.md).
+
 **Status:** foundational spec **v2** (2026-06-17), revised after an adversarial
 pressure-test. This document defines the abstract object the system *is*. The
 scheduler, the evidence schema, and the progressive-enrichment UI are three

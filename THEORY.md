@@ -1,9 +1,11 @@
 # Earworm — Formal Theory
 
-*The rigorous version. For the plain-language overview see [VISION.md](VISION.md);
-for SRS-engine internals (cold engine, evidence log, fibered poset) see
-[ACQUISITION_MODEL.md](ACQUISITION_MODEL.md). This document is also the **language
-instantiation spec** — §7 is the recipe for adding a language.*
+> **Scope — the framework.** *What* to teach, in what order, for a given (L₁,L₂) pair,
+> and what counts as *knowing* it. Canonical for the φ/γ/σ cost measures, the generative
+> basis, substitution, the production-gate definition of knowing, the framing lenses, and
+> the **language-instantiation recipe** (§7 — the spec for adding a language).
+> **Plain-language version:** [VISION.md](VISION.md). · **The engine that executes this**
+> (state, measurement, scheduling): [ACQUISITION_MODEL.md](ACQUISITION_MODEL.md).
 
 ---
 

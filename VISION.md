@@ -1,7 +1,9 @@
 # Earworm — the idea, in plain language
 
-*A one-sitting read for anyone who wants to understand what we're building and why.
-No math here — see [THEORY.md](THEORY.md) for the formal version.*
+> **Scope — the pitch.** Why Earworm exists and what makes it different, in plain
+> language, in one sitting. No math.
+> **The formal framework** (what to teach, for whom): [THEORY.md](THEORY.md). · **The
+> engine** (how it runs): [ACQUISITION_MODEL.md](ACQUISITION_MODEL.md).
 
 ---
 
