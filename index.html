@@ -347,51 +347,43 @@
       <div class="prog-milestone" id="milestoneProgNote"></div>
     </div>
 
-    <!-- STATS (condensed) -->
+    <!-- ENGINE STRIP — what the acquisition engine actually tracks -->
     <div style="display:flex;flex-direction:column;gap:5px;padding:2px;">
       <div style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;">
-        <span>SEEN <span id="uniqueCount">0</span></span>
-        <span id="due">--</span>
-        <span>STREAK <span id="streak">0</span></span>
+        <span>FRONTIER <span id="engFrontier">0</span></span>
+        <span>DUE <span id="engDue">0</span></span>
+        <span>ACTIVE <span id="engActive">0/6</span></span>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:9px;opacity:.55;letter-spacing:1px;">
+        <span>SEEN <span id="uniqueCount">0</span></span>
         <span id="masteryBreakdown" title="UNSEEN · LEARNING · FAMILIAR · MASTERED">0·0·0·0</span>
-        <span id="multDisplay">1x</span>
-        <span>XP <span id="xp">0</span></span>
-        <span>LV <span id="lvl">1</span></span>
+        <span>NEW <span id="engNew">0</span></span>
       </div>
     </div>
 
-    <!-- SETTINGS -->
-    <div style="display:flex;gap:8px;">
-      <button class="btn" id="muteBtn" style="font-size:9px;flex:1">SOUND: AUTO</button>
-    </div>
-    <div id="ttsStatus" style="font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;opacity:.4;"></div>
     <button class="btn" id="profileBtn" style="font-size:9px;">◷ PROFILE</button>
 
     <!-- DEBUG MODES (hidden by default) -->
     <div id="debugToggle" style="font-size:7px;text-align:center;opacity:.35;cursor:pointer;padding:4px;letter-spacing:2px;">▸ DEBUG MODES</div>
     <div id="debugModes" style="display:none;flex-direction:column;gap:6px;">
+      <div style="font-size:8px;opacity:.4;letter-spacing:2px;margin:2px 0 0;">▌DRILL ISOLATION</div>
       <button class="btn" id="startWS" style="font-size:8px;opacity:.6">► WORD SEARCH</button>
       <button class="btn" id="start" style="font-size:8px;opacity:.6">► FLASHCARDS</button>
       <button class="btn" id="startMC" style="font-size:8px;opacity:.6">► MULTIPLE CHOICE</button>
       <button class="btn" id="startTone" style="font-size:8px;opacity:.6">► TONE DRILL</button>
       <button class="btn" id="startGrammar" style="font-size:8px;opacity:.6">► GRAMMAR DRILL</button>
-      <div style="border-top:1px solid;opacity:.3;margin:4px 0;"></div>
-      <button class="btn" id="debugTTS" style="font-size:8px;opacity:.6;">🔊 TTS DEBUG</button>
-      <button class="btn" id="debugPolicy" style="font-size:8px;opacity:.6;">⚙ POLICY: V1</button>
-      <button class="btn" id="debugReset" style="font-size:8px;opacity:.6;border-color:hsl(0,70%,50%);color:hsl(0,70%,50%);">⚠ RESET ALL PROGRESS</button>
-      <button class="btn" id="debugSetProficiency" style="font-size:8px;opacity:.6;">◈ SET PROFICIENCY LEVEL</button>
-      <button class="btn" id="debugExport" style="font-size:8px;opacity:.6;">↓ EXPORT STATE</button>
-      <button class="btn" id="debugImport" style="font-size:8px;opacity:.6;">↑ IMPORT STATE</button>
+
+      <div style="font-size:8px;opacity:.4;letter-spacing:2px;margin:6px 0 0;">▌ENGINE</div>
       <button class="btn" id="debugElig" style="font-size:8px;opacity:.6;">◈ ELIGIBILITY</button>
-      <button class="btn" id="debugColdLive" style="font-size:8px;opacity:.6;">⧉ COLD vs LIVE</button>
-      <button class="btn" id="debugColdCutover" style="font-size:8px;opacity:.6;">⇄ COLD CUTOVER: OFF</button>
       <button class="btn" id="debugCardBrowser" style="font-size:8px;opacity:.6;">▦ CARD BROWSER</button>
       <button class="btn" id="debugSimTrace" style="font-size:8px;opacity:.6;">▷ SIM PLAYTHROUGH</button>
       <button class="btn" id="debugBasis" style="font-size:8px;opacity:.6;">◇ BASIS / 3 AXES</button>
       <button class="btn" id="debugExplain" style="font-size:8px;opacity:.6;">◉ WHY THIS CARD: OFF</button>
-      <div style="border-top:1px solid;opacity:.3;margin:4px 0;"></div>
+      <button class="btn" id="debugColdLive" style="font-size:8px;opacity:.6;">⧉ COLD vs LIVE</button>
+      <button class="btn" id="debugColdCutover" style="font-size:8px;opacity:.6;">⇄ COLD CUTOVER: OFF</button>
+      <button class="btn" id="debugPolicy" style="font-size:8px;opacity:.6;">⚙ POLICY: V1</button>
+
+      <div style="font-size:8px;opacity:.4;letter-spacing:2px;margin:6px 0 0;">▌CONTENT</div>
       <div style="font-size:9px;opacity:.7;letter-spacing:1px;margin-bottom:3px;">ANTHROPIC API KEY</div>
       <div style="display:flex;gap:6px;align-items:stretch;">
         <input id="debugApiKey" type="password" placeholder="sk-ant-api03-…" style="font-size:12px;flex:1;min-width:0;background:rgba(255,255,255,0.06);border:1px solid currentColor;color:inherit;padding:8px 10px;font-family:monospace;border-radius:2px;"/>
@@ -402,6 +394,13 @@
       <button class="btn" id="debugGenerate" style="font-size:8px;opacity:.6;">⚡ GENERATE SENTENCES</button>
       <button class="btn" id="debugCurate" style="font-size:8px;opacity:.6;">✎ CURATE SENTENCES</button>
       <button class="btn" id="debugAddWords" style="font-size:8px;opacity:.6;">⊕ ADD WORDS</button>
+
+      <div style="font-size:8px;opacity:.4;letter-spacing:2px;margin:6px 0 0;">▌STATE</div>
+      <button class="btn" id="debugExport" style="font-size:8px;opacity:.6;">↓ EXPORT STATE</button>
+      <button class="btn" id="debugImport" style="font-size:8px;opacity:.6;">↑ IMPORT STATE</button>
+      <button class="btn" id="debugSetProficiency" style="font-size:8px;opacity:.6;">◈ SET PROFICIENCY LEVEL</button>
+      <button class="btn" id="debugTTS" style="font-size:8px;opacity:.6;">🔊 TTS DEBUG</button>
+      <button class="btn" id="debugReset" style="font-size:8px;opacity:.6;border-color:hsl(0,70%,50%);color:hsl(0,70%,50%);">⚠ RESET ALL PROGRESS</button>
     </div>
   </div>
 
@@ -642,6 +641,15 @@
       <button class="btn" id="stats-back" style="font-size:9px;">◄ HOME</button>
       <div style="font-size:11px;letter-spacing:2px;">PROFILE</div>
     </div>
+    <!-- META-GAME + SETTINGS (relocated off the engine command center) -->
+    <div style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;padding:2px;">
+      <span>XP <span id="xp">0</span></span>
+      <span>LV <span id="lvl">1</span></span>
+      <span>STREAK <span id="streak">0</span></span>
+      <span id="multDisplay">1x</span>
+    </div>
+    <button class="btn" id="muteBtn" style="font-size:9px;">SOUND: AUTO</button>
+    <div id="ttsStatus" style="font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;opacity:.4;"></div>
     <div id="statsBody"></div>
   </div>
 </div>

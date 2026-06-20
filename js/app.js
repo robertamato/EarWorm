@@ -2734,7 +2734,15 @@ function renderHome(){
   const newN=D.filter((_,i)=>isUnlocked(i)&&!(S.cards[i]&&S.cards[i].seen)).length;
   const mastN=D.filter((_,i)=>isMastered(i)).length;
   const frVal=frontier();
-  $('due').textContent=`DUE ${dueN}  NEW ${newN}`;
+  // Engine strip — FRONTIER · DUE · ACTIVE (in-acquisition / cap). The numbers the
+  // acquisition engine actually tracks; meta-game (XP/LV/STREAK) lives in PROFILE.
+  let ACQ_STAGE=1; try{ ACQ_STAGE=ACQUIRED_STAGE; }catch(e){}  // let in TDZ at init — typeof would throw
+  const inAcq=D.filter((_,k)=>{ const c=S.cards[k]; return c&&c.exp>0&&getAxisStage(k,'meaning')<ACQ_STAGE; }).length;
+  let acap=6; try{ acap=Estimator.pools().cap; }catch(e){}
+  if($('engFrontier')) $('engFrontier').textContent=frVal;
+  if($('engDue')) $('engDue').textContent=dueN;
+  if($('engNew')) $('engNew').textContent=newN;
+  if($('engActive')) $('engActive').textContent=inAcq+'/'+acap;
   const course=activeCourse&&activeCourse();
   $('mapLabel').textContent='FRONTIER '+frVal+'  ·  '+activeDeckName().toUpperCase()+' ▸';
   const ll=$('courseId');
@@ -2932,6 +2940,13 @@ function show(view){
 function renderStats(){
   const body=document.getElementById('statsBody');
   if(!body) return;
+  // Refresh the relocated meta-game + settings (moved here off the home command center)
+  if($('xp')) $('xp').textContent=S.xp;
+  if($('lvl')) $('lvl').textContent=Math.floor(S.xp/100)+1;
+  if($('streak')) $('streak').textContent=S.streak;
+  if($('multDisplay')) $('multDisplay').textContent=getMult()+'x ⚡'+(getMultStreak()||'');
+  if($('muteBtn')) $('muteBtn').textContent='SOUND: '+S.sound.toUpperCase();
+  try{ if(typeof renderTTSStatus==='function') renderTTSStatus(); }catch(e){}
   const st=(S.stats&&typeof S.stats==='object')?S.stats:{days:{},totalAnswers:0,totalCorrect:0,byModality:{}};
   const totA=st.totalAnswers||0, totC=st.totalCorrect||0;
   const acc=totA?Math.round(totC/totA*100):0;
