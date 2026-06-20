@@ -548,6 +548,113 @@ be rebuilt against the past.
 
 ---
 
+## 12. Bases — the frequency/generativity dissonance (CORE PROBLEM)
+
+Zipf is only **one** ordering principle, and on its own it is the wrong one for a
+tool whose goal is *production*, not just comprehension. There are (at least) two
+distinct **bases** — spanning sets — over the same atom inventory, optimizing
+different things:
+
+- **Frequency basis (Zipf):** rank by comprehension utility — each atom, in order,
+  unlocks the most text. "How much will this let me *understand*."
+- **Generative basis:** the minimum set of atoms that **closes the grammar's clause
+  templates** — one filler per obligatory grammatical role. "What lets me *build* a
+  sentence." Frequency does not care whether you've covered the copula, a negator,
+  a classifier, or a question particle, so the top-N frequent words are **not**
+  guaranteed to form a sentence.
+
+**The dissonance between these two bases is a core problem of the project.** A
+pure-Zipf curriculum can leave the learner "knowing" N words yet unable to produce
+a single grammatical clause.
+
+### 12.1 Formalizing the generative basis
+
+Model a language as a sequence of **construction tiers** `T1…Tk` ordered by
+structural complexity, each a set of clause templates over obligatory **roles**
+(closed-class functions + open POS slots). The minimum generative basis for a tier is
+
+> **μ(Tᵢ) = minimum-cardinality set S such that every obligatory role in Tᵢ's
+> templates has ≥1 filler in S** — a set-cover / hitting-set problem.
+
+The capability ladder is the nested sequence `μ(T1) ⊆ μ(T2) ⊆ … ⊆ μ(Tk)`; `|μ(Tᵢ)|`
+is each milestone's size (the formal underpinning of the M0–M7 ladder, §8-ter).
+The set-cover **algorithm is language-general**; the per-language **grammar spec**
+(templates → roles) is the language module (deck-gen Phase 0). Tie-break the cover
+toward **high-Zipf fillers** — that tie-break is where the two bases reconcile:
+generativity decides *which roles*, frequency decides *which atom per role*.
+
+Crucially this is no more expensive than Zipf: the same LLM that yields frequency
+rank yields the grammar spec and role tags. Implemented as
+`computeGenerativeBasis(deck, spec)` / `GRAMMAR_SPEC_ZH` in `data.js`.
+
+### 12.2 Measured on the Mandarin deck (2026-06-19)
+
+Tiers T1…T5 (predication → transitive/neg/Q → modify/quantify → adjunct/aspect →
+complex), computed against the 114-atom deck:
+
+| Tier | basis size | deepest Zipf rank | reach ratio | freq-deferred |
+|---|---|---|---|---|
+| T1 basic predication | 6 | 69 | 11.5× | — |
+| T5 **complex sentences** | **16** | **75** | **4.69×** | 好,没,上,很,也,和 |
+
+- **The whole ladder to complex sentences is 16 atoms** — far below the deck, and in
+  a real corpus far below the Zipf knee (hundreds). *Production capability is cheap;
+  comprehension breadth is expensive.* Generative milestones arrive long before
+  frequency milestones.
+- **Reach ratio 4.69×** = the 16-atom basis must dip to frequency rank 75 to close.
+  This single number **is** the dissonance.
+- **~38% of the basis (6/16) is frequency-deferred** — a pure-Zipf learner of the top
+  16 words would *lack* 很(69, degree adv), 也(74), 和(75, conjunction) and could not
+  say "我很好" or conjoin clauses. That is the production gap of a frequency-only
+  curriculum, measured.
+
+Mandarin is the **low-dissonance** baseline (isolating → function words stay
+frequent). The reach ratio is expected to blow up in fusional/agglutinative families
+where required morphology is rare relative to its structural necessity — the
+abstraction to learn at the first non-isolating language (Arabic). The metric is the
+transferable instrument; the absolute ranks are deck-specific.
+
+### 12.3 Product consequences
+
+- **Principled "when to break Zipf":** deviate from frequency order exactly enough to
+  complete the current tier's minimum cover — and no more. This is the rigorous
+  version of front-loading (previously gated off as arbitrary). It makes the learner
+  *productive within the first session* — a "win" becomes "I made a sentence," which
+  is the engagement coupling (see engagement-ethics).
+- **Generative basis gates modality availability:** cloze / word-order / sentence
+  modalities (the higher-evidence channels, `MODALITY_PROFILE`) are only *possible*
+  once their tier's basis is covered. `sentenceAllIntroduced` is the crude current
+  proxy; the basis is the principled gate.
+- **Seed vs post-knee deck, defined:** the seed deck ≈ the union of the small bases
+  (generative ∪ phonological ∪ pragmatic), Zipf-tie-broken; the post-knee deck is the
+  Zipf long tail.
+
+### 12.4 The lattice of bases (other spanning sets)
+
+The curriculum is a scheduling over a **lattice of bases**, each a different
+optimization on the same atoms — generalize across families by composing them:
+
+1. **Frequency** (Zipf) — comprehension utility.
+2. **Generative** (grammatical role cover, tiered) — production capability. *(§12.1)*
+3. **Phonological / orthographic** — min atoms covering the phoneme/tone inventory and
+   writing-system primitives (Mandarin radical/component set; Arabic letterforms).
+4. **Morphological** — min morphemes/affixes that close inflection (trivial for
+   isolating Mandarin; load-bearing at Arabic).
+5. **Semantic-field covering** — min atoms to refer across core domains ("survival vocab").
+6. **Pragmatic / discourse** — speech-act + politeness primitives (greet, affirm/deny,
+   request, question) — minimum to *participate in an exchange*.
+7. **Construction / dependency** — atoms covering the most distinct bigram/dependency
+   constructions (the information-theoretic cousin of #2; better empirical generativity proxy).
+
+The **pre-linguistic categories** (SELF/OTHER, EXISTENCE/IDENTITY, NEGATION, QUANTITY,
+DEIXIS, core predicates/entities) are the shared scaffold that bases 2, 5, and 6 project
+onto: they *are* the role-dimensions, the generative basis is one lexeme per category,
+and this is the concrete mechanism behind the "universal core + pluggable language
+module" thesis — language-agnostic at the category level, language-specific only in
+surface lexicalization and grammar spec.
+
+---
+
 *Relates to: `CLAUDE.md` (invariants), `ROADMAP.md`, the product thesis
 (Zipf-graded universal core), the context-pivot timescale philosophy
 (count-within / time-between), and the aptitude/IRT measurement vision

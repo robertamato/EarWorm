@@ -528,6 +528,50 @@ const MODALITY_PROFILE = {
 function modalityDiff(mod){ const p=MODALITY_PROFILE[mod]; return p?p.diff:0; }
 function modalityEv(mod){ const p=MODALITY_PROFILE[mod]; return p?p.ev:1; }
 
+// ── GENERATIVE BASIS (min set-cover to PRODUCE sentences) ──────────────────
+// CORE PROBLEM of the project: the FREQUENCY basis (Zipf — what to learn for
+// comprehension) and the GENERATIVE basis (the minimum atoms that close the
+// grammar's clause templates — what you need to PRODUCE sentences) are different
+// optimizations over the same atoms, and their DISSONANCE drives curriculum design.
+// Pure Zipf can leave you "knowing" N words yet unable to form a clause (no copula,
+// negator, classifier...). This computes the generative basis per construction tier
+// and quantifies the dissonance against frequency order.
+//
+// The set-cover ALGORITHM is language-general; GRAMMAR_SPEC is the per-language
+// module (deck-gen Phase 0). Roles are filled by the LOWEST-frequency-rank atom that
+// matches — a specific function word (char) or a POS class (token-exact on '/').
+// Tie-breaking covers toward high-Zipf fillers is where the two bases reconcile.
+const GRAMMAR_SPEC_ZH = {
+  reserved: ['是','在'],   // function words excluded from generic POS-class roles
+  tiers: [
+    { name:'T1 predication',     roles:[ {role:'referent',pos:'pronoun'}, {role:'lexical-verb',pos:'verb'}, {role:'copula',char:'是'}, {role:'nominal',pos:'noun'}, {role:'adjective',pos:'adjective'}, {role:'degree',char:'很'} ] },
+    { name:'T2 transitive/neg/Q',roles:[ {role:'negator',char:'不'}, {role:'negator-perf',char:'没'}, {role:'Q-particle',char:'吗'} ] },
+    { name:'T3 modify/quantify', roles:[ {role:'modifier',char:'的'}, {role:'numeral',pos:'numeral'}, {role:'classifier',char:'个'} ] },
+    { name:'T4 adjunct/aspect',  roles:[ {role:'coverb',char:'在'}, {role:'aspect',char:'了'} ] },
+    { name:'T5 complex',         roles:[ {role:'conjunction',pos:'conjunction'}, {role:'additive-adv',char:'也'} ] }
+  ]
+};
+function computeGenerativeBasis(deck, spec){
+  deck=deck||(typeof D!=='undefined'?D:[]); spec=spec||GRAMMAR_SPEC_ZH;
+  const reserved=new Set(spec.reserved||[]);
+  const charIdx=c=>deck.findIndex(d=>d[0]===c);
+  const toks=i=>(deck[i][4]||'').split('/');
+  const lowestPOS=tok=>{ for(let i=0;i<deck.length;i++){ if(toks(i).indexOf(tok)>=0 && !reserved.has(deck[i][0])) return i; } return -1; };
+  const fill=r=> r.char!=null?charIdx(r.char):lowestPOS(r.pos);
+  const cum=new Map(); const tiers=[];
+  spec.tiers.forEach(t=>{
+    t.roles.forEach(r=>{ const idx=fill(r); if(idx>=0){ const ch=deck[idx][0]; if(!cum.has(ch)) cum.set(ch,{role:r.role,idx:idx}); } });
+    const atoms=[...cum.values()].sort((a,b)=>a.idx-b.idx);
+    const m=atoms.length, deep=atoms.length?Math.max.apply(null,atoms.map(a=>a.idx)):0;
+    const deferred=atoms.filter(a=>a.idx>=m);   // generatively required but beyond a same-size pure-Zipf deck
+    tiers.push({ name:t.name, basisSize:m, deepestRank:deep, reachRatio:m?Math.round(deep/m*100)/100:0,
+      deferredCount:deferred.length, deferred:deferred.map(a=>deck[a.idx][0]+'#'+a.idx) });
+  });
+  const basis=[...cum.values()].sort((a,b)=>a.idx-b.idx).map(a=>({ch:deck[a.idx][0], rank:a.idx, role:a.role}));
+  return { tiers:tiers, basis:basis, basisSize:basis.length };
+}
+try{ window.computeGenerativeBasis=computeGenerativeBasis; window.GRAMMAR_SPEC_ZH=GRAMMAR_SPEC_ZH; }catch(e){}
+
 // ── FRONTIER MODEL ──────────────────────────────────────────────
 // Words enter one at a time in strict frequency order.
 // A word is INTRODUCED when it has been shown as a flashcard (seen:true).
