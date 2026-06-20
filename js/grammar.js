@@ -878,6 +878,10 @@ const COURSES={
     lexicon:D_MANDARIN,
     storageKey:'earworm-mandarin-v1',
     hasGrammar:true,
+    // role→atom map for the universal GRAMMAR_SPEC (function-word fillers; POS-class
+    // roles resolve from the deck). Drives the generative basis + capability tiers.
+    grammarRoles:{ copula:'是', degree:'很', negator:'不', 'negator-perf':'没', 'q-particle':'吗',
+                   modifier:'的', classifier:'个', coverb:'在', aspect:'了', 'additive-adv':'也' },
   },
   'arabic-levantine':{
     langCode:'ar-LB',
@@ -960,6 +964,10 @@ const COURSES={
     lexicon:D_VI,
     storageKey:'earworm-vietnamese-v1',
     hasGrammar:false,
+    // Same universal roles as Mandarin (VN is its typological twin: isolating, classifiers,
+    // copula, q-particle, aspect) — only the fillers differ. Drives capability tiers for VN.
+    grammarRoles:{ copula:'là', degree:'rất', negator:'không', 'negator-perf':'chưa', 'q-particle':'à',
+                   modifier:'của', classifier:'cái', coverb:'ở', aspect:'rồi', 'additive-adv':'cũng' },
   },
 };
 const ACTIVE_COURSE_PREF='earworm-active-course';

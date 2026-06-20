@@ -573,36 +573,56 @@ function modalityEv(mod){ const p=MODALITY_PROFILE[mod]; return p?p.ev:1; }
 // module (deck-gen Phase 0). Roles are filled by the LOWEST-frequency-rank atom that
 // matches — a specific function word (char) or a POS class (token-exact on '/').
 // Tie-breaking covers toward high-Zipf fillers is where the two bases reconcile.
-const GRAMMAR_SPEC_ZH = {
-  reserved: ['是','在'],   // function words excluded from generic POS-class roles
+// The spec is now LANGUAGE-AGNOSTIC: tiers × roles is the universal clause-template
+// skeleton (referent, copula, negator, classifier, aspect…), plus a capability label
+// per tier. What's language-specific — WHICH atom fills each function-word role — lives
+// on the course object as `grammarRoles` (role→atom), the same per-course-flag pattern
+// as segment/readingIsWord/hasTone. POS-class roles (`pos:`) were already agnostic.
+// `cap`/`desc` describe the CAPABILITY a tier closes (also universal). Example sentence
+// is per-course (built from the tier's atoms / the course's example bank).
+const GRAMMAR_SPEC = {
   tiers: [
-    { name:'T1 predication',     roles:[ {role:'referent',pos:'pronoun'}, {role:'lexical-verb',pos:'verb'}, {role:'copula',char:'是'}, {role:'nominal',pos:'noun'}, {role:'adjective',pos:'adjective'}, {role:'degree',char:'很'} ] },
-    { name:'T2 transitive/neg/Q',roles:[ {role:'negator',char:'不'}, {role:'negator-perf',char:'没'}, {role:'Q-particle',char:'吗'} ] },
-    { name:'T3 modify/quantify', roles:[ {role:'modifier',char:'的'}, {role:'numeral',pos:'numeral'}, {role:'classifier',char:'个'} ] },
-    { name:'T4 adjunct/aspect',  roles:[ {role:'coverb',char:'在'}, {role:'aspect',char:'了'} ] },
-    { name:'T5 complex',         roles:[ {role:'conjunction',pos:'conjunction'}, {role:'additive-adv',char:'也'} ] }
+    { name:'T1 predication',      cap:'PREDICATE',     desc:'say what something is, is like, or does',
+      roles:[ {role:'referent',pos:'pronoun'}, {role:'lexical-verb',pos:'verb'}, {role:'copula'}, {role:'nominal',pos:'noun'}, {role:'adjective',pos:'adjective'}, {role:'degree'} ] },
+    { name:'T2 transitive/neg/Q', cap:'NEGATE & ASK',  desc:'deny and ask yes/no questions',
+      roles:[ {role:'negator'}, {role:'negator-perf'}, {role:'q-particle'} ] },
+    { name:'T3 modify/quantify',  cap:'MODIFY & COUNT', desc:'possess, modify, and quantify',
+      roles:[ {role:'modifier'}, {role:'numeral',pos:'numeral'}, {role:'classifier'} ] },
+    { name:'T4 adjunct/aspect',   cap:'PLACE & ASPECT', desc:'locate and mark completion',
+      roles:[ {role:'coverb'}, {role:'aspect'} ] },
+    { name:'T5 complex',          cap:'CONNECT',        desc:'join clauses',
+      roles:[ {role:'conjunction',pos:'conjunction'}, {role:'additive-adv'} ] }
   ]
 };
 function computeGenerativeBasis(deck, spec){
-  deck=deck||(typeof D!=='undefined'?D:[]); spec=spec||GRAMMAR_SPEC_ZH;
-  const reserved=new Set(spec.reserved||[]);
+  deck=deck||(typeof D!=='undefined'?D:[]); spec=spec||GRAMMAR_SPEC;
+  // per-course role→atom map; function-word fillers are auto-reserved from generic POS picks
+  let roleMap={}; try{ const c=(typeof activeCourse==='function')&&activeCourse(); roleMap=(c&&c.grammarRoles)||{}; }catch(e){}
+  const reserved=new Set([...(spec.reserved||[]), ...Object.values(roleMap)]);
   const charIdx=c=>deck.findIndex(d=>d[0]===c);
   const toks=i=>(deck[i][4]||'').split('/');
   const lowestPOS=tok=>{ for(let i=0;i<deck.length;i++){ if(toks(i).indexOf(tok)>=0 && !reserved.has(deck[i][0])) return i; } return -1; };
-  const fill=r=> r.char!=null?charIdx(r.char):lowestPOS(r.pos);
+  const fill=r=>{
+    if(r.pos!=null) return lowestPOS(r.pos);
+    if(r.char!=null) return charIdx(r.char);                 // legacy/explicit filler
+    if(r.role!=null && roleMap[r.role]!=null) return charIdx(roleMap[r.role]); // agnostic resolve
+    return -1;
+  };
   const cum=new Map(); const tiers=[];
   spec.tiers.forEach(t=>{
+    const before=new Set(cum.keys());
     t.roles.forEach(r=>{ const idx=fill(r); if(idx>=0){ const ch=deck[idx][0]; if(!cum.has(ch)) cum.set(ch,{role:r.role,idx:idx}); } });
     const atoms=[...cum.values()].sort((a,b)=>a.idx-b.idx);
     const m=atoms.length, deep=atoms.length?Math.max.apply(null,atoms.map(a=>a.idx)):0;
     const deferred=atoms.filter(a=>a.idx>=m);   // generatively required but beyond a same-size pure-Zipf deck
-    tiers.push({ name:t.name, basisSize:m, deepestRank:deep, reachRatio:m?Math.round(deep/m*100)/100:0,
-      deferredCount:deferred.length, deferred:deferred.map(a=>deck[a.idx][0]+'#'+a.idx) });
+    const newAtoms=[...cum.entries()].filter(e=>!before.has(e[0])).map(e=>({ch:e[0], rank:e[1].idx, role:e[1].role}));
+    tiers.push({ name:t.name, cap:t.cap, desc:t.desc, basisSize:m, deepestRank:deep, reachRatio:m?Math.round(deep/m*100)/100:0,
+      deferredCount:deferred.length, deferred:deferred.map(a=>deck[a.idx][0]+'#'+a.idx), atoms:newAtoms });
   });
   const basis=[...cum.values()].sort((a,b)=>a.idx-b.idx).map(a=>({ch:deck[a.idx][0], rank:a.idx, role:a.role}));
   return { tiers:tiers, basis:basis, basisSize:basis.length };
 }
-try{ window.computeGenerativeBasis=computeGenerativeBasis; window.GRAMMAR_SPEC_ZH=GRAMMAR_SPEC_ZH; }catch(e){}
+try{ window.computeGenerativeBasis=computeGenerativeBasis; window.GRAMMAR_SPEC=GRAMMAR_SPEC; window.GRAMMAR_SPEC_ZH=GRAMMAR_SPEC; }catch(e){}
 
 // ── SUBSTITUTION DISTANCE — the THIRD cost axis (the L1→L2 diff) ───────────
 // Acquisition isn't learning L2 from zero; the learner owns a generative engine

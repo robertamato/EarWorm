@@ -11,16 +11,28 @@
   try{ renderYieldCurve(fg); }catch(e){}
   const yw=$('yieldWrap'); if(yw){ yw.style.borderColor=fg; yw.style.color=fg; }
 
-  // Milestone progress bar
-  const MILESTONES=[10,50,100,200,500,1000,2000,5000];
-  const MLABELS={10:'first batch',50:'survival vocab',100:'core deck',200:'basic phrases',500:'conversational',1000:'functional literacy',2000:'near-fluent',5000:'advanced'};
-  const nextM=MILESTONES.find(m=>m>frVal)||MILESTONES[MILESTONES.length-1];
-  const prevM=MILESTONES[MILESTONES.indexOf(nextM)-1]||0;
-  const mPct=Math.min(100,Math.round((frVal-prevM)/(nextM-prevM)*100));
-  $('milestoneProgFill').style.width=mPct+'%';
-  $('milestoneProgFill').style.background=fg;
-  $('milestoneProgLabel').textContent=frVal+' / '+nextM;
-  $('milestoneProgNote').textContent=(MLABELS[nextM]||'next milestone').toUpperCase();
+  // Capability milestone (replaces the raw word-count milestone): basis-tier progress.
+  // A capability is a real, true claim — the tier's atoms have graduated. Honest LABEL
+  // only; the production-gated badge + Title Defense (the game layer) come later.
+  const capLbl=document.getElementById('milestoneCapLabel');
+  let cap=null; try{ cap=Estimator.capability(); }catch(e){}
+  if(cap){
+    if(capLbl) capLbl.textContent='CAPABILITY';
+    $('milestoneProgFill').style.width=(cap.next?cap.nextPct:100)+'%';
+    $('milestoneProgFill').style.background=fg;
+    $('milestoneProgLabel').textContent = cap.next ? cap.nextPct+'%' : '✓ ALL';
+    const youCan = cap.current ? ('CAN '+cap.current.cap) : 'NO CAPABILITY YET';
+    const eff = cap.next ? (' · NEXT '+cap.next.cap+' ('+cap.effort+(cap.sigma!=null?' · σ'+cap.sigma:'')+')') : ' · ALL TIERS CLOSED';
+    $('milestoneProgNote').textContent=(youCan+eff).toUpperCase();
+  } else {
+    // Coverage fallback for courses with no resolvable basis (no grammarRoles yet).
+    if(capLbl) capLbl.textContent='COVERAGE';
+    const pct=Math.min(100,Math.round(frVal/Math.max(1,D.length)*100));
+    $('milestoneProgFill').style.width=pct+'%';
+    $('milestoneProgFill').style.background=fg;
+    $('milestoneProgLabel').textContent=frVal+' / '+D.length;
+    $('milestoneProgNote').textContent=frVal+' ATOMS COVERED';
+  }
   $('milestoneProgTrack').style.borderColor=fg;
   $('milestoneProgWrap').style.borderColor=fg; $('milestoneProgWrap').style.color=fg;
   $('muteBtn').textContent='SOUND: '+S.sound.toUpperCase();
@@ -104,6 +116,30 @@ const Estimator = {
       V+=rho; points.push({ n, V:Math.round(V*1000)/1000, rho:Math.round(rho*1000)/1000 });
     }
     return { points, knee:p.window, window:p.window, pools:p, maxN };
+  },
+
+  // Capability render (THEORY.md §10.2): which basis tier the learner has CLOSED.
+  // A tier is achieved when all its atoms have GRADUATED (filter-crossing, not seen).
+  // effort-to-next = un-graduated atoms of the next tier, σ-weighted where σ exists.
+  // Returns null when the course has no resolvable basis (→ caller shows coverage).
+  capability(){
+    let g; try{ g=computeGenerativeBasis(); }catch(e){ return null; }
+    if(!g||!g.tiers||!g.tiers.length) return null;
+    if(!g.tiers.some(t=>t.atoms&&t.atoms.length)) return null;  // no role-atoms resolved
+    const grad=ch=>{ const i=D.findIndex(d=>d[0]===ch); if(i<0) return false; try{ return Scheduler._isGraduated((S.cards&&S.cards[i])||{}); }catch(e){ return false; } };
+    let current=null, next=null, ok=true;
+    g.tiers.forEach(t=>{
+      const atoms=(t.atoms||[]).map(a=>a.ch);
+      const allGrad=atoms.length>0 && atoms.every(grad);
+      if(ok && allGrad) current=t;
+      else { ok=false; if(!next) next=t; }
+    });
+    let effort=0, sigma=0, hasSigma=false; const nextAtoms=[];
+    if(next){ (next.atoms||[]).forEach(a=>{ if(!grad(a.ch)){ effort++; nextAtoms.push(a.ch);
+      try{ const s=(typeof substitution==='function')&&substitution(a.ch); if(s&&s.d!=null){ sigma+=s.d; hasSigma=true; } }catch(e){} } }); }
+    const nextTotal=next?(next.atoms||[]).length:0;
+    return { current, next, effort, nextAtoms, sigma:hasSigma?Math.round(sigma*10)/10:null,
+             nextPct: nextTotal?Math.round((nextTotal-effort)/nextTotal*100):100 };
   }
 };
 try{ window.Estimator=Estimator; }catch(e){}
@@ -127,10 +163,12 @@ function renderYieldCurve(fg){
   const dotX=x(dn).toFixed(1), dotY=y(pts[dn-1].V).toFixed(1);
   const past=doneToday>=knee;
   const dim='rgba(125,255,192,0.30)';
+  const plural=n=>'card'+(n===1?'':'s');
+  const left=Math.max(0,knee-doneToday);
   const note = past ? (c.pools.idle>0 ? "today's high-value window spent — the rest is low-yield"
                                       : "today's window spent — rest and return tomorrow")
-                    : (doneToday>0 ? Math.max(0,knee-doneToday)+' high-value cards left today'
-                                   : '~'+knee+' high-value cards today');
+                    : (doneToday>0 ? left+' high-value '+plural(left)+' left today'
+                                   : '~'+knee+' high-value '+plural(knee)+' today');
   host.innerHTML =
     '<div style="display:flex;justify-content:space-between;font-size:7px;letter-spacing:1.5px;opacity:.7;margin-bottom:3px;">'
       +'<span>YIELD</span><span>'+doneToday+' DONE · KNEE '+knee+'</span></div>'
