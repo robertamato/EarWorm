@@ -543,6 +543,7 @@ function showStudyCloze(i){
   // Rank
   $('studyMCRank').textContent=cardRankStr(i);
   $('studyMCModality').textContent='CLOZE \u00b7 FILL THE BLANK';
+  if($('studyMCExplain')) $('studyMCExplain').textContent='';
 
   // Sentence with blank — phi-units (char above, pinyin below) per character
   const promptEl=$('studyMCPromptText');
@@ -623,6 +624,7 @@ function showStudyCloze(i){
   choices.forEach(function(opt){
     const b=document.createElement('button');
     b.className='choice';
+    b._choice=opt;
     // Phi-unit: character above, pinyin below
     b.style.cssText='border-color:'+fg+';color:'+fg+
       ';display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:10px 6px;';
@@ -647,30 +649,36 @@ function showStudyCloze(i){
       if(locked) return; locked=true;
       const isCorrect=opt===ch;
       const respMs=Date.now()-cardShownAtMC;
-      document.querySelectorAll('#studyMCChoices .choice').forEach(function(tb){
-        if(tb.textContent===ch) tb.classList.add('correct');
-        else if(tb===b&&!isCorrect) tb.classList.add('wrong');
-        tb.style.pointerEvents='none';
-      });
       recordChallengeResult(i,'cloze',isCorrect,respMs);
       recordObservation({mod:'cloze',comp:zh,fg:i,fax:'meaning',ok:isCorrect,opt:opt});
       recordAxisResultNew(i,'meaning',isCorrect,respMs);
       recordWagerDecision(i,isCorrect,currentMultIdx,defaultMultIdx,respMs);
       logAnswer(i,isCorrect,'cloze',respMs);
-      const speedM=respMs<1500?1.3:respMs<4000?1.0:0.8;
+      const finish=function(){
+        promptEl.style.cursor='pointer';
+        promptEl.onclick=function(e){ e.stopPropagation(); openCharDetail(ch,0,i); };
+        if(S.sound!=='mute') speak(zh,activeCourse().langCode);
+        armTapAdvance($('studyMC'),function(){nextStudyCard();},0);
+      };
       if(isCorrect){
+        b.classList.add('correct');
+        document.querySelectorAll('#studyMCChoices .choice').forEach(function(tb){ tb.style.pointerEvents='none'; });
         advanceMult();
         S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier());
+        if(typeof decayConfusion==='function') decayConfusion(i);
+        save(); finish();
       } else {
+        // Correction moment: reveal what the chosen fill actually means, hold the rest,
+        // require manual selection of the correct word. Writes the confusion edge.
+        b.classList.add('wrong');
         resetMult();
         studyPending.push({idx:i,mod:'cloze'});
+        const chosenIdx=D.findIndex(function(d){return d[0]===opt;});
+        const errType=(chosenIdx>=0&&typeof classifyDistractorError==='function')?classifyDistractorError(i,D[chosenIdx][2]):'random';
+        if(chosenIdx>=0&&typeof recordConfusion==='function') recordConfusion(i,chosenIdx,errType);
+        save();
+        enterClozeCorrection(i, ch, b, finish);
       }
-      save();
-      if(S.sound!=='mute') speak(zh,activeCourse().langCode);
-      // Make char tappable to open dictionary
-      promptEl.style.cursor='pointer';
-      promptEl.onclick=function(e){ e.stopPropagation(); openCharDetail(ch,0,i); };
-      armTapAdvance($('studyMC'),function(){nextStudyCard();},isCorrect?0:1200);
     };
     box.appendChild(b);
   });
@@ -684,6 +692,35 @@ function showStudyCloze(i){
     armTapAdvance($('studyMC'),function(){nextStudyCard();},1200);
   };
   renderWagerControl('studyMCActions',i);
+}
+
+// Cloze correction moment (mirrors the MC one; choices are chars → annotate with meaning).
+function _clozeAnnotate(b){
+  if(!b||b._annotated) return; b._annotated=true;
+  const idx=D.findIndex(function(d){return d[0]===b._choice;}); if(idx<0) return;
+  const span=document.createElement('span');
+  span.textContent='= '+String(D[idx][2]).toLowerCase();
+  span.style.cssText='display:block;font-size:9px;opacity:.85;margin-top:3px;letter-spacing:.5px;';
+  b.appendChild(span);
+}
+function enterClozeCorrection(i, correctCh, chosenBtn, onResolve){
+  const box=$('studyMCChoices'); if(!box){ if(onResolve) onResolve(); return; }
+  const fg=getComputedStyle(document.body).color;
+  _clozeAnnotate(chosenBtn);
+  const el=$('studyMCExplain'); if(el){ el.textContent='NOT QUITE — NOW CHOOSE THE RIGHT ONE'; el.style.color=fg; el.style.fontFamily='inherit'; }
+  const buttons=[].slice.call(box.querySelectorAll('.choice'));
+  buttons.forEach(function(b){
+    b.style.pointerEvents='auto';
+    b.onclick=function(){
+      if(b._done) return;
+      if(b._choice===correctCh){
+        b._done=true; b.classList.add('correct'); _clozeAnnotate(b);
+        buttons.forEach(function(x){ x.style.pointerEvents='none'; });
+        if(el) el.textContent='';
+        if(onResolve) onResolve();
+      } else { b.classList.add('wrong'); _clozeAnnotate(b); }
+    };
+  });
 }
 
 /* ============ COMPREHENSION MODALITY ============ */
