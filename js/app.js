@@ -10486,44 +10486,45 @@ function explainCardSelection(i, mod){
     var frontier = D.filter(function(_,k){ return S.cards[k]&&S.cards[k].exp>0; }).length;
     var ring = (typeof sessionAnswerRing!=='undefined')?sessionAnswerRing:[];
     var cap = (function(){ try{ return Scheduler._effectiveCap({sessionAnswerRing:ring}); }catch(e){ return ACQUISITION_CAP; } })();
+    // All values are sentence-case with a single separator (·) for parallel fields, so
+    // the readout stays consistent; labels carry the structure.
     var modWhy = {
-      'flash':'first exposure — admission, never tested yet',
-      'mc-fwd':(stage===0?'first recognition test — one clean correct graduates it':'recognition: character → meaning'),
-      'mc-rev':'production-leaning recall: meaning → character',
-      'cloze':'context: fill the blank in a real sentence',
-      'word-order':'context: assemble the sentence from tiles',
+      'flash':'first exposure · never tested yet',
+      'mc-fwd':(stage===0?'first recognition · one clean pass graduates it':'recognition · character to meaning'),
+      'mc-rev':'recall · meaning to character',
+      'cloze':'context · fill the blank in a sentence',
+      'word-order':'context · assemble from tiles',
+      'production':'production · generate from nothing',
       'tone':'tone discrimination',
-      'comprehension':'comprehension check'
+      'comprehension':'whole-sentence comprehension'
     }[mod] || mod;
-    var edge = H>=0.95?'AT THE EDGE (P≈0.5 — max learning)':H>=0.8?'near the edge':(p>=0.85?'easy — well known':(p<=0.3?'hard — model expects a miss':''));
-    var pickWhy = isAcq ? 'picked: in-acquisition, prioritized to consolidate & free a slot'
-                : (overdue>0 ? 'picked: most-overdue (due '+overdue+' cards ago)' : 'picked: due now');
-    var capNote = 'frontier '+frontier+'/'+D.length+' · in-acquisition '+inAcq+'/'+cap+(inAcq>=cap?'  ⚠ CAP FULL — no new word until one graduates':'');
-    // Substitution (σ) — the L1→L2 cost, and (when SUBST_GATING is on) its live effect
-    // on the graduation bar: transparent grads a rep sooner, divergent/false-friend a rep later.
-    var subNote = '';
+    var edge = H>=0.95?'at the edge · max learning':H>=0.8?'near the edge':(p>=0.85?'well known':(p<=0.3?'expects a miss':'learning'));
+    var pickWhy = isAcq ? 'in acquisition · consolidate to free a slot'
+                : (overdue>0 ? 'most overdue · '+overdue+' card'+(overdue===1?'':'s')+' ago' : 'due now');
+    var subVal = 'unclassified';
     try {
       var sub = (typeof substitution==='function') ? substitution(D[i][0]) : null;
       if (sub) {
         var gate = (typeof SUBST_GATING!=='undefined' && SUBST_GATING)
-          ? (sub.c==='transparent' ? ' → graduates FASTER (−1 rep)' : (sub.c==='divergent'||sub.c==='false-friend') ? ' → needs MORE consolidation (+1 rep)' : '')
-          : ' (gating off)';
-        subNote = 'substitution: '+sub.c+' (σ '+sub.d+')'+gate+' — '+sub.n;
-      } else {
-        subNote = 'substitution: unclassified';
+          ? (sub.c==='transparent' ? ' · −1 rep' : (sub.c==='divergent'||sub.c==='false-friend') ? ' · +1 rep' : '')
+          : '';
+        subVal = sub.c+' · σ '+sub.d+gate;
       }
     } catch(e){}
     return {
-      head: (D[i]?D[i][0]:'?')+' #'+i+' · '+(introduced?'review':'INTRODUCE (flash)')+' · meaning-stage '+stage,
-      lines: [
-        'P(correct) '+(Math.round(p*100)/100)+(edge?'  ·  '+edge:''),
-        pickWhy,
-        'modality '+mod+' — '+modWhy,
-        subNote,
-        capNote
+      title: 'WHY THIS CARD',
+      rows: [
+        { k:'card',        v:(D[i]?D[i][0]:'?')+' · #'+(i+1)+' · '+(introduced?'review':'introduce') },
+        { k:'stage',       v:'meaning '+stage },
+        { k:'confidence',  v:'P '+p.toFixed(2)+' · '+edge },
+        { k:'selected',    v:pickWhy },
+        { k:'modality',    v:mod+' · '+modWhy },
+        { k:'subst',       v:subVal },
+        { k:'working set', v:'frontier '+frontier+'/'+D.length+' · acquiring '+inAcq+'/'+cap,
+                           warn: inAcq>=cap?'cap full — graduate one to admit a new word':'' }
       ]
     };
-  }catch(e){ return { head:'(why: error)', lines:[String(e)] }; }
+  }catch(e){ return { title:'WHY THIS CARD', rows:[{ k:'error', v:String(e) }] }; }
 }
 // Renders into the in-flow #studyExplain panel at the TOP of the study view, so it
 // COMPRESSES the card below (flex) instead of overlaying and obscuring it.
@@ -10533,8 +10534,12 @@ function renderCardExplain(i, mod){
   if(!window.EXPLAIN_MODE){ el.style.display='none'; el.innerHTML=''; return; }
   var ex = explainCardSelection(i, mod);
   el.style.display='block';
-  el.innerHTML='<div style="font-size:11px;color:#dff3ea;letter-spacing:1px;margin-bottom:3px;">◉ WHY ▸ '+ex.head+'</div>'
-    +ex.lines.map(function(l){ return '<div style="opacity:.82;">'+l+'</div>'; }).join('');
+  var rows=(ex.rows||[]).map(function(r){
+    return '<div style="opacity:.45;text-transform:uppercase;letter-spacing:1px;font-size:8px;white-space:nowrap;">'+r.k+'</div>'
+      +'<div style="opacity:.92;">'+r.v+(r.warn?' <span style="color:#fbbf24;">· '+r.warn+'</span>':'')+'</div>';
+  }).join('');
+  el.innerHTML='<div style="font-size:9px;letter-spacing:2px;color:#dff3ea;opacity:.9;margin-bottom:6px;">◉ '+(ex.title||'WHY THIS CARD')+'</div>'
+    +'<div style="display:grid;grid-template-columns:80px 1fr;gap:3px 10px;align-items:baseline;font-size:10px;line-height:1.45;">'+rows+'</div>';
 }
 function hideCardExplain(){ var el=document.getElementById('studyExplain'); if(el){ el.style.display='none'; el.innerHTML=''; } }
 // Single toggle, shared by the home debug button and the in-session button.
