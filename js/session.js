@@ -360,15 +360,11 @@ function grammarAxisFromKey(k){
 }
 
 // Single explicit session-state bag for Scheduler.next and Scheduler.modality.
-// Prefers State._s._session when populated by the bridge (v2 path).
-// Falls back to legacy globals for v1 / early migration.
+// The live module session globals (studyPending, sessionRecentCards, …) are the SINGLE
+// source of truth — pushed/cleared directly by startStudy / showStudyCard / the drill
+// handlers. Read module-only (no dual-state mirror): keeps the recency window live
+// across answers and the grammarAnswered Set always iterable.
 function buildSessionState(){
-  // Live module session globals are the SINGLE source of truth. They are pushed/
-  // cleared directly by startStudy / showStudyCard / the drill handlers. The
-  // State._s._session mirror is no longer read back into them (see dispatchStudyAction),
-  // so reading it here would only reintroduce staleness. Read module only — this also
-  // makes the earlier grammarAnswered non-iterable crash impossible (module Set is
-  // always iterable) and keeps the recency window live across answers.
   return {
     studyCardCount,
     studyFlashOnly,
@@ -542,7 +538,7 @@ function nextStudyCard(){
   // Returns early after showing the card; v1 path below is preserved for rollback.
   if(newSchedulerPolicy()){
     try{
-      const schedState=S; // S is the authoritative LIVE card state; State._s drifts out of sync (stale exp read as 0 -> modality 'flash' -> new cards never MC'd -> frontier froze)
+      const schedState=S; // S is the authoritative live card state (the old drifting State._s shadow is removed)
       const sessionState=buildSessionState();
       const decision=Scheduler.next(schedState,D,sessionState);
       if(window.EW&&EW.obs) EW.obs.logEvent('study:next',{type:decision&&decision.type,reason:decision&&decision.reason,idx:decision&&decision.idx,source:'v2-scheduler'});
@@ -675,7 +671,7 @@ function showStudyCard(i){
   if(mod===null){
     if(newSchedulerPolicy()){
       try{
-        const schedState=S; // S is the authoritative LIVE card state; State._s drifts out of sync (stale exp read as 0 -> modality 'flash' -> new cards never MC'd -> frontier froze)
+        const schedState=S; // S is the authoritative live card state (the old drifting State._s shadow is removed)
         mod=Scheduler.modality(schedState,D,i);
         if(window.EW&&EW.obs) EW.obs.logEvent('study:modality',{item:i,mod:mod,source:'v2-scheduler'});
       }catch(e){

@@ -2,15 +2,14 @@
 /* ================================================================
    EARWORM v2 — Layered Architecture
    ================================================================
-   Layer 1: Legacy UI  — original working code (preserved intact)
-   Layer 2: Data       — clean static data module (overrides L1 data)
-   Layer 3: Scheduler  — pure scheduling engine (no DOM/side effects)
-   Layer 4: State      — centralised dispatch state manager
-   Layer 5: Bridge     — wires State/Scheduler into legacy code
+   Layer 1: UI / handlers — DOM, study loop, drill rendering
+   Layer 2: Data          — vocabulary D[], speak(), SRS primitives, load()/save()
+   Layer 3: Scheduler     — pure scheduling engine (no DOM/side effects)
    ================================================================
-   Migration strategy: legacy code continues to work unchanged.
-   New features use State.dispatch() and Scheduler methods.
-   Legacy code migrated function-by-function as time permits.
+   State: the single global S (this file) is the source of truth, persisted by
+   load()/save() with .bak backup + migration. The old Layer-4 `State` dispatch
+   object kept a parallel State._s copy that drifted (frontier-freeze bugs) — it is
+   removed; recordAxisResultNew is the sole vocab engine, grammar dispatches onto S.
    ================================================================ */
 
 // ═══════════════════════════════════════════════════════════════

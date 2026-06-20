@@ -2,15 +2,14 @@
 /* ================================================================
    EARWORM v2 — Layered Architecture
    ================================================================
-   Layer 1: Legacy UI  — original working code (preserved intact)
-   Layer 2: Data       — clean static data module (overrides L1 data)
-   Layer 3: Scheduler  — pure scheduling engine (no DOM/side effects)
-   Layer 4: State      — centralised dispatch state manager
-   Layer 5: Bridge     — wires State/Scheduler into legacy code
+   Layer 1: UI / handlers — DOM, study loop, drill rendering
+   Layer 2: Data          — vocabulary D[], speak(), SRS primitives, load()/save()
+   Layer 3: Scheduler     — pure scheduling engine (no DOM/side effects)
    ================================================================
-   Migration strategy: legacy code continues to work unchanged.
-   New features use State.dispatch() and Scheduler methods.
-   Legacy code migrated function-by-function as time permits.
+   State: the single global S (this file) is the source of truth, persisted by
+   load()/save() with .bak backup + migration. The old Layer-4 `State` dispatch
+   object kept a parallel State._s copy that drifted (frontier-freeze bugs) — it is
+   removed; recordAxisResultNew is the sole vocab engine, grammar dispatches onto S.
    ================================================================ */
 
 // ═══════════════════════════════════════════════════════════════
@@ -3709,15 +3708,11 @@ function grammarAxisFromKey(k){
 }
 
 // Single explicit session-state bag for Scheduler.next and Scheduler.modality.
-// Prefers State._s._session when populated by the bridge (v2 path).
-// Falls back to legacy globals for v1 / early migration.
+// The live module session globals (studyPending, sessionRecentCards, …) are the SINGLE
+// source of truth — pushed/cleared directly by startStudy / showStudyCard / the drill
+// handlers. Read module-only (no dual-state mirror): keeps the recency window live
+// across answers and the grammarAnswered Set always iterable.
 function buildSessionState(){
-  // Live module session globals are the SINGLE source of truth. They are pushed/
-  // cleared directly by startStudy / showStudyCard / the drill handlers. The
-  // State._s._session mirror is no longer read back into them (see dispatchStudyAction),
-  // so reading it here would only reintroduce staleness. Read module only — this also
-  // makes the earlier grammarAnswered non-iterable crash impossible (module Set is
-  // always iterable) and keeps the recency window live across answers.
   return {
     studyCardCount,
     studyFlashOnly,
@@ -3891,7 +3886,7 @@ function nextStudyCard(){
   // Returns early after showing the card; v1 path below is preserved for rollback.
   if(newSchedulerPolicy()){
     try{
-      const schedState=S; // S is the authoritative LIVE card state; State._s drifts out of sync (stale exp read as 0 -> modality 'flash' -> new cards never MC'd -> frontier froze)
+      const schedState=S; // S is the authoritative live card state (the old drifting State._s shadow is removed)
       const sessionState=buildSessionState();
       const decision=Scheduler.next(schedState,D,sessionState);
       if(window.EW&&EW.obs) EW.obs.logEvent('study:next',{type:decision&&decision.type,reason:decision&&decision.reason,idx:decision&&decision.idx,source:'v2-scheduler'});
@@ -4024,7 +4019,7 @@ function showStudyCard(i){
   if(mod===null){
     if(newSchedulerPolicy()){
       try{
-        const schedState=S; // S is the authoritative LIVE card state; State._s drifts out of sync (stale exp read as 0 -> modality 'flash' -> new cards never MC'd -> frontier froze)
+        const schedState=S; // S is the authoritative live card state (the old drifting State._s shadow is removed)
         mod=Scheduler.modality(schedState,D,i);
         if(window.EW&&EW.obs) EW.obs.logEvent('study:modality',{item:i,mod:mod,source:'v2-scheduler'});
       }catch(e){
@@ -10265,331 +10260,23 @@ const Scheduler = {
 
 
 // ═══════════════════════════════════════════════════════════════
-// LAYER 4 — State Management
+// State persistence & grammar dispatch
 // ═══════════════════════════════════════════════════════════════
-// earworm — engine/state.js
-// Centralised state. All mutations through State.dispatch().
-// No DOM access. Emits events that UI layer subscribes to.
-
-// KEY and DAY already declared in legacy Layer 1
-const DAY_MS = DAY; // alias
-
-const DEFAULT_STATE = () => ({
-  cards: {},
-  xp: 0, streak: 0, lastDay: null,
-  sound: 'auto', // 'auto'|'tap'|'mute'
-  mult: 1.0, multStreak: 0,
-  activeDeck: 'core', decks: {},
-  dailyCards: 0, dailyDate: '',
-  uniqueSeen: [],
-  seenColls: [],
-  grammarMastery: {},
-  grammar: {},
-  // Session (not persisted)
-  _session: null,
-});
-
-const State = {
-  _s: DEFAULT_STATE(),
-  _listeners: [],
-
-  // ── Persistence ─────────────────────────────────────────────────────────
-
-  load() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        this._s = Object.assign(DEFAULT_STATE(), saved);
-        // Type guards
-        if (!Array.isArray(this._s.uniqueSeen)) this._s.uniqueSeen = [];
-        if (!Array.isArray(this._s.seenColls)) this._s.seenColls = [];
-        if (typeof this._s.mult !== 'number') this._s.mult = 1.0;
-        if (typeof this._s.xp !== 'number') this._s.xp = 0;
-        if (!this._s.cards || typeof this._s.cards !== 'object') this._s.cards = {};
-        if (!this._s.grammar || typeof this._s.grammar !== 'object') this._s.grammar = {};
-      }
-    } catch(e) { console.warn('State.load failed', e); }
-    this._initGrammar();
-    return this._s;
-  },
-
-  save() {
-    try {
-      const toSave = Object.assign({}, this._s);
-      delete toSave._session;
-      localStorage.setItem(KEY, JSON.stringify(toSave));
-    } catch(e) {}
-  },
-
-  get() { return this._s; },
-
-  // ── Dispatch ─────────────────────────────────────────────────────────────
-  // Single entry point for all state mutations.
-
-  dispatch(action, payload = {}) {
-    const prev = this._s;
-    switch(action) {
-
-      // ANSWER_VOCAB (the second recording engine, Scheduler.recordAnswer → State._s)
-      // is retired — recordAxisResultNew on live S is the sole vocab engine and the
-      // dispatch is no longer fired. Grammar still dispatches (it has no engine-1 path).
-      case 'ANSWER_GRAMMAR': {
-        const { cat, axis, isCorrect, responseMs, currentMultIdx, defaultMultIdx } = payload;
-        Scheduler.recordGrammarAnswer(this._s, cat, axis, isCorrect, responseMs, currentMultIdx, defaultMultIdx);
-        if (isCorrect) this._s.xp += Math.round(10 * this._xpMult(payload));
-        break;
-      }
-
-      case 'FLASH_SHOWN': {
-        const { idx } = payload;
-        if (!this._s.cards[idx]) this._s.cards[idx] = Scheduler._freshCard();
-        const ci = this._s.cards[idx];
-        if (!ci.exp) {
-          ci.exp = 1;
-          ci.seen = true;
-          if (!ci.axisDue) ci.axisDue = {};
-          ci.axisDue.meaning = (S.totalSeen || 0) + AXIS_STABILITY.meaning[0];
-          ci.axisDue.pos = (S.totalSeen || 0) + AXIS_STABILITY.pos[0];
-        }
-        break;
-      }
-
-      case 'FLASH_FLIPPED': {
-        const { idx, frontMs, backMs } = payload;
-        const ci = this._s.cards[idx] || Scheduler._freshCard();
-        const totalMs = frontMs + backMs;
-        ci.flipMs = ci.flipMs ? Math.round(ci.flipMs * 0.6 + totalMs * 0.4) : totalMs;
-        ci.exp = (ci.exp || 0) + 1;
-        this._s.cards[idx] = ci;
-        break;
-      }
-
-      case 'MASTERY_ADD': {
-        const { idx, delta } = payload;
-        const ci = this._s.cards[idx] || Scheduler._freshCard();
-        ci.m = Math.min(4, Math.max(0, (ci.m || 0) + delta));
-        this._s.cards[idx] = ci;
-        break;
-      }
-
-      case 'START_SESSION': {
-        this._s._session = {
-          cardCount: 0,
-          history: new Map(),
-          flashCount: new Map(),
-          pending: [],
-          grammarAnswered: new Set(),
-          encounters: new Map(),
-        };
-        break;
-      }
-
-      case 'SESSION_CARD_SHOWN': {
-        if (this._s._session) this._s._session.cardCount++;
-        break;
-      }
-
-      case 'RESET': {
-        const sound = this._s.sound;
-        this._s = DEFAULT_STATE();
-        this._s.sound = sound;
-        this._initGrammar();
-        localStorage.removeItem(KEY);
-        break;
-      }
-
-      case 'SET_PROFICIENCY': {
-        this._applyProficiency(payload.level);
-        break;
-      }
-
-      case 'SET_SOUND': {
-        this._s.sound = payload.mode;
-        break;
-      }
-
-      case 'WAGER_CHANGE': {
-        // No state change — wager lives in session UI state
-        break;
-      }
-
-      case 'GRAMMAR_SESSION_ANSWERED': {
-        if (this._s._session) {
-          this._s._session.grammarAnswered.add(payload.cat + ':' + payload.axis);
-        }
-        break;
-      }
-
-      default:
-        console.warn('State.dispatch: unknown action', action);
-        return;
-    }
-
-    this.save();
-    this._emit(action, payload);
-  },
-
-  // ── Subscriptions ────────────────────────────────────────────────────────
-
-  on(action, fn) {
-    this._listeners.push({ action, fn });
-    return () => { this._listeners = this._listeners.filter(l => l.fn !== fn); };
-  },
-
-  _emit(action, payload) {
-    this._listeners.forEach(l => {
-      if (l.action === '*' || l.action === action) l.fn(payload, this._s);
-    });
-  },
-
-  // ── Internal helpers ─────────────────────────────────────────────────────
-
-  _initGrammar() {
-    if (!this._s.grammar) this._s.grammar = {};
-    GRAMMAR_CATS.forEach(cat => {
-      if (!this._s.grammar[cat]) this._s.grammar[cat] = {};
-      GRAMMAR_AXES.forEach(axis => {
-        if (!this._s.grammar[cat][axis]) {
-          this._s.grammar[cat][axis] = { stage: 0, history: [], due: 0, reps: 0 };
-        }
-      });
-    });
-  },
-
-  // _xpMult is used by the live ANSWER_GRAMMAR case; the vocab-engine helpers
-  // (_computeXP / _advanceMult / _resetMult) were removed with ANSWER_VOCAB.
-  _xpMult({ currentMultIdx }) {
-    return MULT_STEPS[currentMultIdx || 0] || 1;
-  },
-
-  _applyProficiency(level) {
-    const wordCount = Math.round((level / 100) * D.length);
-    const axisStageTarget = Math.round((level / 100) * 5);
-    const grammarStageTarget = Math.round((level / 100) * 4);
-
-    this._s.cards = {};
-    this._s.grammar = {};
-    this._initGrammar();
-
-    D.forEach((_, i) => {
-      if (i >= wordCount) return;
-      const ci = Scheduler._freshCard();
-      ci.exp = Math.max(1, Math.round((level / 100) * 5));
-      ci.seen = true;
-      ci.m = Math.round((level / 100) * 4 * 10) / 10;
-      ci.axisStage = { meaning: Math.min(5, axisStageTarget), pos: Math.min(4, Math.floor(axisStageTarget / 2)) };
-      ci.axisReps = { meaning: Math.round((level / 100) * 20), pos: 0, tone: 0 };
-      ci.axisDue = { meaning: 0, pos: 0 }; // always due immediately
-      ci.axisHistory = { meaning: Array(Math.round((level / 100) * 15)).fill(1), pos: [], tone: [] };
-      this._s.cards[i] = ci;
-    });
-
-    GRAMMAR_CATS.forEach(cat => {
-      GRAMMAR_AXES.forEach(axis => {
-        this._s.grammar[cat][axis] = {
-          stage: Math.min(AXIS_MAX_STAGES[axis] || 4, grammarStageTarget),
-          reps: Math.round((level / 100) * 10),
-          due: level >= 50 ? (S.totalSeen || 0) + 200 : 0,
-          history: Array(Math.round((level / 100) * 10)).fill(1),
-        };
-      });
-    });
-
-    this._s.xp = Math.round((level / 100) * 50000);
-    this._s.streak = Math.round((level / 100) * 30);
-  },
-};
-
-
-// ═══════════════════════════════════════════════════════════════
-// LAYER 5 — Bridge: legacy ↔ new architecture
-// ═══════════════════════════════════════════════════════════════
-// Connects State module to legacy S object.
-// Ensures State.dispatch() and legacy mutations stay in sync.
-// Gradually replace direct S mutations with State.dispatch() calls.
-
-(function wireStateBridge() {
-  // Ensure grammar state is initialized
-  State.load();
-
-  // Keep S in sync with State._s on load
-  const loaded = State._s;
-  if (loaded.xp) S.xp = loaded.xp;
-  if (loaded.cards && Object.keys(loaded.cards).length) {
-    Object.assign(S.cards, loaded.cards);
-  }
-  if (loaded.grammar && Object.keys(loaded.grammar).length) {
-    S.grammar = loaded.grammar;
-  }
-
-  // Initialize _session for v2 session state (pending, grammarAnswered, rings, etc.)
-  if (!State._s._session) {
-    State._s._session = {
-      grammarAnswered: new Set(),
-      studyPending: [],
-      studyEncounters: {},
-      sessionRecentCards: [],
-      sessionAnswerRing: []
-    };
-  }
-
-  // Initial sync of key session globals into _session (for v2 paths)
-  try {
-    State._s._session.studyPending = [...studyPending];
-    if (sessionGrammarAnswered && sessionGrammarAnswered.size) {
-      State._s._session.grammarAnswered = new Set(sessionGrammarAnswered);
-    }
-    State._s._session.studyEncounters = Object.fromEntries(studyEncounters);
-    State._s._session.sessionRecentCards = [...sessionRecentCards];
-    State._s._session.sessionAnswerRing = [...sessionAnswerRing];
-  } catch(e){}
-
-  // Proxy save() to also update State._s (and _session)
-  const _origSave = window.save;
-  window.save = function() {
-    _origSave && _origSave();
-    Object.assign(State._s, S);
-    if (State._s._session) {
-      State._s._session.studyPending = [...studyPending];
-      State._s._session.studyEncounters = Object.fromEntries(studyEncounters);
-      State._s._session.sessionRecentCards = [...sessionRecentCards];
-      State._s._session.sessionAnswerRing = [...sessionAnswerRing];
-      // grammarAnswered is managed via dispatch cases
-    }
+// The legacy global S (data.js) is the SINGLE source of truth — loaded/saved by
+// load()/save() in data.js (.bak backup + migration). The old dispatch object kept a
+// parallel hidden copy of S; that dual state drifted and was the root of the
+// frontier-freeze class of bugs, and its dispatch API was dead except the grammar
+// answer. Removed entirely. Grammar — its only live consumer, and the one writer with
+// no engine-1 (recordAxisResultNew) equivalent — dispatches directly onto S below.
+(function wireGrammarDispatch(){
+  window.dispatchStudyAction = function(action, payload){
+    if (action !== 'ANSWER_GRAMMAR') return;
+    const { cat, axis, isCorrect, responseMs, currentMultIdx, defaultMultIdx } = payload;
+    Scheduler.recordGrammarAnswer(S, cat, axis, isCorrect, responseMs, currentMultIdx, defaultMultIdx);
+    if (isCorrect) S.xp += Math.round(10 * (MULT_STEPS[currentMultIdx || 0] || 1));
+    save();
   };
-
-  // Wire State.dispatch for new code paths
-  window.dispatchStudyAction = function(action, payload) {
-    State.dispatch(action, payload);
-    // ANSWER_GRAMMAR is the only live dispatch now; sync its grammar/xp writes from
-    // State._s back onto legacy S. (Vocab no longer dispatches — recordAxisResultNew
-    // writes S directly.)
-    Object.assign(S, State._s);
-
-    // NOTE: we deliberately do NOT sync the session-scoped globals (studyPending,
-    // grammarAnswered, studyEncounters, sessionRecentCards, sessionAnswerRing) back
-    // FROM State._s._session. The live module globals are authoritative — they are
-    // pushed/cleared directly by startStudy / showStudyCard / the drill handlers.
-    // Reading the (lagging) _session mirror into them clobbered live data: every
-    // answer wiped the recency push from showStudyCard, collapsing rotation so the
-    // scheduler re-served the lowest-index card. Same dual-state fragility as the
-    // buildSessionState bugs; the mirror-back below keeps _session current for any
-    // legacy reader, but it is never read back into the live globals.
-
-    // Mirror back from legacy globals to _session after dispatch (for future Scheduler.next calls)
-    if (State._s._session) {
-      State._s._session.studyPending = [...studyPending];
-      State._s._session.studyEncounters = Object.fromEntries(studyEncounters);
-      State._s._session.sessionRecentCards = [...sessionRecentCards];
-      State._s._session.sessionAnswerRing = [...sessionAnswerRing];
-      if (sessionGrammarAnswered) {
-        State._s._session.grammarAnswered = new Set(sessionGrammarAnswered);
-      }
-    }
-  };
-
-  console.log('[Earworm v2] Architecture layers loaded. Scheduler and State available.');
+  console.log('[Earworm] state = single global S; grammar dispatch wired.');
 })();
 
 // ── Waveform Visualizer ──────────────────────────────────────────────────────
