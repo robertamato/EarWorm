@@ -61,7 +61,6 @@ function uiBtn(key){
 // Apply bilingual labels to all known UI elements
 function applyBilingualUI(){
   const stage=uiStage();
-  if(stage===1) return; // all English, nothing to change
 
   // Buttons
   const btnMap={
@@ -89,6 +88,7 @@ function applyBilingualUI(){
   Object.entries(btnMap).forEach(([id,key])=>{
     const el=$(id);
     if(!el) return;
+    if(stage===1){ el.textContent=key; return; } // reset to English on course switch
     const entry=UI[key];
     if(!entry) return;
     const [zh]=entry;

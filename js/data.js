@@ -2151,6 +2151,7 @@ function renderSyls(el, syls, fg){
 function charFont(){
   const c=activeCourse?activeCourse():null;
   if(c&&c.script==='rtl') return "font-family:'Aref Ruqaa','Noto Naskh Arabic','Arabic Typesetting','Arial Unicode MS',sans-serif;font-weight:700";
+  if(typeof _segMode==='function'&&_segMode()==='space') return "font-family:inherit";
   return "font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 }
 

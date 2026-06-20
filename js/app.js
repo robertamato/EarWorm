@@ -2151,6 +2151,7 @@ function renderSyls(el, syls, fg){
 function charFont(){
   const c=activeCourse?activeCourse():null;
   if(c&&c.script==='rtl') return "font-family:'Aref Ruqaa','Noto Naskh Arabic','Arabic Typesetting','Arial Unicode MS',sans-serif;font-weight:700";
+  if(typeof _segMode==='function'&&_segMode()==='space') return "font-family:inherit";
   return "font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 }
 
@@ -2989,10 +2990,11 @@ function renderCard(){
   }catch(e){ $('card').style.boxShadow='none'; }
   const m=masteryScore(cur);
 
-  // Wrap each character in a tappable span
+  // Wrap each character in a tappable span (CJK only — space-mode treats word as one unit)
   const chars=[...ch]; // spread handles multi-char words
-  if(chars.length===1){
+  if(chars.length===1 || (typeof _segMode==='function'&&_segMode()==='space')){
     $('hanzi').textContent=ch;
+    $('hanzi').style.fontFamily=charFont().split(':')[1].trim();
     $('hanzi').style.cursor='default';
     $('hanzi').onclick=null;
   } else {
@@ -3395,8 +3397,9 @@ function renderMC(){
     // FORWARD: show character + pinyin, pick English definition
     $('mc-hanzi').textContent=ch;
     $('mc-hanzi').style.fontSize='56px';
+    $('mc-hanzi').style.fontFamily=charFont().split(':')[1].trim();
     const pp=$('mc-pinyin'); pp.innerHTML='';
-    syls.forEach(([syl,t])=>{
+    if(!(typeof _readingRedundant==='function'&&_readingRedundant())) syls.forEach(([syl,t])=>{
       const s=document.createElement('span');
       s.textContent=syl; s.style.color=toneColor(t,ink);
       pp.appendChild(s);
@@ -3605,6 +3608,7 @@ function jumpToCard(i){
 
 
 function openCharDetail(word, charIdx, deckIdx){
+  if(typeof _segMode==='function'&&_segMode()==='space') return; // no char detail for space-delimited courses
   // Gate: only open if word has been introduced via flashcard
   if(deckIdx>=0 && !hasBeenIntroducedIdx(deckIdx)){
     // Queue it and show a brief message
@@ -4732,7 +4736,7 @@ function pickStudyMC(btn,chosen,correct,i){
         el.style.fontFamily='inherit';
       } else {
         el.textContent='✗ '+chosen+' → ✓ '+correctCh;
-        el.style.fontFamily=CJKe;
+        el.style.fontFamily=charFont().split(':')[1].trim();
       }
     }
   }
@@ -6081,7 +6085,6 @@ function uiBtn(key){
 // Apply bilingual labels to all known UI elements
 function applyBilingualUI(){
   const stage=uiStage();
-  if(stage===1) return; // all English, nothing to change
 
   // Buttons
   const btnMap={
@@ -6109,6 +6112,7 @@ function applyBilingualUI(){
   Object.entries(btnMap).forEach(([id,key])=>{
     const el=$(id);
     if(!el) return;
+    if(stage===1){ el.textContent=key; return; } // reset to English on course switch
     const entry=UI[key];
     if(!entry) return;
     const [zh]=entry;

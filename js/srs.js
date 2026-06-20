@@ -277,10 +277,11 @@ function renderCard(){
   }catch(e){ $('card').style.boxShadow='none'; }
   const m=masteryScore(cur);
 
-  // Wrap each character in a tappable span
+  // Wrap each character in a tappable span (CJK only — space-mode treats word as one unit)
   const chars=[...ch]; // spread handles multi-char words
-  if(chars.length===1){
+  if(chars.length===1 || (typeof _segMode==='function'&&_segMode()==='space')){
     $('hanzi').textContent=ch;
+    $('hanzi').style.fontFamily=charFont().split(':')[1].trim();
     $('hanzi').style.cursor='default';
     $('hanzi').onclick=null;
   } else {
@@ -683,8 +684,9 @@ function renderMC(){
     // FORWARD: show character + pinyin, pick English definition
     $('mc-hanzi').textContent=ch;
     $('mc-hanzi').style.fontSize='56px';
+    $('mc-hanzi').style.fontFamily=charFont().split(':')[1].trim();
     const pp=$('mc-pinyin'); pp.innerHTML='';
-    syls.forEach(([syl,t])=>{
+    if(!(typeof _readingRedundant==='function'&&_readingRedundant())) syls.forEach(([syl,t])=>{
       const s=document.createElement('span');
       s.textContent=syl; s.style.color=toneColor(t,ink);
       pp.appendChild(s);
@@ -893,6 +895,7 @@ function jumpToCard(i){
 
 
 function openCharDetail(word, charIdx, deckIdx){
+  if(typeof _segMode==='function'&&_segMode()==='space') return; // no char detail for space-delimited courses
   // Gate: only open if word has been introduced via flashcard
   if(deckIdx>=0 && !hasBeenIntroducedIdx(deckIdx)){
     // Queue it and show a brief message

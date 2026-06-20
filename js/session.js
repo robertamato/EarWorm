@@ -1076,7 +1076,7 @@ function pickStudyMC(btn,chosen,correct,i){
         el.style.fontFamily='inherit';
       } else {
         el.textContent='✗ '+chosen+' → ✓ '+correctCh;
-        el.style.fontFamily=CJKe;
+        el.style.fontFamily=charFont().split(':')[1].trim();
       }
     }
   }
