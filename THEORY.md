@@ -99,6 +99,54 @@ The universal core (pre-linguistic categories: self/other, existence, negation,
 quantity, deixis, core predicates/entities) supplies the **role-dimensions**; the
 language module supplies L₂'s lexicalization + grammar spec + the σ map vs L₁.
 
+### 3.1 Classification rubric (so σ is reproducible and L₂-comparable)
+
+σ is only useful as a *comparison* (the C(L₁,L₂) delta across language pairs), and a
+comparison is only as sound as the classification process is consistent. The rubric:
+
+**Scope — what σ measures, and what it EXCLUDES.** σ is the cost of the **meaning +
+grammatical-category mapping** from L₁ to L₂ for an atom. It deliberately excludes
+three things that belong to *other* axes, because folding them in would make pairs
+incomparable (e.g. a Latin-script L₂ would look artificially cheaper than a
+logographic one):
+- **phonology** (tone, pronunciation difficulty) → the phonological basis (§6.3).
+- **orthography** (script, character form) → the orthographic basis (§6.3).
+- **template-level word order / construction placement** → the grammar spec / γ (§2).
+  (So an interrogative pronoun whose only divergence is *in-situ placement* is
+  transparent — the *category* exists in L₁; the placement is a construction.)
+
+**Class — decided by the TRANSFER relationship, not by raw difficulty.** Ask: does the
+learner have an L₁ instinct here, and does it help or hurt?
+- **transparent** — L₁ has an atom with the same concept *and* grammatical category;
+  transfer-then-relabel yields correct L₂ in the core cases. *Positive transfer.*
+- **divergent** — L₂'s atom belongs to a category/distinction L₁ **lacks**; there is no
+  L₁ atom to transfer from, so it is learned as new. *No misleading instinct.*
+- **false-friend** — L₁ has a salient atom the learner **will** reach for, but it
+  misfires (partial/conditional mapping; one-L₁-to-many-L₂ confusable; misleading
+  default sense). *Negative transfer* — must be un-learned.
+- **Discriminator (divergent vs false-friend):** *is there a tempting-but-wrong L₁
+  instinct?* No → divergent. Yes → false-friend. (False-friends often cost ≥ divergent
+  because suppression+correction is harder than fresh acquisition.)
+
+**Distance d ∈ [0,1] — learning cost WITHIN the class:**
+- transparent **0.15–0.45** — 0.15 clean relabel; +up to 0.30 for peripheral divergence
+  (polysemy, a divergent secondary use, an excluded placement quirk worth flagging).
+- divergent **0.55–0.95** — 0.55 a distinction English partly analogizes; → 0.95 a wholly
+  novel **obligatory** category (classifier, aspect particle). Score up by obligatoriness
+  and how alien the category.
+- false-friend **0.55–1.0** — 0.55 a mild, easily-corrected trap; → 1.0 a pervasive trap
+  with a strongly-wrong instinct. Score up by frequency of the misfire and number of
+  confusable senses.
+
+**Compounds** are classified by the **compound's meaning** transparency (电话 electric-
+speech → "telephone" maps cleanly → transparent), not by morphological novelty (a
+separate axis).
+
+This rubric is applied identically to every (L₁,L₂) pair. The EN→ZH map
+(`SUBSTITUTION_EN_ZH`) is the rubric-governed baseline; EN→VN will be derived the same
+way, and the **σ-delta between them is only interpretable because the procedure is
+fixed**. (Caveat: still a single-author pass — independent validation is the next rigor.)
+
 ---
 
 ## 4. Two orthogonal axes of the whole problem

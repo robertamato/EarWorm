@@ -579,13 +579,14 @@ try{ window.computeGenerativeBasis=computeGenerativeBasis; window.GRAMMAR_SPEC_Z
 // Acquisition isn't learning L2 from zero; the learner owns a generative engine
 // (L1). The real cost of an atom is its SUBSTITUTION DISTANCE from L1, not its
 // frequency or grammatical role. This is the (L1,L2)-PAIR language module —
-// authored here for English→Mandarin over the FULL 114-atom deck (an LLM emits it
-// per pair; this one is the calibration baseline — a single careful pass, not yet
-// independently validated; debatable calls are flagged in the notes).
-//   c: 'transparent'  — same concept/role, relabel only (positive transfer, ~free)
-//      'divergent'    — no clean L1 analog / new category (the real learning load)
-//      'false-friend' — looks substitutable but misfires (negative transfer; UN-learn)
-//   d ∈ [0,1] ≈ learning cost.  Effort follows this axis, not frequency.
+// authored for English→Mandarin over the FULL 114-atom deck, governed by the
+// CLASSIFICATION RUBRIC in THEORY.md §3.1 (so EN→VN is derived identically and the
+// σ-delta is comparable). Single-author pass; independent validation still pending.
+//   c: 'transparent'  — L1 has same concept AND category; relabel (positive transfer)
+//      'divergent'    — L2 category/distinction L1 LACKS; learn new (no wrong instinct)
+//      'false-friend' — salient L1 atom that MISFIRES (negative transfer; un-learn)
+//   d ∈ [0,1] ≈ learning cost WITHIN class. σ EXCLUDES phonology, orthography, and
+//     template word-order (those are other axes) — so it stays L2-comparable.
 const SUBSTITUTION_EN_ZH = {
   '的':{c:'divergent',   d:0.80, n:'possessive + relativizer + modifier marker — no single English analog'},
   '我':{c:'transparent', d:0.15, n:'I/me — same pronoun role (no case form)'},
@@ -609,7 +610,7 @@ const SUBSTITUTION_EN_ZH = {
   '去':{c:'transparent', d:0.30, n:'go (directional-complement use diverges)'},
   '说':{c:'transparent', d:0.25, n:'speak/say'},
   '到':{c:'transparent', d:0.45, n:'arrive (transparent); as resultative complement 看到 diverges'},
-  '什么':{c:'divergent', d:0.60, n:'what — wh-IN-SITU (no fronting: 你要什么)'},
+  '什么':{c:'transparent',d:0.40, n:'what — interrogative pronoun EXISTS in Eng; only in-situ placement diverges (construction, not σ)'},
   '要':{c:'false-friend',d:0.70, n:'want + need-to + future "will" + "be going to" — polysemous modal'},
   '就':{c:'false-friend',d:0.90, n:'focus/emphasis adverb (then/just/precisely) — no clean English analog, instinct misfires'},
   '会':{c:'false-friend',d:0.80, n:'modal: learned ability "can" + future likelihood "will"; overlaps 能/可以'},
@@ -630,7 +631,7 @@ const SUBSTITUTION_EN_ZH = {
   '想':{c:'false-friend',d:0.60, n:'think + want + miss(long for) — English instinct splits the senses'},
   '知道':{c:'transparent',d:0.45,n:'know-a-fact (the 知道/认识 know-fact vs know-person split is the divergence)'},
   '时间':{c:'transparent',d:0.30,n:'time (duration)'},
-  '时候':{c:'divergent', d:0.60, n:'…的时候 = "when" clause — structural, no standalone English equivalent'},
+  '时候':{c:'transparent',d:0.45, n:'moment/time (noun maps); the 的时候 "when"-clause is a construction, not σ'},
   '年':{c:'transparent', d:0.30, n:'year (acts as its own measure word — 一年)'},
   '天':{c:'transparent', d:0.35, n:'day/sky/heaven (own measure word)'},
   '今天':{c:'transparent',d:0.20,n:'today'},
@@ -654,11 +655,11 @@ const SUBSTITUTION_EN_ZH = {
   '卖':{c:'transparent', d:0.25, n:'sell'},
   '多':{c:'transparent', d:0.40, n:'many/much (predicative + question 多少 use diverges)'},
   '点':{c:'divergent',   d:0.55, n:'o\'clock measure + "a bit" (一点) + dot/point — polysemous, partly classifier'},
-  '儿':{c:'divergent',   d:0.85, n:'erhua suffix — phonological, bound, no English analog'},
+  '儿':{c:'divergent',   d:0.60, n:'erhua diminutive suffix — no English category (its phonological difficulty is EXCLUDED from σ)'},
   '少':{c:'transparent', d:0.35, n:'few/little'},
   '很':{c:'false-friend',d:0.70, n:'looks like "very" but OBLIGATORY + bleached before predicate adjectives'},
   '太':{c:'transparent', d:0.45, n:'too/excessively (太…了 frame)'},
-  '都':{c:'divergent',   d:0.60, n:'all/both — PRE-verbal, quantifies subject leftward (他们都); scope differs'},
+  '都':{c:'divergent',   d:0.55, n:'all — but obligatorily PRE-verbal, quantifies the subject leftward; a distribution Eng "all" lacks'},
   '问':{c:'transparent', d:0.25, n:'ask'},
   '题':{c:'transparent', d:0.40, n:'topic/question (bound: 问题)'},
   '也':{c:'transparent', d:0.40, n:'also/too — fixed PRE-verbal position (我也去)'},
@@ -694,9 +695,9 @@ const SUBSTITUTION_EN_ZH = {
   '听':{c:'transparent', d:0.20, n:'listen'},
   '音乐':{c:'transparent',d:0.20,n:'music'},
   '名字':{c:'transparent',d:0.20,n:'name'},
-  '谁':{c:'divergent',   d:0.55, n:'who — wh-in-situ (no fronting)'},
-  '哪里':{c:'divergent', d:0.60, n:'where — wh-in-situ; 哪 + 里 localizer'},
-  '怎么':{c:'divergent', d:0.60, n:'how/why-so — wh-in-situ, polysemous manner/reason'},
+  '谁':{c:'transparent', d:0.40, n:'who — interrogative pronoun exists; in-situ placement is construction-level'},
+  '哪里':{c:'transparent',d:0.45, n:'where — interrogative exists; in-situ; 里 component is morphology (excluded)'},
+  '怎么':{c:'transparent',d:0.45, n:'how — interrogative manner adverb exists; polysemous how/why-so; in-situ'},
   '为什么':{c:'transparent',d:0.45,n:'why (为+什么 = for-what; wh-in-situ)'},
   '对':{c:'false-friend',d:0.55, n:'correct + coverb "toward/to" (对我说) + agreement — polysemous'},
   '错':{c:'transparent', d:0.30, n:'wrong/mistake (adjective)'},
