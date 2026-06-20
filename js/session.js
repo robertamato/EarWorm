@@ -701,6 +701,8 @@ function showStudyCard(i){
     showStudyComprehension(i);
   } else if(mod==='word-order'){
     showWordOrderDrill(i);
+  } else if(mod==='production'){
+    showStudyProduction(i);
   } else if(mod==='pos-s1'||mod==='pos-s2'||mod==='pos-s3'){
     const posAxisStage=mod==='pos-s1'?1:mod==='pos-s2'?2:3;
     showStudyPOSStaged(i, posAxisStage);

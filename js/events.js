@@ -656,6 +656,12 @@ function simInvariants(r){
   steps.forEach(function(s){ if(s.idx!=null && !s.end && !s.error && s.type!=='grammar'){ servedCount[s.idx]=(servedCount[s.idx]||0)+1; totalServed++; } });
   Object.keys(servedCount).forEach(function(k){ if(servedCount[k]>maxShare) maxShare=servedCount[k]; });
   var topShare=totalServed?maxShare/totalServed:0;
+  // Never produce before recognize (PRODUCTION.md): a 'production' step must only occur
+  // on a well-recognized card (meaning-stage ≥ the production gate). Mirrors never-test-
+  // before-flash, one rung up. Trivially passes when production is disabled (no such steps).
+  var pMin=2; try{ pMin=PRODUCTION_MIN_STAGE; }catch(e){}
+  var prodSteps=0, prodEarly=0;
+  steps.forEach(function(s){ if(s.mod==='production'){ prodSteps++; if(s.stg==null||s.stg<pMin) prodEarly++; } });
   var MIN_GAP=3, PACE_FLOOR=Math.max(1,Math.round(steps.length*0.15)), EDGE_MAX=0.15, MONOPOLY_MAX=0.35;
   var checks=[
     {name:'never test before flash',     pass:beforeFlash===0,                              detail:beforeFlash+' violation(s)'},
@@ -663,7 +669,8 @@ function simInvariants(r){
     {name:'no immediate repeat',         pass:immediateRepeat===0,                          detail:immediateRepeat+' repeat(s)'},
     {name:'no card monopoly',            pass:(totalServed<30||topShare<=MONOPOLY_MAX),     detail:'top card '+Math.round(topShare*100)+'% of '+totalServed},
     {name:'pace ≥'+PACE_FLOOR,         pass:(r.finalFrontier>=PACE_FLOOR),              detail:'frontier '+r.finalFrontier},
-    {name:'edge ≤'+EDGE_MAX,           pass:(meanEdge==null||meanEdge<=EDGE_MAX),       detail:'mean|P-.5| '+(meanEdge==null?'-':meanEdge.toFixed(3))}
+    {name:'edge ≤'+EDGE_MAX,           pass:(meanEdge==null||meanEdge<=EDGE_MAX),       detail:'mean|P-.5| '+(meanEdge==null?'-':meanEdge.toFixed(3))},
+    {name:'never produce before recognize', pass:prodEarly===0,                            detail:prodEarly+' early of '+prodSteps+' prod'}
   ];
   return {pass:checks.every(function(c){return c.pass;}), checks:checks};
 }
@@ -961,6 +968,17 @@ let FRONTIER_SEEK = true;   // select due cards by entropy(P_correct); off → l
 let ENTROPY_BUCKET = 0.08;  // coarseness of entropy tiers, so fair recency rotation operates within a tier
 try{ window.setFrontierSeek=function(on){ FRONTIER_SEEK=!!on; return FRONTIER_SEEK; }; }catch(e){}
 
+// Production modality knobs (PRODUCTION.md — the Build consumer). Lands DARK:
+// PRODUCTION_ENABLED=false ⇒ Scheduler.modality never returns 'production' ⇒ scheduling
+// byte-identical to today. PROB is the rarity (a knob to grow toward dominance);
+// MIN_STAGE enforces never-produce-before-recognize; FEEDBACK_WEIGHT (0) keeps production
+// measurement-only until trusted.
+let PRODUCTION_ENABLED = false;
+let PRODUCTION_MIN_STAGE = 3;
+let PRODUCTION_PROB = 0.20;
+let PRODUCTION_FEEDBACK_WEIGHT = 0;
+try{ window.setProductionKnobs=function(en,prob,minStg,w){ if(en!=null)PRODUCTION_ENABLED=!!en; if(prob!=null)PRODUCTION_PROB=prob; if(minStg!=null)PRODUCTION_MIN_STAGE=minStg; if(w!=null)PRODUCTION_FEEDBACK_WEIGHT=w; return {PRODUCTION_ENABLED,PRODUCTION_PROB,PRODUCTION_MIN_STAGE,PRODUCTION_FEEDBACK_WEIGHT}; }; }catch(e){}
+
 const Scheduler = {
 
   // ─── Primary entry point ─────────────────────────────────────────────────
@@ -1019,6 +1037,13 @@ const Scheduler = {
 
       // Stage 0: always MC-forward (first MC after flash)
       if (meanStg === 0) return 'mc-fwd';
+
+      // Production (PRODUCTION.md — the Build consumer). Dark unless PRODUCTION_ENABLED.
+      // Rare, and only when well-recognized (never produce before recognize) AND a task
+      // can be built over graduated atoms. Off ⇒ this branch never fires.
+      if (PRODUCTION_ENABLED && meanStg >= PRODUCTION_MIN_STAGE && Math.random() < PRODUCTION_PROB) {
+        try { if (typeof buildProductionTask === 'function' && buildProductionTask({forIdx:i})) return 'production'; } catch(e){}
+      }
 
       // POS axis (fibration: gated behind meaning — grammatical role is meaningless on
       // an un-comprehended word). Once a word is recognized (meaning ≥ 1), interleave

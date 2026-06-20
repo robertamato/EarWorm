@@ -4580,6 +4580,8 @@ function showStudyCard(i){
     showStudyComprehension(i);
   } else if(mod==='word-order'){
     showWordOrderDrill(i);
+  } else if(mod==='production'){
+    showStudyProduction(i);
   } else if(mod==='pos-s1'||mod==='pos-s2'||mod==='pos-s3'){
     const posAxisStage=mod==='pos-s1'?1:mod==='pos-s2'?2:3;
     showStudyPOSStaged(i, posAxisStage);
@@ -9086,6 +9088,126 @@ function showWordOrderDrill(i){
 }
 
 
+/* ============ PRODUCTION (PRODUCTION.md — the Build consumer) ============ */
+// The first modality that measures crutch-independence: typed, L2-out, generate-from-
+// nothing. Lands DARK — PRODUCTION_ENABLED (srs.js) is false by default, so it is never
+// scheduled and behavior is byte-identical to today. v1 = R1 cued-translation; the grade
+// is a deterministic string-match (the haiku grader replaces _productionGrader in step 2).
+
+function _atomGraduated(i){ try{ return Scheduler._isGraduated((S.cards&&S.cards[i])||{}); }catch(e){ return false; } }
+
+// Build a production task over GRADUATED atoms only (never produce before recognize).
+// Prefers a sentence containing card `i`. Returns {rung,prompt,expected,en,atoms} or null.
+function buildProductionTask(opts){
+  opts=opts||{};
+  const grad=new Set();
+  for(let k=0;k<D.length;k++){ if(_atomGraduated(k)) grad.add(D[k][0]); }
+  if(grad.size<2) return null;
+  let bank; try{ bank=(typeof EXAMPLE_SENTENCES!=='undefined')?EXAMPLE_SENTENCES:null; }catch(e){ bank=null; }
+  if(!bank) return null;
+  const targetCh=(opts.forIdx!=null&&D[opts.forIdx])?D[opts.forIdx][0]:null;
+  const cands=[];
+  Object.keys(bank).forEach(function(key){ (bank[key]||[]).forEach(function(s){
+    const zh=s&&s[0]; if(!zh) return;
+    let atoms=[]; try{ atoms=(typeof sentenceAtomsInOrder==='function')?sentenceAtomsInOrder(zh).map(function(a){return a.w;}):[]; }catch(e){ return; }
+    if(atoms.length>=2 && atoms.every(function(w){return grad.has(w);})){
+      cands.push({ zh:zh, en:(s[2]||s[1]||''), atoms:atoms, hasTarget:targetCh?atoms.indexOf(targetCh)>=0:false });
+    }
+  }); });
+  if(!cands.length) return null;
+  const pref=cands.filter(function(c){return c.hasTarget;});
+  const pool=pref.length?pref:cands;
+  const c=pool[Math.floor(Math.random()*pool.length)];
+  const _langName=(typeof activeCourse==='function'&&activeCourse())?activeCourse().langName:'the target language';
+  return { rung:'R1', capability:null, atoms:c.atoms, en:c.en, expected:c.zh,
+           prompt:'Say in '+_langName.toUpperCase()+':  "'+c.en+'"' };
+}
+
+// Injectable grader seam. Default = deterministic normalized string-match (no LLM).
+// The haiku grader (step 2) swaps _productionGrader for judgment + crutch detection.
+function _normProd(s){ return String(s||'').toLowerCase().trim().replace(/[.,!?;:。，！？]/g,'').replace(/\s+/g,' '); }
+function gradeProductionMatch(task, response){
+  const ok=_normProd(response)===_normProd(task.expected);
+  return { ok:ok, capabilityMet:ok, usedL1:false, rung:task.rung,
+           errors: ok?[]:[{type:'mismatch'}], feedback: ok?'✓':('expected: '+task.expected) };
+}
+let _productionGrader=gradeProductionMatch;
+try{ window.setProductionGrader=function(fn){ _productionGrader=fn||gradeProductionMatch; }; }catch(e){}
+
+// Hot log + cold-infer tierProduced (read by Estimator._tierProduced). Feedback into
+// scheduling is behind PRODUCTION_FEEDBACK_WEIGHT (0 ⇒ logs but moves nothing).
+function recordProduction(i, task, verdict, response){
+  if(!S.productionLog) S.productionLog=[];
+  S.productionLog.push({ idx:i, atoms:task.atoms, rung:task.rung, cap:task.capability,
+    ok:verdict.ok?1:0, capMet:verdict.capabilityMet?1:0, l1:verdict.usedL1?1:0, ts:Date.now() });
+  if(S.productionLog.length>200) S.productionLog.shift();
+  coldInferTierProduced();
+  try{ logAnswer(i, verdict.ok, 'production', 0); }catch(e){}
+  // PRODUCTION_FEEDBACK_WEIGHT>0 would nudge atom stability here (step 4) — no-op at 0.
+  save();
+}
+
+function coldInferTierProduced(){
+  let g; try{ g=computeGenerativeBasis(); }catch(e){ return; }
+  if(!g||!g.tiers) return;
+  if(!S.tierProduced) S.tierProduced={};
+  const K=2; const log=S.productionLog||[];
+  g.tiers.forEach(function(t){
+    const set=new Set((t.atoms||[]).map(function(a){return a.ch;}));
+    if(!set.size) return;
+    let n=0; log.forEach(function(e){ if(e.capMet && (e.atoms||[]).some(function(w){return set.has(w);})) n++; });
+    if(n>=K) S.tierProduced[t.name]=true;
+  });
+}
+
+// Inline production card — reuses the studyMC panel (prompt + text input + submit).
+function showStudyProduction(i){
+  const task=buildProductionTask({forIdx:i});
+  if(!task){ showStudyMC(i,false); return; }   // can't build → fall back to recognition
+  activeCardIdx=i; rollBg();
+  const fg=getComputedStyle(document.body).color;
+  $('studyMode').textContent='PRODUCTION';
+  show('study');
+  $('studySession').style.display='none';
+  $('studyMC').style.display='flex';
+  $('studyTone').style.display='none';
+  if($('studyPOS')) $('studyPOS').style.display='none';
+  if($('studyColl')) $('studyColl').style.display='none';
+  cardShownAtMC=Date.now();
+  $('studyMCRank').textContent=cardRankStr(i);
+  $('studyMCModality').textContent='PRODUCTION · '+task.rung;
+  $('studyMCPromptText').innerHTML='<div style="font-size:13px;line-height:1.5;text-align:center;padding:6px 8px;">'+_esc(task.prompt)+'</div>';
+  $('studyMCPinyin').innerHTML='';
+  if($('studyMCExplain')) $('studyMCExplain').textContent='';
+  if($('studyMCTapHint')) $('studyMCTapHint').textContent='';
+  if($('studyMCActions')) $('studyMCActions').innerHTML='';
+  const box=$('studyMCChoices'); box.innerHTML=''; box.style.display='block';
+  const inp=document.createElement('input');
+  inp.type='text'; inp.autocapitalize='off'; inp.autocomplete='off'; inp.setAttribute('autocorrect','off'); inp.spellcheck=false;
+  inp.style.cssText='width:100%;box-sizing:border-box;font-size:22px;padding:12px;background:rgba(255,255,255,0.06);border:2px solid '+fg+';color:'+fg+';font-family:inherit;text-align:center;border-radius:2px;';
+  const submit=document.createElement('button'); submit.className='btn'; submit.textContent='SUBMIT';
+  submit.style.cssText='margin-top:10px;font-size:12px;';
+  const verdict=document.createElement('div'); verdict.style.cssText='margin-top:10px;text-align:center;font-size:13px;min-height:20px;'+_segFontProd();
+  box.appendChild(inp); box.appendChild(submit); box.appendChild(verdict);
+  setTimeout(function(){ try{ inp.focus(); }catch(e){} },60);
+  let done=false;
+  const go=function(){
+    if(done) return; done=true;
+    const v=_productionGrader(task, inp.value);
+    recordProduction(i, task, v, inp.value);
+    verdict.style.color=v.ok?'#4ade80':'#f87171';
+    verdict.textContent=(v.ok?'✓  ':'✗  ')+task.expected;
+    inp.disabled=true; submit.disabled=true;
+    if(S.sound!=='mute') speak(task.expected, activeCourse().langCode);
+    armTapAdvance($('studyMC'), function(){ nextStudyCard(); }, v.ok?500:1400);
+  };
+  submit.onclick=go;
+  inp.addEventListener('keydown', function(e){ if(e.key==='Enter') go(); });
+}
+function _segFontProd(){ try{ return (typeof _segMode==='function'&&_segMode()==='space')?'':"font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif;"; }catch(e){ return ''; } }
+try{ window.buildProductionTask=buildProductionTask; window.showStudyProduction=showStudyProduction; }catch(e){}
+
+
 /* ============ DEBUG: PROGRESS CONTROLS ============ */
 
 function debugResetProgress(){
@@ -10019,6 +10141,12 @@ function simInvariants(r){
   steps.forEach(function(s){ if(s.idx!=null && !s.end && !s.error && s.type!=='grammar'){ servedCount[s.idx]=(servedCount[s.idx]||0)+1; totalServed++; } });
   Object.keys(servedCount).forEach(function(k){ if(servedCount[k]>maxShare) maxShare=servedCount[k]; });
   var topShare=totalServed?maxShare/totalServed:0;
+  // Never produce before recognize (PRODUCTION.md): a 'production' step must only occur
+  // on a well-recognized card (meaning-stage ≥ the production gate). Mirrors never-test-
+  // before-flash, one rung up. Trivially passes when production is disabled (no such steps).
+  var pMin=2; try{ pMin=PRODUCTION_MIN_STAGE; }catch(e){}
+  var prodSteps=0, prodEarly=0;
+  steps.forEach(function(s){ if(s.mod==='production'){ prodSteps++; if(s.stg==null||s.stg<pMin) prodEarly++; } });
   var MIN_GAP=3, PACE_FLOOR=Math.max(1,Math.round(steps.length*0.15)), EDGE_MAX=0.15, MONOPOLY_MAX=0.35;
   var checks=[
     {name:'never test before flash',     pass:beforeFlash===0,                              detail:beforeFlash+' violation(s)'},
@@ -10026,7 +10154,8 @@ function simInvariants(r){
     {name:'no immediate repeat',         pass:immediateRepeat===0,                          detail:immediateRepeat+' repeat(s)'},
     {name:'no card monopoly',            pass:(totalServed<30||topShare<=MONOPOLY_MAX),     detail:'top card '+Math.round(topShare*100)+'% of '+totalServed},
     {name:'pace ≥'+PACE_FLOOR,         pass:(r.finalFrontier>=PACE_FLOOR),              detail:'frontier '+r.finalFrontier},
-    {name:'edge ≤'+EDGE_MAX,           pass:(meanEdge==null||meanEdge<=EDGE_MAX),       detail:'mean|P-.5| '+(meanEdge==null?'-':meanEdge.toFixed(3))}
+    {name:'edge ≤'+EDGE_MAX,           pass:(meanEdge==null||meanEdge<=EDGE_MAX),       detail:'mean|P-.5| '+(meanEdge==null?'-':meanEdge.toFixed(3))},
+    {name:'never produce before recognize', pass:prodEarly===0,                            detail:prodEarly+' early of '+prodSteps+' prod'}
   ];
   return {pass:checks.every(function(c){return c.pass;}), checks:checks};
 }
@@ -10324,6 +10453,17 @@ let FRONTIER_SEEK = true;   // select due cards by entropy(P_correct); off → l
 let ENTROPY_BUCKET = 0.08;  // coarseness of entropy tiers, so fair recency rotation operates within a tier
 try{ window.setFrontierSeek=function(on){ FRONTIER_SEEK=!!on; return FRONTIER_SEEK; }; }catch(e){}
 
+// Production modality knobs (PRODUCTION.md — the Build consumer). Lands DARK:
+// PRODUCTION_ENABLED=false ⇒ Scheduler.modality never returns 'production' ⇒ scheduling
+// byte-identical to today. PROB is the rarity (a knob to grow toward dominance);
+// MIN_STAGE enforces never-produce-before-recognize; FEEDBACK_WEIGHT (0) keeps production
+// measurement-only until trusted.
+let PRODUCTION_ENABLED = false;
+let PRODUCTION_MIN_STAGE = 3;
+let PRODUCTION_PROB = 0.20;
+let PRODUCTION_FEEDBACK_WEIGHT = 0;
+try{ window.setProductionKnobs=function(en,prob,minStg,w){ if(en!=null)PRODUCTION_ENABLED=!!en; if(prob!=null)PRODUCTION_PROB=prob; if(minStg!=null)PRODUCTION_MIN_STAGE=minStg; if(w!=null)PRODUCTION_FEEDBACK_WEIGHT=w; return {PRODUCTION_ENABLED,PRODUCTION_PROB,PRODUCTION_MIN_STAGE,PRODUCTION_FEEDBACK_WEIGHT}; }; }catch(e){}
+
 const Scheduler = {
 
   // ─── Primary entry point ─────────────────────────────────────────────────
@@ -10382,6 +10522,13 @@ const Scheduler = {
 
       // Stage 0: always MC-forward (first MC after flash)
       if (meanStg === 0) return 'mc-fwd';
+
+      // Production (PRODUCTION.md — the Build consumer). Dark unless PRODUCTION_ENABLED.
+      // Rare, and only when well-recognized (never produce before recognize) AND a task
+      // can be built over graduated atoms. Off ⇒ this branch never fires.
+      if (PRODUCTION_ENABLED && meanStg >= PRODUCTION_MIN_STAGE && Math.random() < PRODUCTION_PROB) {
+        try { if (typeof buildProductionTask === 'function' && buildProductionTask({forIdx:i})) return 'production'; } catch(e){}
+      }
 
       // POS axis (fibration: gated behind meaning — grammatical role is meaningless on
       // an un-comprehended word). Once a word is recognized (meaning ≥ 1), interleave
