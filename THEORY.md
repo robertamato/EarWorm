@@ -283,6 +283,13 @@ measurably from EN→Mandarin (no logographic script, Latin-based Quốc Ngữ, 
 tone system) — measuring that delta against the Mandarin baseline is how we confirm
 `C(L₁,L₂)` generalizes rather than overfits.
 
+> **Done, for Vietnamese.** All four artifacts exist (`D_VI`, the VN seed mirroring
+> `GRAMMAR_SPEC_ZH`, an inline EN→VN σ-map, `EXAMPLE_SENTENCES_VI`), the engine ran
+> unchanged, and the σ-delta came out as predicted (EN→VN lighter). The *one* engine
+> change the port forced was below this recipe — the **segmentation seam** (atom ≠ CJK
+> character). That field report is [MIGRATION.md](MIGRATION.md): which assumptions were
+> "language" vs secretly "Mandarin," and what a typologically distant language breaks next.
+
 ---
 
 ## 8. Framing lenses (orthogonal to the lattice)
