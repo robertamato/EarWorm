@@ -497,9 +497,9 @@ function showStudyPOSStaged(i, axisStage){
   const [ch,syls,,, pos]=D[i];
   if(!pos){ recordAxisResult(i,'pos',true); nextStudyCard(); return; }
 
+  setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
-  rollBg();
 
   const m=masteryScore(i);
   const axisToStage={1:1,2:2,3:3};

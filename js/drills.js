@@ -496,7 +496,7 @@ function showStudyCloze(i){
   if(!sents.length){ showStudyMC(i,false); return; }  // fall back to MC on the same card, not a wasted turn
 
   activeCardIdx=i;
-  rollBg();
+  setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 
@@ -716,7 +716,7 @@ function showStudyComprehension(i){
   const choices=shuffle([en,...distractors]);
 
   activeCardIdx=i;
-  rollBg();
+  setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 
@@ -861,7 +861,7 @@ function showWordOrderDrill(i){
   const shuffledWords=shuffle(drillWords.slice());
 
   activeCardIdx=i;
-  rollBg();
+  setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
   // Tiles only force the CJK face for ideographic courses; space-delimited scripts
   // (Vietnamese, Arabic) inherit the body font so diacritics render correctly.
@@ -1202,7 +1202,7 @@ function coldInferTierProduced(){
 function showStudyProduction(i){
   const task=buildProductionTask({forIdx:i});
   if(!task){ showStudyMC(i,false); return; }   // can't build → fall back to recognition
-  activeCardIdx=i; rollBg();
+  activeCardIdx=i; setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
   $('studyMode').textContent='PRODUCTION';
   show('study');

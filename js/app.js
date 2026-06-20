@@ -3976,6 +3976,35 @@ function rollBg(){
   return {fg};
 }
 
+// ── ATOM SESSION COLOR (THEORY.md §13.3) ──────────────────────
+// Manufactured synesthesia: each atom gets a hue, CONSISTENT within a session and
+// RANDOMIZED between (encoding-variability — binds for distinctiveness, never a durable
+// crutch). Distinctiveness-only (no semantics → no error vector). Golden-angle spread over
+// a per-session random permutation. NEXT: confusion-graph-driven separation of the
+// live-confusable pairs (confusionEdges() is ready).
+let _sessionHueOffset=Math.random()*360;
+let _atomHueOrder=null;
+function resetAtomColors(){ _sessionHueOffset=Math.random()*360; _atomHueOrder=null; }
+function _ensureHueOrder(){
+  if(_atomHueOrder) return;
+  _atomHueOrder={};
+  const idx=D.map((_,k)=>k);
+  for(let a=idx.length-1;a>0;a--){ const b=Math.floor(Math.random()*(a+1)); const t=idx[a]; idx[a]=idx[b]; idx[b]=t; }
+  idx.forEach((id,rank)=>{ _atomHueOrder[id]=rank; });
+}
+function atomHue(i){ _ensureHueOrder(); const r=(_atomHueOrder[i]!=null)?_atomHueOrder[i]:i; return (_sessionHueOffset + r*GA) % 360; }
+function setAtomBg(i){
+  const h=atomHue(i);
+  bgHue=h;  // keep bgHue in sync so toneColor()/constellation offsets stay consistent
+  const bg=hsl(h,85,58), fg=hsl(h,70,8);
+  document.documentElement.style.setProperty('--bg',bg);
+  document.documentElement.style.setProperty('--fg',fg);
+  document.body.style.backgroundColor=bg;
+  document.body.style.color=fg;
+  return {fg};
+}
+try{ window.setAtomBg=setAtomBg; window.atomHue=atomHue; window.resetAtomColors=resetAtomColors; }catch(e){}
+
 /* ============ TONE DRILL ============ */
 // Tone labels and descriptions
 const TONE_LABEL=['-','1ST','2ND','3RD','4TH','NEUT'];
@@ -4384,6 +4413,7 @@ let studyModalityFilter=null; // null=all, 'flash','grammar','mc','tone','pos'
 const sessionGrammarAnswered=new Set(); // cats answered correctly this session
 function startStudy(flashOnly){
   studyFlashOnly=!!flashOnly;
+  if(typeof resetAtomColors==='function') resetAtomColors();  // new session → reshuffle atom hues
   if(window.EW&&EW.obs) EW.obs.logEvent('session:start',{flashOnly:!!flashOnly,policy:newSchedulerPolicy()});
   // Don't call load() here — state was loaded at page init
   // Calling load() again would overwrite in-memory state with stale localStorage
@@ -4657,10 +4687,10 @@ function showStudyFlash(i){
   try{
   const [ch,syls,def,,pos]=D[i];
   const CJKf=charFont();
+  setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
   let flipped=false;
 
-  rollBg();
   $('studyMode').textContent='EXPOSURE';
   $('studyRank').textContent=cardRankStr(i);
   // Mark as introduced on first showing — don't require flip
@@ -4781,7 +4811,7 @@ function introduceForDistractor(){
 
 function showStudyMC(i, reverse, showPosHint){
   activeCardIdx=i; mcCur=i; mcLocked=false; mcReverse=reverse;
-  rollBg();
+  setAtomBg(i);
 
   // Render into studyMC panel
   const [ch,syls,def,,pos]=D[i];
@@ -5112,7 +5142,7 @@ function toneStage(mastery){
 function showStudyTone(i){
   toneCur=i; toneLocked=false;
   activeCardIdx=i;
-  rollBg();
+  setAtomBg(i);
   const [ch,syls]=D[i];
   const CJKf=charFont();
   const fg=getComputedStyle(document.body).color;
@@ -6839,9 +6869,9 @@ function showStudyPOSStaged(i, axisStage){
   const [ch,syls,,, pos]=D[i];
   if(!pos){ recordAxisResult(i,'pos',true); nextStudyCard(); return; }
 
+  setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
-  rollBg();
 
   const m=masteryScore(i);
   const axisToStage={1:1,2:2,3:3};
@@ -8673,7 +8703,7 @@ function showStudyCloze(i){
   if(!sents.length){ showStudyMC(i,false); return; }  // fall back to MC on the same card, not a wasted turn
 
   activeCardIdx=i;
-  rollBg();
+  setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 
@@ -8893,7 +8923,7 @@ function showStudyComprehension(i){
   const choices=shuffle([en,...distractors]);
 
   activeCardIdx=i;
-  rollBg();
+  setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
   const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
 
@@ -9038,7 +9068,7 @@ function showWordOrderDrill(i){
   const shuffledWords=shuffle(drillWords.slice());
 
   activeCardIdx=i;
-  rollBg();
+  setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
   // Tiles only force the CJK face for ideographic courses; space-delimited scripts
   // (Vietnamese, Arabic) inherit the body font so diacritics render correctly.
@@ -9379,7 +9409,7 @@ function coldInferTierProduced(){
 function showStudyProduction(i){
   const task=buildProductionTask({forIdx:i});
   if(!task){ showStudyMC(i,false); return; }   // can't build → fall back to recognition
-  activeCardIdx=i; rollBg();
+  activeCardIdx=i; setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
   $('studyMode').textContent='PRODUCTION';
   show('study');
