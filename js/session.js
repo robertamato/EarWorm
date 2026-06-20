@@ -619,13 +619,26 @@ function schedulePrewarmFromQueue(){
 
 function resolveStudyModality(i){
   if(studyFlashOnly) return 'flash';
-  if(studyModalityFilter==='mc'){
+  const f=studyModalityFilter;
+  if(!f || f==='grammar') return null;
+  // Every isolation path still respects never-test-before-flash: an unseen card is
+  // shown as a flashcard first. Modalities that can't build (word-order/production/
+  // cloze when no scaffold) fall back to recognition inside their own show* fn.
+  const seen=(card(i).exp||0)>0;
+  if(f==='mc'){
+    if(!seen) return 'flash';
     const mstg=getAxisStage(i,'meaning');
     if(mstg>=3&&clozeUnlocked(i)) return Math.random()<0.5?'cloze':'mc-rev';
-    return (card(i).exp||0)>0?'mc-fwd':'flash';
+    return 'mc-fwd';
   }
-  if(studyModalityFilter==='tone') return (activeCourse().hasTone&&(card(i).exp||0)>0)?'tone':'flash';
-  if(studyModalityFilter==='pos'){
+  if(f==='mc-fwd') return seen?'mc-fwd':'flash';
+  if(f==='mc-rev') return seen?'mc-rev':'flash';
+  if(f==='cloze')  return seen?(clozeUnlocked(i)?'cloze':'mc-fwd'):'flash';
+  if(f==='word-order') return seen?'word-order':'flash';
+  if(f==='production') return seen?'production':'flash';
+  if(f==='tone') return (activeCourse().hasTone&&seen)?'tone':'flash';
+  if(f==='pos'){
+    if(!seen) return 'flash';
     const ps=Math.max(1,getAxisStage(i,'pos'));
     return 'pos-s'+Math.min(ps,3);
   }
