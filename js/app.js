@@ -2758,13 +2758,18 @@ function renderHome(){
   const capLbl=document.getElementById('milestoneCapLabel');
   let cap=null; try{ cap=Estimator.capability(); }catch(e){}
   if(cap){
-    if(capLbl) capLbl.textContent='CAPABILITY';
+    if(capLbl) capLbl.textContent = cap.current ? ('CAN '+cap.current.cap) : 'CAPABILITY';
     $('milestoneProgFill').style.width=(cap.next?cap.nextPct:100)+'%';
     $('milestoneProgFill').style.background=fg;
-    $('milestoneProgLabel').textContent = cap.next ? cap.nextPct+'%' : '✓ ALL';
-    const youCan = cap.current ? ('CAN '+cap.current.cap) : 'NO CAPABILITY YET';
-    const eff = cap.next ? (' · NEXT '+cap.next.cap+' ('+cap.effort+(cap.sigma!=null?' · σ'+cap.sigma:'')+')') : ' · ALL TIERS CLOSED';
-    $('milestoneProgNote').textContent=(youCan+eff).toUpperCase();
+    $('milestoneProgLabel').textContent = cap.next ? ('NEXT: '+cap.next.cap) : '✓ ALL TIERS';
+    // Prefer a concrete now-producible example (what you can actually say); else effort.
+    if(cap.example){
+      $('milestoneProgNote').textContent = 'e.g. '+cap.example.zh+(cap.example.en?' — '+cap.example.en:'');
+    } else if(cap.next){
+      $('milestoneProgNote').textContent = (cap.effort+' atom'+(cap.effort===1?'':'s')+' to go'+(cap.sigma!=null?' · σ'+cap.sigma:'')).toUpperCase();
+    } else {
+      $('milestoneProgNote').textContent = 'ALL TIERS CLOSED';
+    }
   } else {
     // Coverage fallback for courses with no resolvable basis (no grammarRoles yet).
     if(capLbl) capLbl.textContent='COVERAGE';
@@ -2859,10 +2864,21 @@ const Estimator = {
     return { points, knee:p.window, window:p.window, pools:p, maxN };
   },
 
+  // §12 production gate. OFF until a REAL production modality exists (LLM-graded free
+  // production). While off, a capability is graduation-based (recognition-level). Flip
+  // true once production evidence is trustworthy — then a tier needs both graduation AND
+  // production. word-order/cloze are NOT wired here on purpose (they're trap-exposed, §4).
+  PRODUCTION_GATE:false,
+  _tierProduced(t){
+    // Seam for Phase 2: per-tier production evidence. Nothing writes S.tierProduced yet,
+    // so this is intentionally false — the gate is inert, not faked.
+    try{ return !!(S.tierProduced && t && S.tierProduced[t.name]); }catch(e){ return false; }
+  },
+
   // Capability render (THEORY.md §10.2): which basis tier the learner has CLOSED.
-  // A tier is achieved when all its atoms have GRADUATED (filter-crossing, not seen).
-  // effort-to-next = un-graduated atoms of the next tier, σ-weighted where σ exists.
-  // Returns null when the course has no resolvable basis (→ caller shows coverage).
+  // A tier is achieved when all its atoms have GRADUATED (filter-crossing, not seen) —
+  // and, once PRODUCTION_GATE is on, also produced. effort-to-next = un-graduated atoms
+  // of the next tier, σ-weighted where σ exists. null when no resolvable basis.
   capability(){
     let g; try{ g=computeGenerativeBasis(); }catch(e){ return null; }
     if(!g||!g.tiers||!g.tiers.length) return null;
@@ -2871,8 +2887,8 @@ const Estimator = {
     let current=null, next=null, ok=true;
     g.tiers.forEach(t=>{
       const atoms=(t.atoms||[]).map(a=>a.ch);
-      const allGrad=atoms.length>0 && atoms.every(grad);
-      if(ok && allGrad) current=t;
+      const achieved=atoms.length>0 && atoms.every(grad) && (!this.PRODUCTION_GATE || this._tierProduced(t));
+      if(ok && achieved) current=t;
       else { ok=false; if(!next) next=t; }
     });
     let effort=0, sigma=0, hasSigma=false; const nextAtoms=[];
@@ -2880,7 +2896,30 @@ const Estimator = {
       try{ const s=(typeof substitution==='function')&&substitution(a.ch); if(s&&s.d!=null){ sigma+=s.d; hasSigma=true; } }catch(e){} } }); }
     const nextTotal=next?(next.atoms||[]).length:0;
     return { current, next, effort, nextAtoms, sigma:hasSigma?Math.round(sigma*10)/10:null,
+             gated:this.PRODUCTION_GATE,
+             example:this.capabilityExample(),
              nextPct: nextTotal?Math.round((nextTotal-effort)/nextTotal*100):100 };
+  },
+
+  // A concrete now-producible sentence: shortest example-bank sentence whose every
+  // deck-atom has graduated. Honest — it's something the learner can actually assemble.
+  capabilityExample(){
+    let bank; try{ bank=(typeof EXAMPLE_SENTENCES!=='undefined')?EXAMPLE_SENTENCES:null; }catch(e){ bank=null; }
+    if(!bank) return null;
+    const gradSet=new Set();
+    for(let i=0;i<D.length;i++){ try{ if(Scheduler._isGraduated((S.cards&&S.cards[i])||{})) gradSet.add(D[i][0]); }catch(e){} }
+    if(!gradSet.size) return null;
+    let best=null;
+    Object.keys(bank).forEach(k=>{
+      (bank[k]||[]).forEach(s=>{
+        const zh=s&&s[0]; if(!zh) return;
+        let atoms=[]; try{ atoms=(typeof sentenceAtomsInOrder==='function')?sentenceAtomsInOrder(zh).map(a=>a.w):[]; }catch(e){ return; }
+        if(atoms.length>=2 && atoms.every(w=>gradSet.has(w))){
+          if(!best || zh.length<best.zh.length) best={ zh:zh, en:s[2]||s[1]||'' };
+        }
+      });
+    });
+    return best;
   }
 };
 try{ window.Estimator=Estimator; }catch(e){}
