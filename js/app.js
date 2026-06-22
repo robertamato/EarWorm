@@ -2693,7 +2693,22 @@ function renderConstellation(){
         for(let it=0;it<45;it++){ for(let q=0;q<pairs.length;q++){ const a=pairs[q][0],b=pairs[q][1],mx=(px[a]+px[b])/2,my=(py[a]+py[b])/2,f=0.05; px[a]+=(mx-px[a])*f; py[a]+=(my-py[a])*f; px[b]+=(mx-px[b])*f; py[b]+=(my-py[b])*f; } }
         node.forEach((o,i)=>{ o.tx=px[i]; o.ty=py[i]; o.tz=o.az*0.35; });
         _edges=pairs.map(p=>[node[p[0]],node[p[1]]]); _dim=function(o){ return inv[o.i]?1:0.25; };
-        this.flex=pairs.length?(pairs.length+' blur'+(pairs.length>1?'s':'')+' — drawn together, decaying as you tell them apart'):'no blurs caught yet — keep playing'; } }
+        this.flex=pairs.length?(pairs.length+' blur'+(pairs.length>1?'s':'')+' — drawn together, decaying as you tell them apart'):'no blurs caught yet — keep playing'; } },
+    { id:'engine', name:'THE ENGINE', flex:'',
+      apply:function(){ let gb; try{ gb=computeGenerativeBasis(); }catch(e){ gb=null; }
+        const tierOf={}; let T=0,basisSize=0,deepest=0;
+        if(gb){ T=gb.tiers.length; basisSize=gb.basisSize; gb.tiers.forEach((t,ti)=>{ t.atoms.forEach(a=>{ tierOf[a.rank]=ti; if(a.rank>deepest)deepest=a.rank; }); }); }
+        const GAr=2.39996, tc={};
+        node.forEach((o,i)=>{ if(tierOf[i]!=null){ const t=tierOf[i],k=(tc[t]=(tc[t]||0)); tc[t]++; const rr=Rmin+(Rmax-Rmin)*((t+1)/(T+1)),ang=k*GAr+t*0.7; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=0; } else { const ang=i*GAr,rr=Rmax*1.12; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=-Rmax*0.4; } });
+        _edges=[]; _dim=function(o){ return tierOf[o.i]!=null?1:0.18; };
+        const reach=basisSize?Math.round(deepest/basisSize*10)/10:0;
+        this.flex=basisSize?(basisSize+'-atom basis → '+reach+'× reach · a generator, not a memorizer'):'basis forming…'; } },
+    { id:'reading', name:'THE READING', flex:'',
+      apply:function(){ const GAr=2.39996;
+        node.forEach((o,i)=>{ const rr=Rmax*Math.sqrt((i+0.5)/N),ang=i*GAr; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=0; });
+        _edges=[]; let ws=0,wa=0; for(let i=0;i<N;i++){ const w=1/(i+1); wa+=w; if(node[i].seen) ws+=w; }
+        const pct=wa?Math.round(ws/wa*100):0; _dim=function(o){ return o.seen?1:0.18; };
+        this.flex='you can read ~'+pct+'% of running text on sight'; } }
   ];
   let lensIdx=0, currentLens=LENSES[0];
   let yaw=0,zoom=1,dragging=false,lastX=0,moved=0,tapFx=null;
