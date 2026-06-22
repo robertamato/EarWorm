@@ -358,6 +358,12 @@ $('charDetail-back').onclick=()=>{
     show('session'); renderCard();
   }
 };
+// Atom card back: 'sky'/walked-link → home WITHOUT re-render, so the constellation
+// closure keeps its yaw/zoom and the camera is exactly where you left it.
+if($('atomCard-back')) $('atomCard-back').onclick=()=>{
+  const dest=(atomCardFrom==='sky'||atomCardFrom==='atomCard'||!atomCardFrom)?'home':atomCardFrom;
+  show(dest);
+};
 $('startTone').onclick=()=>{
   if(_startStudyPending) return;
   _startStudyPending=true;

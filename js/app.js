@@ -2678,6 +2678,8 @@ function renderConstellation(){
   for(let f=0;f<fibers.length;f++){const a=fibers[f][0],b=fibers[f][1]; if(node[a].seen&&node[b].seen) edges.push([node[a],node[b]]);}
   const frR=Rmin+(Rmax-Rmin)*Math.sqrt(Math.min(frontier(),N)/N);
   let yaw=0,zoom=1,dragging=false,lastX=0,moved=0,tapFx=null;
+  // Press-and-hold → open the atom's detail card (tap stays pure TTS). project_fibroid.
+  let holdStar=null,holdT0=0,holdFired=false,holdTimer=null; const HOLD_MS=450;
   const pts=new Map(); let pinchD0=0,zoom0=1;
   const CJK="'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
   function proj(o){
@@ -2734,6 +2736,12 @@ function renderConstellation(){
       if(dt>520) tapFx=null;
       else{ const o=node[tapFx.i]; if(o&&o._sx!=null){ const k=dt/520; ctx.strokeStyle='rgba(255,255,255,'+(0.6*(1-k))+')'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(o._sx,o._sy,5+k*28,0,7); ctx.stroke(); } }
     }
+    // press-and-hold charge ring — fills as you hold a star; opens its card at completion
+    if(holdStar && holdStar._sx!=null && !holdFired){
+      const prog=Math.min(1,(performance.now()-holdT0)/HOLD_MS);
+      ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.arc(holdStar._sx,holdStar._sy,15,-Math.PI/2,-Math.PI/2+prog*6.2832); ctx.stroke();
+    }
   }
   function visible(){ return !document.hidden && $('home') && $('home').style.display!=='none'; }
   function loop(){
@@ -2745,32 +2753,37 @@ function renderConstellation(){
   function py(e){const r=cv.getBoundingClientRect(); return (e.clientY-r.top)/r.height*Hc;}
   function clampZoom(z){return Math.max(0.7,Math.min(8,z));}
   function hideHint(){const h=document.getElementById('mapHint'); if(h) h.style.opacity='0';}
+  function starAtPx(mx,my){ let best=null,bd=1e9; for(let i=0;i<N;i++){const o=node[i]; if(!o.seen||o._sx==null)continue; const d=(o._sx-mx)*(o._sx-mx)+(o._sy-my)*(o._sy-my); if(d<bd){bd=d;best=o;}} return (best&&bd<420)?best:null; }
   function handleTap(e){
-    const mx=px(e),my=py(e); let best=null,bd=1e9;
-    for(let i=0;i<N;i++){const o=node[i]; if(!o.seen||o._sx==null)continue; const d=(o._sx-mx)*(o._sx-mx)+(o._sy-my)*(o._sy-my); if(d<bd){bd=d;best=o;}}
-    if(best&&bd<420){ if(S.sound!=='mute') speak(D[best.i][0],activeCourse().langCode); tapFx={i:best.i,t0:performance.now()}; }
+    const best=starAtPx(px(e),py(e));
+    if(best){ if(S.sound!=='mute') speak(D[best.i][0],activeCourse().langCode); tapFx={i:best.i,t0:performance.now()}; }
   }
+  function cancelHold(){ if(holdTimer){clearTimeout(holdTimer);holdTimer=null;} holdStar=null; }
+  function openHeldAtom(){ if(!holdStar) return; holdFired=true; const idx=holdStar.i; cancelHold(); if(typeof openAtomDetail==='function') openAtomDetail(idx,'sky'); }
   cv.addEventListener('pointerdown',e=>{
     try{cv.setPointerCapture(e.pointerId);}catch(_){}
     pts.set(e.pointerId,{x:px(e),y:py(e)}); hideHint();
-    if(pts.size===1){ dragging=true; moved=0; lastX=px(e); cv.style.cursor='grabbing'; }
-    else if(pts.size===2){ dragging=false; const a=[...pts.values()]; pinchD0=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1; zoom0=zoom; }
+    if(pts.size===1){ dragging=true; moved=0; lastX=px(e); cv.style.cursor='grabbing';
+      holdFired=false; cancelHold(); const hs=starAtPx(px(e),py(e)); if(hs){ holdStar=hs; holdT0=performance.now(); holdTimer=setTimeout(openHeldAtom,HOLD_MS); } }
+    else if(pts.size===2){ dragging=false; cancelHold(); const a=[...pts.values()]; pinchD0=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1; zoom0=zoom; }
   });
   cv.addEventListener('pointermove',e=>{
     if(!pts.has(e.pointerId)) return;
     pts.set(e.pointerId,{x:px(e),y:py(e)});
-    if(pts.size>=2){ const a=[...pts.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y); zoom=clampZoom(zoom0*(d/(pinchD0||1))); }
-    else if(dragging){ const x=px(e),dx=x-lastX; lastX=x; moved+=Math.abs(dx); yaw+=dx*0.006; }
+    if(pts.size>=2){ cancelHold(); const a=[...pts.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y); zoom=clampZoom(zoom0*(d/(pinchD0||1))); }
+    else if(dragging){ const x=px(e),dx=x-lastX; lastX=x; moved+=Math.abs(dx); yaw+=dx*0.006; if(moved>6&&holdStar) cancelHold(); }
   });
   function endPtr(e){
     const wasTap=(pts.size===1 && dragging && moved<6);
     pts.delete(e.pointerId);
-    if(pts.size===0){ cv.style.cursor='grab'; if(wasTap) handleTap(e); dragging=false; }
+    if(pts.size===0){ cv.style.cursor='grab'; cancelHold(); if(wasTap && !holdFired) handleTap(e); dragging=false; }
     else if(pts.size===1){ const a=[...pts.values()][0]; dragging=true; lastX=a.x; moved=99; }  // resume orbit after pinch (suppress tap)
   }
   cv.addEventListener('pointerup',endPtr);
   cv.addEventListener('pointercancel',endPtr);
   cv.addEventListener('wheel',e=>{ e.preventDefault(); hideHint(); zoom=clampZoom(zoom*(1-e.deltaY*0.0030)); },{passive:false});
+  // right-click a star → open its atom card (desktop power shortcut for press-and-hold)
+  cv.addEventListener('contextmenu',e=>{ e.preventDefault(); const hs=starAtPx(px(e),py(e)); if(hs && typeof openAtomDetail==='function') openAtomDetail(hs.i,'sky'); });
   // POS legend
   const leg=document.createElement('div');
   leg.style.cssText='position:absolute;top:24px;left:8px;z-index:2;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';
@@ -3062,6 +3075,7 @@ function show(view){
   $('mc').style.display=view==='mc'?'flex':'none';
   $('radDetail').style.display=view==='radDetail'?'flex':'none';
   $('charDetail').style.display=view==='charDetail'?'flex':'none';
+  if($('atomCard')) $('atomCard').style.display=view==='atomCard'?'flex':'none';
   $('tone').style.display=view==='tone'?'flex':'none';
   $('deckMgr').style.display=view==='deckMgr'?'flex':'none';
   $('study').style.display=view==='study'?'flex':'none';
@@ -3925,6 +3939,84 @@ function jumpToCard(i){
 
 /* ============ CHAR DETAIL ============ */
 
+
+// ── THE UNIFIED ATOM ENTRY — the Pokédex card (course-general) ───────────────
+// One renderer for the atom's "dictionary entry," opened from anywhere (fibroid hold,
+// card tap, browser). Collectible-card frame: dex number (rank) · POS type badge (in the
+// star's POS-palette color) · glyph + ALWAYS-ON romanization · silent LV/XP bar · a
+// depth-gated lore box · footer. v1 = deterministic; LLM-composed examples drop into the
+// same lore seams later. Gates are DEFAULTED here, tuned live. Transition = plain show()
+// for now; the color-flood zoom (project_fibroid) slots into this seam.
+let atomCardFrom='home';
+function openAtomDetail(i, origin){
+  if(i==null||i<0||!D[i]) return;
+  atomCardFrom = origin || 'home';
+  const _esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>c==='&'?'&amp;':c==='<'?'&lt;':'&gt;');
+  const ci=card(i), word=D[i][0], syls=D[i][1]||[], def=D[i][2]||'', posStr=D[i][4]||'';
+  const fg='#e8efe9';
+  const sector=(typeof macroPOS==='function')?macroPOS(posStr):'MISC';
+  const col=(typeof posColor==='function')?posColor(sector):[160,180,170];
+  const colRGB='rgb('+col[0]+','+col[1]+','+col[2]+')', colSoft='rgba('+col[0]+','+col[1]+','+col[2]+',0.16)';
+  const m=masteryScore(i), st=state(i), stage=(ci.axisStage&&ci.axisStage.meaning)||0;
+  const dexNum='#'+String(i+1).padStart(3,'0'), seenCount=ci.exp||0;
+  const CJKf=(typeof charFont==='function')?charFont():"font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const redundant=(typeof _readingRedundant==='function')&&_readingRedundant();
+  // POS type LABEL is gated lay→formal (color is always shown); target metalanguage = later.
+  const LAY={VERB:'action',NOUN:'thing',PRON:'pointer',ADJ:'describer',ADV:'modifier',PART:'particle',CONJ:'connector',MISC:'word'};
+  const FORMAL={VERB:'verb',NOUN:'noun',PRON:'pronoun',ADJ:'adjective',ADV:'adverb',PART:'particle',CONJ:'conjunction',MISC:'word'};
+  const typeLabel=(st>=2?FORMAL:LAY)[sector]||'word';
+  // Romanization — ALWAYS on, unless the script already IS the romanization (VN).
+  let romanHTML='';
+  if(!redundant && syls.length){ romanHTML=syls.map(s=>'<span style="color:'+toneColor(s[1],fg)+'">'+_esc(s[0])+'</span>').join(' '); }
+  // ── LORE (depth-gated) ──
+  let lore='<div style="font-size:14px;opacity:.92;">'+_esc(def)+'</div>';
+  if(st>=2){
+    try{
+      const sents=(typeof getPuzzleSentences==='function')?(getPuzzleSentences(i)||[]):[];
+      const valid=sents.filter(s=>s&&s[0]&&(typeof sentenceAllIntroduced!=='function'||sentenceAllIntroduced(s[0])));
+      if(valid.length){
+        const sent=valid[0], showEn=(st<3);
+        lore+='<div style="border-top:0.5px solid rgba(255,255,255,0.1);padding-top:10px;">'
+            +'<div style="font-size:18px;'+CJKf+'">'+_esc(sent[0])+'</div>'
+            +((showEn&&sent[2])?'<div style="font-size:12px;opacity:.55;margin-top:3px;">'+_esc(sent[2])+'</div>':'')+'</div>';
+      }
+    }catch(e){}
+    const rivals=(typeof confusionDistractorIdx==='function')?confusionDistractorIdx(i,1):[];
+    if(rivals.length){ const r=rivals[0];
+      lore+='<div style="font-size:13px;opacity:.85;">≠ <span class="atomLink" data-idx="'+r+'" style="border-bottom:1px solid rgba(255,255,255,0.35);cursor:pointer;'+CJKf+'">'+_esc(D[r][0])+'</span> <span style="opacity:.6;">'+_esc(D[r][2]||'')+'</span></div>';
+    }
+  }
+  const lvl=isMastered(i)?'MAX':String(stage), pct=Math.round(Math.min(1,m/4)*100);
+  const stLabel=['undiscovered','learning','familiar','mastered'][st]||'';
+  const html=
+    '<div style="background:#0a0d0b;border:1px solid rgba(255,255,255,0.2);border-radius:14px;overflow:hidden;max-width:420px;width:100%;margin:0 auto;">'
+    +'<div style="height:3px;background:'+colRGB+';"></div>'
+    +'<div style="padding:16px 18px;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;">'
+    +'<span style="font-family:ui-monospace,monospace;font-size:12px;opacity:.5;">'+dexNum+'</span>'
+    +'<span style="font-size:11px;letter-spacing:1px;color:'+colRGB+';background:'+colSoft+';border:0.5px solid '+colRGB+';border-radius:20px;padding:2px 10px;">'+typeLabel+'</span>'
+    +'</div>'
+    +'<div style="display:flex;align-items:center;justify-content:center;gap:18px;margin:18px 0 8px;">'
+    +'<span style="font-size:60px;line-height:1;'+CJKf+'">'+_esc(word)+'</span>'
+    +'<span id="atomCardSpeak" style="font-size:22px;cursor:pointer;opacity:.85;">🔊</span>'
+    +'</div>'
+    +(romanHTML?'<div style="text-align:center;font-size:15px;letter-spacing:1px;margin-bottom:16px;">'+romanHTML+'</div>':'<div style="height:6px;"></div>')
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">'
+    +'<span style="font-size:11px;opacity:.55;letter-spacing:1px;">LV '+lvl+'</span>'
+    +'<div style="flex:1;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;"><div style="width:'+pct+'%;height:100%;background:'+colRGB+';"></div></div>'
+    +'</div>'
+    +'<div style="background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">'+lore+'</div>'
+    +'<div style="font-size:11px;opacity:.45;margin-top:14px;letter-spacing:.5px;display:flex;gap:10px;flex-wrap:wrap;">'
+    +'<span>seen '+seenCount+'×</span><span>·</span><span>'+stLabel+'</span><span>·</span><span id="atomFindSky" style="cursor:pointer;opacity:.8;">✦ find in sky</span>'
+    +'</div></div></div>';
+  const body=$('atomCardBody');
+  if(body){ body.innerHTML=html; body.style.color=fg; }
+  const sp=$('atomCardSpeak'); if(sp) sp.onclick=()=>{ if(S.sound!=='mute') speak(word,activeCourse().langCode); };
+  const fs=$('atomFindSky'); if(fs) fs.onclick=()=>{ show('home'); };
+  if(body) body.querySelectorAll('.atomLink').forEach(el=>{ el.onclick=()=>{ openAtomDetail(+el.getAttribute('data-idx'),'atomCard'); }; });
+  if(S.sound!=='mute') speak(word,activeCourse().langCode); // the "cry"
+  show('atomCard');
+}
 
 function openCharDetail(word, charIdx, deckIdx){
   if(typeof _segMode==='function'&&_segMode()==='space') return; // no char detail for space-delimited courses
@@ -10268,6 +10360,12 @@ $('charDetail-back').onclick=()=>{
   } else {
     show('session'); renderCard();
   }
+};
+// Atom card back: 'sky'/walked-link → home WITHOUT re-render, so the constellation
+// closure keeps its yaw/zoom and the camera is exactly where you left it.
+if($('atomCard-back')) $('atomCard-back').onclick=()=>{
+  const dest=(atomCardFrom==='sky'||atomCardFrom==='atomCard'||!atomCardFrom)?'home':atomCardFrom;
+  show(dest);
 };
 $('startTone').onclick=()=>{
   if(_startStudyPending) return;

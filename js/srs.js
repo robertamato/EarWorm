@@ -234,6 +234,7 @@ function show(view){
   $('mc').style.display=view==='mc'?'flex':'none';
   $('radDetail').style.display=view==='radDetail'?'flex':'none';
   $('charDetail').style.display=view==='charDetail'?'flex':'none';
+  if($('atomCard')) $('atomCard').style.display=view==='atomCard'?'flex':'none';
   $('tone').style.display=view==='tone'?'flex':'none';
   $('deckMgr').style.display=view==='deckMgr'?'flex':'none';
   $('study').style.display=view==='study'?'flex':'none';
@@ -1097,6 +1098,84 @@ function jumpToCard(i){
 
 /* ============ CHAR DETAIL ============ */
 
+
+// ── THE UNIFIED ATOM ENTRY — the Pokédex card (course-general) ───────────────
+// One renderer for the atom's "dictionary entry," opened from anywhere (fibroid hold,
+// card tap, browser). Collectible-card frame: dex number (rank) · POS type badge (in the
+// star's POS-palette color) · glyph + ALWAYS-ON romanization · silent LV/XP bar · a
+// depth-gated lore box · footer. v1 = deterministic; LLM-composed examples drop into the
+// same lore seams later. Gates are DEFAULTED here, tuned live. Transition = plain show()
+// for now; the color-flood zoom (project_fibroid) slots into this seam.
+let atomCardFrom='home';
+function openAtomDetail(i, origin){
+  if(i==null||i<0||!D[i]) return;
+  atomCardFrom = origin || 'home';
+  const _esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>c==='&'?'&amp;':c==='<'?'&lt;':'&gt;');
+  const ci=card(i), word=D[i][0], syls=D[i][1]||[], def=D[i][2]||'', posStr=D[i][4]||'';
+  const fg='#e8efe9';
+  const sector=(typeof macroPOS==='function')?macroPOS(posStr):'MISC';
+  const col=(typeof posColor==='function')?posColor(sector):[160,180,170];
+  const colRGB='rgb('+col[0]+','+col[1]+','+col[2]+')', colSoft='rgba('+col[0]+','+col[1]+','+col[2]+',0.16)';
+  const m=masteryScore(i), st=state(i), stage=(ci.axisStage&&ci.axisStage.meaning)||0;
+  const dexNum='#'+String(i+1).padStart(3,'0'), seenCount=ci.exp||0;
+  const CJKf=(typeof charFont==='function')?charFont():"font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const redundant=(typeof _readingRedundant==='function')&&_readingRedundant();
+  // POS type LABEL is gated lay→formal (color is always shown); target metalanguage = later.
+  const LAY={VERB:'action',NOUN:'thing',PRON:'pointer',ADJ:'describer',ADV:'modifier',PART:'particle',CONJ:'connector',MISC:'word'};
+  const FORMAL={VERB:'verb',NOUN:'noun',PRON:'pronoun',ADJ:'adjective',ADV:'adverb',PART:'particle',CONJ:'conjunction',MISC:'word'};
+  const typeLabel=(st>=2?FORMAL:LAY)[sector]||'word';
+  // Romanization — ALWAYS on, unless the script already IS the romanization (VN).
+  let romanHTML='';
+  if(!redundant && syls.length){ romanHTML=syls.map(s=>'<span style="color:'+toneColor(s[1],fg)+'">'+_esc(s[0])+'</span>').join(' '); }
+  // ── LORE (depth-gated) ──
+  let lore='<div style="font-size:14px;opacity:.92;">'+_esc(def)+'</div>';
+  if(st>=2){
+    try{
+      const sents=(typeof getPuzzleSentences==='function')?(getPuzzleSentences(i)||[]):[];
+      const valid=sents.filter(s=>s&&s[0]&&(typeof sentenceAllIntroduced!=='function'||sentenceAllIntroduced(s[0])));
+      if(valid.length){
+        const sent=valid[0], showEn=(st<3);
+        lore+='<div style="border-top:0.5px solid rgba(255,255,255,0.1);padding-top:10px;">'
+            +'<div style="font-size:18px;'+CJKf+'">'+_esc(sent[0])+'</div>'
+            +((showEn&&sent[2])?'<div style="font-size:12px;opacity:.55;margin-top:3px;">'+_esc(sent[2])+'</div>':'')+'</div>';
+      }
+    }catch(e){}
+    const rivals=(typeof confusionDistractorIdx==='function')?confusionDistractorIdx(i,1):[];
+    if(rivals.length){ const r=rivals[0];
+      lore+='<div style="font-size:13px;opacity:.85;">≠ <span class="atomLink" data-idx="'+r+'" style="border-bottom:1px solid rgba(255,255,255,0.35);cursor:pointer;'+CJKf+'">'+_esc(D[r][0])+'</span> <span style="opacity:.6;">'+_esc(D[r][2]||'')+'</span></div>';
+    }
+  }
+  const lvl=isMastered(i)?'MAX':String(stage), pct=Math.round(Math.min(1,m/4)*100);
+  const stLabel=['undiscovered','learning','familiar','mastered'][st]||'';
+  const html=
+    '<div style="background:#0a0d0b;border:1px solid rgba(255,255,255,0.2);border-radius:14px;overflow:hidden;max-width:420px;width:100%;margin:0 auto;">'
+    +'<div style="height:3px;background:'+colRGB+';"></div>'
+    +'<div style="padding:16px 18px;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;">'
+    +'<span style="font-family:ui-monospace,monospace;font-size:12px;opacity:.5;">'+dexNum+'</span>'
+    +'<span style="font-size:11px;letter-spacing:1px;color:'+colRGB+';background:'+colSoft+';border:0.5px solid '+colRGB+';border-radius:20px;padding:2px 10px;">'+typeLabel+'</span>'
+    +'</div>'
+    +'<div style="display:flex;align-items:center;justify-content:center;gap:18px;margin:18px 0 8px;">'
+    +'<span style="font-size:60px;line-height:1;'+CJKf+'">'+_esc(word)+'</span>'
+    +'<span id="atomCardSpeak" style="font-size:22px;cursor:pointer;opacity:.85;">🔊</span>'
+    +'</div>'
+    +(romanHTML?'<div style="text-align:center;font-size:15px;letter-spacing:1px;margin-bottom:16px;">'+romanHTML+'</div>':'<div style="height:6px;"></div>')
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">'
+    +'<span style="font-size:11px;opacity:.55;letter-spacing:1px;">LV '+lvl+'</span>'
+    +'<div style="flex:1;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;"><div style="width:'+pct+'%;height:100%;background:'+colRGB+';"></div></div>'
+    +'</div>'
+    +'<div style="background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">'+lore+'</div>'
+    +'<div style="font-size:11px;opacity:.45;margin-top:14px;letter-spacing:.5px;display:flex;gap:10px;flex-wrap:wrap;">'
+    +'<span>seen '+seenCount+'×</span><span>·</span><span>'+stLabel+'</span><span>·</span><span id="atomFindSky" style="cursor:pointer;opacity:.8;">✦ find in sky</span>'
+    +'</div></div></div>';
+  const body=$('atomCardBody');
+  if(body){ body.innerHTML=html; body.style.color=fg; }
+  const sp=$('atomCardSpeak'); if(sp) sp.onclick=()=>{ if(S.sound!=='mute') speak(word,activeCourse().langCode); };
+  const fs=$('atomFindSky'); if(fs) fs.onclick=()=>{ show('home'); };
+  if(body) body.querySelectorAll('.atomLink').forEach(el=>{ el.onclick=()=>{ openAtomDetail(+el.getAttribute('data-idx'),'atomCard'); }; });
+  if(S.sound!=='mute') speak(word,activeCourse().langCode); // the "cry"
+  show('atomCard');
+}
 
 function openCharDetail(word, charIdx, deckIdx){
   if(typeof _segMode==='function'&&_segMode()==='space') return; // no char detail for space-delimited courses

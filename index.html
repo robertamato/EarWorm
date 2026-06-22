@@ -144,6 +144,9 @@
   #charDetail-def { font-size:11px; line-height:1.8; }
   #charDetail-rads { font-size:8px; width:100%; }
   #charDetail-note { font-size:8px; opacity:.7; }
+  #atomCard { flex:1; display:none; flex-direction:column; padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom)) 16px; gap:14px; overflow-y:auto; background:#070b08; color:#e8efe9; }
+  #atomCard-topbar { display:flex; justify-content:space-between; align-items:center; font-size:8px; }
+  #atomCard-topbar button { font-family:inherit; font-size:8px; padding:8px; border:3px solid; background:transparent; cursor:pointer; color:inherit; }
 
   /* ===== TONE DRILL ===== */
   #tone { flex:1; display:none; flex-direction:column; padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom)) 16px; gap:10px; }
@@ -508,6 +511,15 @@
       <div id="charDetail-rads"></div>
       <div id="charDetail-note"></div>
     </div>
+  </div>
+
+  <!-- THE ATOM CARD — unified Pokédex-style entry (openAtomDetail) -->
+  <div id="atomCard">
+    <div id="atomCard-topbar">
+      <button id="atomCard-back">◄ BACK</button>
+      <span style="font-size:8px;letter-spacing:3px;opacity:.45;">ATOM</span>
+    </div>
+    <div id="atomCardBody"></div>
   </div>
 
   <div id="tone">
