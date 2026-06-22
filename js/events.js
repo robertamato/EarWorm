@@ -372,7 +372,10 @@ if($('atomCard-back')) $('atomCard-back').onclick=()=>{
     return;
   }
   if(f==='session'){ show('session'); renderCard(); return; }
-  show('home'); // 'sky' / 'atomCard' / default
+  // 'sky' / 'atomCard' / default → home. From the sky, recede the color back down to the
+  // star (camera preserved by show('home') without re-render).
+  if(f==='sky' && _atomFloodXY){ const p=_atomFloodXY; atomFloodBack(p.x,p.y,_atomFloodRGB||'#9fd',function(){ show('home'); }); }
+  else show('home');
 };
 $('startTone').onclick=()=>{
   if(_startStudyPending) return;

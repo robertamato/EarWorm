@@ -350,7 +350,9 @@ function renderConstellation(){
     if(best){ if(S.sound!=='mute') speak(D[best.i][0],activeCourse().langCode); tapFx={i:best.i,t0:performance.now()}; }
   }
   function cancelHold(){ if(holdTimer){clearTimeout(holdTimer);holdTimer=null;} holdStar=null; }
-  function openHeldAtom(){ if(!holdStar) return; holdFired=true; const idx=holdStar.i; cancelHold(); if(typeof openAtomDetail==='function') openAtomDetail(idx,'sky'); }
+  // star's last projected canvas point → viewport coords, for the color-flood transition origin
+  function floodFrom(o){ if(!o||o._sx==null) return null; const r=cv.getBoundingClientRect(); return {x:r.left+(o._sx/Wc)*r.width, y:r.top+(o._sy/Hc)*r.height}; }
+  function openHeldAtom(){ if(!holdStar) return; holdFired=true; const o=holdStar, idx=o.i; try{ _atomFloodXY=floodFrom(o); }catch(e){ _atomFloodXY=null; } cancelHold(); if(typeof openAtomDetail==='function') openAtomDetail(idx,'sky'); }
   cv.addEventListener('pointerdown',e=>{
     try{cv.setPointerCapture(e.pointerId);}catch(_){}
     pts.set(e.pointerId,{x:px(e),y:py(e)}); hideHint();
@@ -374,7 +376,7 @@ function renderConstellation(){
   cv.addEventListener('pointercancel',endPtr);
   cv.addEventListener('wheel',e=>{ e.preventDefault(); hideHint(); zoom=clampZoom(zoom*(1-e.deltaY*0.0030)); },{passive:false});
   // right-click a star → open its atom card (desktop power shortcut for press-and-hold)
-  cv.addEventListener('contextmenu',e=>{ e.preventDefault(); const hs=starAtPx(px(e),py(e)); if(hs && typeof openAtomDetail==='function') openAtomDetail(hs.i,'sky'); });
+  cv.addEventListener('contextmenu',e=>{ e.preventDefault(); const hs=starAtPx(px(e),py(e)); if(hs && typeof openAtomDetail==='function'){ try{ _atomFloodXY=floodFrom(hs)||{x:e.clientX,y:e.clientY}; }catch(_){ _atomFloodXY={x:e.clientX,y:e.clientY}; } openAtomDetail(hs.i,'sky'); } });
   // POS legend
   const leg=document.createElement('div');
   leg.style.cssText='position:absolute;top:24px;left:8px;z-index:2;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';

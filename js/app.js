@@ -2759,7 +2759,9 @@ function renderConstellation(){
     if(best){ if(S.sound!=='mute') speak(D[best.i][0],activeCourse().langCode); tapFx={i:best.i,t0:performance.now()}; }
   }
   function cancelHold(){ if(holdTimer){clearTimeout(holdTimer);holdTimer=null;} holdStar=null; }
-  function openHeldAtom(){ if(!holdStar) return; holdFired=true; const idx=holdStar.i; cancelHold(); if(typeof openAtomDetail==='function') openAtomDetail(idx,'sky'); }
+  // star's last projected canvas point → viewport coords, for the color-flood transition origin
+  function floodFrom(o){ if(!o||o._sx==null) return null; const r=cv.getBoundingClientRect(); return {x:r.left+(o._sx/Wc)*r.width, y:r.top+(o._sy/Hc)*r.height}; }
+  function openHeldAtom(){ if(!holdStar) return; holdFired=true; const o=holdStar, idx=o.i; try{ _atomFloodXY=floodFrom(o); }catch(e){ _atomFloodXY=null; } cancelHold(); if(typeof openAtomDetail==='function') openAtomDetail(idx,'sky'); }
   cv.addEventListener('pointerdown',e=>{
     try{cv.setPointerCapture(e.pointerId);}catch(_){}
     pts.set(e.pointerId,{x:px(e),y:py(e)}); hideHint();
@@ -2783,7 +2785,7 @@ function renderConstellation(){
   cv.addEventListener('pointercancel',endPtr);
   cv.addEventListener('wheel',e=>{ e.preventDefault(); hideHint(); zoom=clampZoom(zoom*(1-e.deltaY*0.0030)); },{passive:false});
   // right-click a star → open its atom card (desktop power shortcut for press-and-hold)
-  cv.addEventListener('contextmenu',e=>{ e.preventDefault(); const hs=starAtPx(px(e),py(e)); if(hs && typeof openAtomDetail==='function') openAtomDetail(hs.i,'sky'); });
+  cv.addEventListener('contextmenu',e=>{ e.preventDefault(); const hs=starAtPx(px(e),py(e)); if(hs && typeof openAtomDetail==='function'){ try{ _atomFloodXY=floodFrom(hs)||{x:e.clientX,y:e.clientY}; }catch(_){ _atomFloodXY={x:e.clientX,y:e.clientY}; } openAtomDetail(hs.i,'sky'); } });
   // POS legend
   const leg=document.createElement('div');
   leg.style.cssText='position:absolute;top:24px;left:8px;z-index:2;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';
@@ -3965,6 +3967,33 @@ function atomHouseLine(i){
   // PRODUCED(4)/FLUENT(5): no production evidence yet → the house won't post a line that high.
   return {rung, name:ATOM_RUNGS[rung]};
 }
+// ── The color-flood ZOOM transition (project_fibroid hero animation) ─────────
+// A radial of the atom's color flies OUT of the star to engulf the viewport, then
+// recedes to reveal the card; reversed on back (recede back down to the star). The
+// star's viewport position is captured by the constellation gesture into _atomFloodXY.
+let _atomFloodXY=null, _atomFloodRGB=null;
+function _atomFloodEl(){ let ov=document.getElementById('atomFlood'); if(!ov){ ov=document.createElement('div'); ov.id='atomFlood'; document.body.appendChild(ov); } return ov; }
+function _floodR(x,y){ return Math.hypot(Math.max(x,window.innerWidth-x),Math.max(y,window.innerHeight-y))+50; }
+function atomFloodOpen(x,y,rgb,onCovered){
+  const ov=_atomFloodEl(), R=_floodR(x,y), c0='circle(0px at '+x+'px '+y+'px)', cR='circle('+R+'px at '+x+'px '+y+'px)';
+  ov.style.cssText='position:fixed;inset:0;z-index:300;pointer-events:none;background:'+rgb+';opacity:1;display:block;clip-path:'+c0+';-webkit-clip-path:'+c0+';';
+  ov.getBoundingClientRect(); // reflow so the transition fires
+  ov.style.transition='clip-path 240ms ease-out,-webkit-clip-path 240ms ease-out';
+  ov.style.clipPath=cR; ov.style.webkitClipPath=cR;
+  setTimeout(function(){ if(onCovered) onCovered();
+    ov.style.transition='opacity 260ms ease-in'; ov.style.opacity='0';
+    setTimeout(function(){ ov.style.display='none'; ov.style.opacity='1'; },280);
+  },250);
+}
+function atomFloodBack(x,y,rgb,onCovered){
+  const ov=_atomFloodEl(), R=_floodR(x,y), cR='circle('+R+'px at '+x+'px '+y+'px)', c0='circle(0px at '+x+'px '+y+'px)';
+  ov.style.cssText='position:fixed;inset:0;z-index:300;pointer-events:none;background:'+rgb+';opacity:1;display:block;clip-path:'+cR+';-webkit-clip-path:'+cR+';';
+  ov.getBoundingClientRect();
+  if(onCovered) onCovered(); // swap to the Sky underneath, while covered
+  ov.style.transition='clip-path 280ms ease-in,-webkit-clip-path 280ms ease-in';
+  ov.style.clipPath=c0; ov.style.webkitClipPath=c0;
+  setTimeout(function(){ ov.style.display='none'; },300);
+}
 let atomCardFrom='home';
 function openAtomDetail(i, origin){
   if(i==null||i<0||!D[i]) return;
@@ -4050,7 +4079,8 @@ function openAtomDetail(i, origin){
   const fs=$('atomFindSky'); if(fs) fs.onclick=()=>{ show('home'); };
   if(body) body.querySelectorAll('.atomLink').forEach(el=>{ el.onclick=()=>{ openAtomDetail(+el.getAttribute('data-idx'),'atomCard'); }; });
   if(S.sound!=='mute') speak(word,activeCourse().langCode); // the "cry"
-  show('atomCard');
+  if(origin==='sky' && _atomFloodXY){ _atomFloodRGB=colRGB; const f=_atomFloodXY; atomFloodOpen(f.x,f.y,colRGB,function(){ show('atomCard'); }); }
+  else { if(origin!=='sky'&&origin!=='atomCard') _atomFloodXY=null; show('atomCard'); }
 }
 
 function openCharDetail(word, charIdx, deckIdx){
@@ -10410,7 +10440,10 @@ if($('atomCard-back')) $('atomCard-back').onclick=()=>{
     return;
   }
   if(f==='session'){ show('session'); renderCard(); return; }
-  show('home'); // 'sky' / 'atomCard' / default
+  // 'sky' / 'atomCard' / default → home. From the sky, recede the color back down to the
+  // star (camera preserved by show('home') without re-render).
+  if(f==='sky' && _atomFloodXY){ const p=_atomFloodXY; atomFloodBack(p.x,p.y,_atomFloodRGB||'#9fd',function(){ show('home'); }); }
+  else show('home');
 };
 $('startTone').onclick=()=>{
   if(_startStudyPending) return;

@@ -1124,6 +1124,33 @@ function atomHouseLine(i){
   // PRODUCED(4)/FLUENT(5): no production evidence yet → the house won't post a line that high.
   return {rung, name:ATOM_RUNGS[rung]};
 }
+// ── The color-flood ZOOM transition (project_fibroid hero animation) ─────────
+// A radial of the atom's color flies OUT of the star to engulf the viewport, then
+// recedes to reveal the card; reversed on back (recede back down to the star). The
+// star's viewport position is captured by the constellation gesture into _atomFloodXY.
+let _atomFloodXY=null, _atomFloodRGB=null;
+function _atomFloodEl(){ let ov=document.getElementById('atomFlood'); if(!ov){ ov=document.createElement('div'); ov.id='atomFlood'; document.body.appendChild(ov); } return ov; }
+function _floodR(x,y){ return Math.hypot(Math.max(x,window.innerWidth-x),Math.max(y,window.innerHeight-y))+50; }
+function atomFloodOpen(x,y,rgb,onCovered){
+  const ov=_atomFloodEl(), R=_floodR(x,y), c0='circle(0px at '+x+'px '+y+'px)', cR='circle('+R+'px at '+x+'px '+y+'px)';
+  ov.style.cssText='position:fixed;inset:0;z-index:300;pointer-events:none;background:'+rgb+';opacity:1;display:block;clip-path:'+c0+';-webkit-clip-path:'+c0+';';
+  ov.getBoundingClientRect(); // reflow so the transition fires
+  ov.style.transition='clip-path 240ms ease-out,-webkit-clip-path 240ms ease-out';
+  ov.style.clipPath=cR; ov.style.webkitClipPath=cR;
+  setTimeout(function(){ if(onCovered) onCovered();
+    ov.style.transition='opacity 260ms ease-in'; ov.style.opacity='0';
+    setTimeout(function(){ ov.style.display='none'; ov.style.opacity='1'; },280);
+  },250);
+}
+function atomFloodBack(x,y,rgb,onCovered){
+  const ov=_atomFloodEl(), R=_floodR(x,y), cR='circle('+R+'px at '+x+'px '+y+'px)', c0='circle(0px at '+x+'px '+y+'px)';
+  ov.style.cssText='position:fixed;inset:0;z-index:300;pointer-events:none;background:'+rgb+';opacity:1;display:block;clip-path:'+cR+';-webkit-clip-path:'+cR+';';
+  ov.getBoundingClientRect();
+  if(onCovered) onCovered(); // swap to the Sky underneath, while covered
+  ov.style.transition='clip-path 280ms ease-in,-webkit-clip-path 280ms ease-in';
+  ov.style.clipPath=c0; ov.style.webkitClipPath=c0;
+  setTimeout(function(){ ov.style.display='none'; },300);
+}
 let atomCardFrom='home';
 function openAtomDetail(i, origin){
   if(i==null||i<0||!D[i]) return;
@@ -1209,7 +1236,8 @@ function openAtomDetail(i, origin){
   const fs=$('atomFindSky'); if(fs) fs.onclick=()=>{ show('home'); };
   if(body) body.querySelectorAll('.atomLink').forEach(el=>{ el.onclick=()=>{ openAtomDetail(+el.getAttribute('data-idx'),'atomCard'); }; });
   if(S.sound!=='mute') speak(word,activeCourse().langCode); // the "cry"
-  show('atomCard');
+  if(origin==='sky' && _atomFloodXY){ _atomFloodRGB=colRGB; const f=_atomFloodXY; atomFloodOpen(f.x,f.y,colRGB,function(){ show('atomCard'); }); }
+  else { if(origin!=='sky'&&origin!=='atomCard') _atomFloodXY=null; show('atomCard'); }
 }
 
 function openCharDetail(word, charIdx, deckIdx){
