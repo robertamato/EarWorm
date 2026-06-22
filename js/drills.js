@@ -993,32 +993,36 @@ function showWordOrderDrill(i){
         locked=true;
         const isCorrect=selected.join('')===correctOrder.join('');
         const respMs=Date.now()-cardShownAtMC;
-        // Show correct order
-        const slotsEl=document.getElementById('wordOrderSlots');
-        if(slotsEl){
-          slotsEl.style.opacity='1';
-          correctOrder.forEach(function(cw,ci){
-            const s=document.getElementById('slot'+ci);
-            if(s){
-              const col=selected[ci]===cw?'hsl(120,70%,50%)':'hsl(0,70%,50%)';
-              s.querySelectorAll('span').forEach(function(el){el.style.color=col;});
-            }
-          });
-        }
         recordChallengeResult(i,'word-order',isCorrect,respMs);
         recordObservation({mod:'word-order',comp:zh,fg:i,fax:'meaning',ok:isCorrect,opt:selected.join('')});
         recordAxisResultNew(i,'meaning',isCorrect,respMs);
         logAnswer(i,isCorrect,'word-order',respMs);
         if(isCorrect){
+          // De-hued correct: ink + bold across the placed slots (no green).
+          const slotsEl=document.getElementById('wordOrderSlots');
+          if(slotsEl){
+            slotsEl.style.opacity='1';
+            correctOrder.forEach(function(_,ci){
+              const s=document.getElementById('slot'+ci);
+              if(s){ s.querySelectorAll('span').forEach(function(el){el.style.color=fg;}); s.style.fontWeight='900'; }
+            });
+          }
           advanceMult();
           S.xp+=Math.round(computeXP(true,currentMultIdx,respMs)*fatigueXPMultiplier());
           if(S.sound!=='mute') speak(zh,activeCourse().langCode);
+          save();
+          armTapAdvance($('studyMC'),function(){nextStudyCard();},0);
         } else {
           resetMult();
           studyPending.push({idx:i,mod:'word-order'});
+          save();
+          // Correction moment: reveal the correct order, then require a manual
+          // re-build (active retrieval). No red/green — wrong is graphical + auditory.
+          enterWordOrderCorrection(i, correctOrder, fg, CJKf, function(){
+            if(S.sound!=='mute') speak(zh,activeCourse().langCode);
+            armTapAdvance($('studyMC'),function(){nextStudyCard();},0);
+          });
         }
-        save();
-        armTapAdvance($('studyMC'),function(){nextStudyCard();},isCorrect?0:1500);
       }
     };
     box.appendChild(b);
@@ -1042,6 +1046,69 @@ function showWordOrderDrill(i){
     armTapAdvance($('studyMC'),function(){nextStudyCard();},1200);
   };
   renderWagerControl('studyMCActions',i);
+}
+
+// Word-order correction moment (a DIFFERENT interaction than pick-one MC/cloze):
+// reveal the correct order as a faint reference strip, reset the slots+tiles, and make
+// the user rebuild the sentence left-to-right. The right next tile lands; a wrong next
+// tile is rejected graphically (dashed + dim flash) + beepError, never placed. Word
+// order is a SYNTAX error, not an atom confusion, so this writes NO confusion edge.
+function enterWordOrderCorrection(i, correctOrder, fg, CJKf, onResolve){
+  const box=$('studyMCChoices'); if(!box){ if(onResolve) onResolve(); return; }
+  if(typeof beepError==='function') beepError();
+  const el=$('studyMCExplain'); if(el){ el.textContent='NOT QUITE — NOW REBUILD IT IN ORDER'; el.style.color=fg; el.style.fontFamily='inherit'; }
+  const _hidePy=(typeof _readingRedundant==='function'&&_readingRedundant());
+  // Faint reference of the correct order (the scaffold the user reconstructs against).
+  const promptEl=$('studyMCPromptText');
+  if(promptEl && !document.getElementById('wordOrderRef')){
+    const ref=document.createElement('div'); ref.id='wordOrderRef';
+    ref.style.cssText='display:flex;gap:8px;justify-content:center;margin:6px 0 2px;opacity:.5;font-size:20px;letter-spacing:2px;'+CJKf;
+    ref.textContent=correctOrder.join(' ');
+    promptEl.appendChild(ref);
+  }
+  // Reset slots to empty.
+  correctOrder.forEach(function(_,si){
+    const s=document.getElementById('slot'+si);
+    if(s){ s.innerHTML='<span style="font-size:28px;line-height:1;"> </span>'; s.style.opacity='1'; s.style.fontWeight='400'; }
+  });
+  // Reset tiles to live + solid.
+  const tiles=[].slice.call(box.querySelectorAll('.choice'));
+  tiles.forEach(function(b){ b.dataset.used=''; b.style.opacity='1'; b.style.pointerEvents='auto'; b.style.borderStyle='solid'; });
+  let pos=0;
+  tiles.forEach(function(b){
+    b.onclick=function(){
+      if(b.dataset.used) return;
+      const w=b.dataset.word;
+      if(w===correctOrder[pos]){
+        b.dataset.used='1'; b.style.opacity='.3'; b.style.pointerEvents='none';
+        const slot=document.getElementById('slot'+pos);
+        if(slot){
+          const sIdx=D.findIndex(function(d){return d[0]===w;});
+          const sSyls=sIdx>=0?D[sIdx][1]:[];
+          let pyHTML='';
+          if(sSyls.length && !_hidePy){
+            pyHTML='<span style="font-size:9px;display:flex;gap:2px;font-family:\'Noto Sans\',Arial,sans-serif;">';
+            sSyls.forEach(function([s,t]){ pyHTML+='<span style="color:'+toneColor(t,fg)+'">'+s+'</span>'; });
+            pyHTML+='</span>';
+          }
+          slot.innerHTML='<span style="font-size:28px;line-height:1;'+CJKf+'">'+w+'</span>'+pyHTML;
+          slot.style.fontWeight='900';
+        }
+        pos++;
+        if(pos===correctOrder.length){
+          tiles.forEach(function(x){ x.style.pointerEvents='none'; });
+          const ref=document.getElementById('wordOrderRef'); if(ref) ref.remove();
+          if(el) el.textContent='';
+          if(onResolve) onResolve();
+        }
+      } else {
+        // Graphical reject — dashed + dim flash, no placement.
+        if(typeof beepError==='function') beepError();
+        b.style.borderStyle='dashed'; b.style.opacity='.4';
+        setTimeout(function(){ if(!b.dataset.used){ b.style.borderStyle='solid'; b.style.opacity='1'; } },260);
+      }
+    };
+  });
 }
 
 
