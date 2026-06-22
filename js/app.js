@@ -2565,8 +2565,31 @@ let activeCardIdx=-1; // always tracks current card regardless of modality
 // it. Rendered to canvas; the animation loop is generation-guarded so
 // re-renders never stack, and pauses when home is not visible.
 const POS_SECTORS=['NOUN','VERB','PRON','ADV','ADJ','PART','CONJ','MISC'];
-const POS_COLOR={NOUN:[255,184,77],VERB:[77,255,160],PRON:[77,216,255],ADV:[255,111,181],ADJ:[198,255,82],PART:[185,160,255],CONJ:[111,140,255],MISC:[255,122,77]};
-function posRGB(s){const c=POS_COLOR[s]||[160,180,170]; return 'rgb('+c[0]+','+c[1]+','+c[2]+')';}
+function hslToRgb(h,s,l){
+  h=((h%360)+360)%360; s/=100; l/=100;
+  const c=(1-Math.abs(2*l-1))*s, x=c*(1-Math.abs((h/60)%2-1)), m=l-c/2;
+  let r=0,g=0,b=0;
+  if(h<60){r=c;g=x;} else if(h<120){r=x;g=c;} else if(h<180){g=c;b=x;}
+  else if(h<240){g=x;b=c;} else if(h<300){r=x;b=c;} else {r=c;b=x;}
+  return [Math.round((r+m)*255),Math.round((g+m)*255),Math.round((b+m)*255)];
+}
+// Per-app-open POS palette: each category gets a golden-angle-spaced hue, randomly
+// permuted + offset, frozen for the sitting. A page load re-executes this module and
+// clears _posPalette, so it reshuffles only on close/reopen — STABLE within a sitting,
+// unlike the per-atom session hue (which churns per study session). Color here = POS
+// CATEGORY (~8 distinct clusters = legible structure); it is NOT the atom-identity
+// channel, and the Sky is a dashboard, not a measurement surface, so the two don't
+// collide. Reshuffle per open is what keeps a durable "amber=noun" crutch from forming.
+let _posPalette=null;
+function _buildPosPalette(){
+  const GAp=137.508, off=Math.random()*360;
+  const order=POS_SECTORS.slice();
+  for(let i=order.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=order[i]; order[i]=order[j]; order[j]=t; }
+  _posPalette={};
+  order.forEach(function(s,k){ _posPalette[s]=hslToRgb(off+k*GAp,78,64); });
+}
+function posColor(s){ if(!_posPalette) _buildPosPalette(); return _posPalette[s]||[160,180,170]; }
+function posRGB(s){ const c=posColor(s); return 'rgb('+c[0]+','+c[1]+','+c[2]+')'; }
 function macroPOS(p){
   p=(p||'').toLowerCase();
   if(p.indexOf('pronoun')>=0) return 'PRON';
@@ -2678,7 +2701,7 @@ function renderConstellation(){
     const ps=node.map(o=>{const p=proj(o); p.o=o; o._sx=null; return p;}).sort((a,b)=>b.depth-a.depth);
     const labels=[];
     for(let q=0;q<ps.length;q++){
-      const p=ps[q],o=p.o,c=POS_COLOR[o.pos];
+      const p=ps[q],o=p.o,c=posColor(o.pos);
       if(!o.seen){ ctx.fillStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.12)'; ctx.beginPath(); ctx.arc(p.sx,p.sy,1.5*p.sc,0,7); ctx.fill(); continue; }
       const halo=(o.st>=3?13:o.st>=2?10:8)*p.sc, ha=(o.st>=3?0.34:o.st>=2?0.22:0.15);
       const g=ctx.createRadialGradient(p.sx,p.sy,0,p.sx,p.sy,halo);
