@@ -2671,12 +2671,31 @@ function renderConstellation(){
     const r=(k===0)?Rmin:Rmin+(Rmax-Rmin)*Math.sqrt(i/N);
     const seen=S.cards[i]&&S.cards[i].seen, st=state(i);
     const fwd=!seen?-Rmax*0.30:(st-1)*Rmax*0.19, z=fwd+(hash(i+1)-0.5)*Rmax*0.62;
-    node[i]={i:i,pos:s,seen:seen,st:st,x:r*Math.cos(a),y:r*Math.sin(a),z:z,_sx:null,_sy:null};
+    const nx=r*Math.cos(a), ny=r*Math.sin(a);
+    // ax/ay/az = anatomy base; tx/ty/tz = current lens target (draw loop eases x/y/z → t*)
+    node[i]={i:i,pos:s,seen:seen,st:st,x:nx,y:ny,z:z,ax:nx,ay:ny,az:z,tx:nx,ty:ny,tz:z,_sx:null,_sy:null};
   }
   // fibers between introduced atoms
   const fibers=constellationFibers(),edges=[];
   for(let f=0;f<fibers.length;f++){const a=fibers[f][0],b=fibers[f][1]; if(node[a].seen&&node[b].seen) edges.push([node[a],node[b]]);}
   const frR=Rmin+(Rmax-Rmin)*Math.sqrt(Math.min(frontier(),N)/N);
+  // ── LENS ENGINE: the same star field, re-projected. Each lens sets per-node targets
+  // (tx,ty,tz); the draw loop eases toward them, so switching MORPHS the constellation.
+  // It also swaps the edges + a dim() emphasis. New insight = a new lens, not a new screen.
+  let _edges=edges, _dim=null, _lensId='anatomy';
+  function _confusionPairs(){ const map={}; if(S.confusion){ Object.keys(S.confusion).forEach(a=>{ const ai=+a; Object.keys(S.confusion[ai]||{}).forEach(b=>{ const bi=+b; if(node[ai]&&node[bi]&&node[ai].seen&&node[bi].seen){ const n=(S.confusion[ai][bi]&&S.confusion[ai][bi].n)||0; if(n>0){ const key=ai<bi?ai+'_'+bi:bi+'_'+ai; map[key]=(map[key]||0)+n; } } }); }); } return Object.keys(map).map(k=>{ const p=k.split('_'); return [+p[0],+p[1],map[k]]; }); }
+  const LENSES=[
+    { id:'anatomy', name:'ANATOMY', flex:'your words, mapped by grammar',
+      apply:function(){ node.forEach(o=>{ o.tx=o.ax; o.ty=o.ay; o.tz=o.az; }); _edges=edges; _dim=null; } },
+    { id:'web', name:'THE WEB', flex:'',
+      apply:function(){ const pairs=_confusionPairs(); const px=node.map(o=>o.ax), py=node.map(o=>o.ay), inv={};
+        for(let q=0;q<pairs.length;q++){ inv[pairs[q][0]]=1; inv[pairs[q][1]]=1; }
+        for(let it=0;it<45;it++){ for(let q=0;q<pairs.length;q++){ const a=pairs[q][0],b=pairs[q][1],mx=(px[a]+px[b])/2,my=(py[a]+py[b])/2,f=0.05; px[a]+=(mx-px[a])*f; py[a]+=(my-py[a])*f; px[b]+=(mx-px[b])*f; py[b]+=(my-py[b])*f; } }
+        node.forEach((o,i)=>{ o.tx=px[i]; o.ty=py[i]; o.tz=o.az*0.35; });
+        _edges=pairs.map(p=>[node[p[0]],node[p[1]]]); _dim=function(o){ return inv[o.i]?1:0.25; };
+        this.flex=pairs.length?(pairs.length+' blur'+(pairs.length>1?'s':'')+' — drawn together, decaying as you tell them apart'):'no blurs caught yet — keep playing'; } }
+  ];
+  let lensIdx=0, currentLens=LENSES[0];
   let yaw=0,zoom=1,dragging=false,lastX=0,moved=0,tapFx=null;
   // Press-and-hold → open the atom's detail card (tap stays pure TTS). project_fibroid.
   let holdStar=null,holdT0=0,holdFired=false,holdTimer=null; const HOLD_MS=450;
@@ -2697,22 +2716,29 @@ function renderConstellation(){
   function draw(){
     const now=performance.now();
     ctx.clearRect(0,0,Wc,Hc);
-    ctx.strokeStyle='rgba(77,255,160,0.22)'; ctx.setLineDash([2,7]); ctx.lineWidth=1; ctx.beginPath();
-    for(let t=0;t<=64;t++){const aa=t/64*2*Math.PI,p=proj({x:frR*Math.cos(aa),y:frR*Math.sin(aa),z:0}); if(t===0)ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);} ctx.stroke(); ctx.setLineDash([]);
-    for(let e=0;e<edges.length;e++){const a=proj(edges[e][0]),b=proj(edges[e][1]); ctx.strokeStyle='rgba(125,255,192,0.15)'; ctx.lineWidth=0.7; ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();}
+    // morph: ease every node toward its current lens target — a lens switch animates here
+    for(let q=0;q<node.length;q++){ const o=node[q]; o.x+=(o.tx-o.x)*0.14; o.y+=(o.ty-o.y)*0.14; o.z+=(o.tz-o.z)*0.14; }
+    if(_lensId==='anatomy'){
+      ctx.strokeStyle='rgba(77,255,160,0.22)'; ctx.setLineDash([2,7]); ctx.lineWidth=1; ctx.beginPath();
+      for(let t=0;t<=64;t++){const aa=t/64*2*Math.PI,p=proj({x:frR*Math.cos(aa),y:frR*Math.sin(aa),z:0}); if(t===0)ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);} ctx.stroke(); ctx.setLineDash([]);
+    }
+    const _webE=(_lensId==='web');
+    for(let e=0;e<_edges.length;e++){const a=proj(_edges[e][0]),b=proj(_edges[e][1]); ctx.strokeStyle=_webE?'rgba(255,255,255,0.30)':'rgba(125,255,192,0.15)'; ctx.lineWidth=_webE?1:0.7; ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();}
     const ps=node.map(o=>{const p=proj(o); p.o=o; o._sx=null; return p;}).sort((a,b)=>b.depth-a.depth);
     const labels=[];
     for(let q=0;q<ps.length;q++){
-      const p=ps[q],o=p.o,c=posColor(o.pos);
+      const p=ps[q],o=p.o,c=posColor(o.pos),dm=_dim?_dim(o):1;
       if(!o.seen){ ctx.fillStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.12)'; ctx.beginPath(); ctx.arc(p.sx,p.sy,1.5*p.sc,0,7); ctx.fill(); continue; }
-      const halo=(o.st>=3?13:o.st>=2?10:8)*p.sc, ha=(o.st>=3?0.34:o.st>=2?0.22:0.15);
+      const halo=(o.st>=3?13:o.st>=2?10:8)*p.sc, ha=(o.st>=3?0.34:o.st>=2?0.22:0.15)*dm;
       const g=ctx.createRadialGradient(p.sx,p.sy,0,p.sx,p.sy,halo);
       g.addColorStop(0,'rgba('+c[0]+','+c[1]+','+c[2]+','+ha+')'); g.addColorStop(1,'rgba('+c[0]+','+c[1]+','+c[2]+',0)');
       ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.sx,p.sy,halo,0,7); ctx.fill();
       const core=(o.st>=3?4:o.st>=2?3.2:2.6)*p.sc;
+      ctx.globalAlpha=dm;
       ctx.fillStyle=o.st>=3?'#ffffff':'rgb('+c[0]+','+c[1]+','+c[2]+')';
       ctx.beginPath(); ctx.arc(p.sx,p.sy,core,0,7); ctx.fill();
       if(o.st>=3){ ctx.strokeStyle='rgb('+c[0]+','+c[1]+','+c[2]+')'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(p.sx,p.sy,core+2,0,7); ctx.stroke(); }
+      ctx.globalAlpha=1;
       o._sx=p.sx; o._sy=p.sy;
       // detail-on-demand: once zoomed in, on-screen seen stars earn a label
       if(zoom>=2.0 && p.sx>-30&&p.sx<Wc+30&&p.sy>-30&&p.sy<Hc+50) labels.push({p:p,o:o,c:c,core:core});
@@ -2803,6 +2829,14 @@ function renderConstellation(){
   hint.style.cssText='position:absolute;left:8px;bottom:6px;z-index:2;font-size:9px;letter-spacing:1px;color:#9fd;opacity:.4;transition:opacity .5s;pointer-events:none;';
   hint.textContent='drag · pinch or scroll to zoom · tap to hear';
   host.appendChild(hint);
+  // lens switcher (top-right) — cycle the lenses; shows the active lens + its flex line
+  const lensCtl=document.createElement('div');
+  lensCtl.style.cssText='position:absolute;top:6px;right:8px;z-index:3;text-align:right;cursor:pointer;font-size:9px;letter-spacing:1px;max-width:54%;';
+  host.appendChild(lensCtl);
+  function updateLensUI(){ lensCtl.innerHTML='<div style="opacity:.85;">◳ '+currentLens.name+' ▸</div><div style="font-size:8px;opacity:.5;margin-top:2px;line-height:1.3;">'+(currentLens.flex||'')+'</div>'; }
+  function applyLens(idx){ lensIdx=((idx%LENSES.length)+LENSES.length)%LENSES.length; currentLens=LENSES[lensIdx]; _lensId=currentLens.id; currentLens.apply(); updateLensUI(); }
+  lensCtl.onclick=function(e){ e.stopPropagation(); applyLens(lensIdx+1); };
+  applyLens(0);
   loop();
 }
 function renderHome(){
