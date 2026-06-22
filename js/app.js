@@ -4041,12 +4041,17 @@ function openAtomDetail(i, origin){
     } }catch(e){}
   }
   const hl=atomHouseLine(i);
+  // "new lore unlocked" glow: if the house line rose SINCE YOU LAST OPENED this card, the
+  // newly-earned rung(s) pulse. First view sets the baseline silently (no glow). Quiet beat.
+  const _firstView=(ci._cardRung==null), _prevRung=_firstView?hl.rung:ci._cardRung;
   let ladder='';
   for(let s=0;s<6;s++){
     const locked=s>=ATOM_RUNG_LOCKED_FROM, filled=(hl.rung>=0 && s<=hl.rung);
-    const seg=locked?'background:rgba(255,255,255,0.04);border:1px dashed rgba(255,255,255,0.18);':'background:'+(filled?colRGB:'rgba(255,255,255,0.12)')+';';
+    const isNew=(!locked && hl.rung>=0 && s>_prevRung && s<=hl.rung);
+    const seg=(locked?'background:rgba(255,255,255,0.04);border:1px dashed rgba(255,255,255,0.18);':'background:'+(filled?colRGB:'rgba(255,255,255,0.12)')+';')+(isNew?'animation:rungGlow 1.1s ease-out 0.25s;':'');
     ladder+='<div title="'+ATOM_RUNGS[s]+(locked?' — needs production':'')+'" style="flex:1;height:8px;border-radius:2px;'+seg+'"></div>';
   }
+  if(ci._cardRung!==hl.rung){ ci._cardRung=hl.rung; try{ save(); }catch(e){} }
   const lvLabel=hl.rung<0?'—':('LV '+hl.rung+' · '+hl.name);
   const stLabel=['undiscovered','learning','familiar','mastered'][st]||'';
   const html=
