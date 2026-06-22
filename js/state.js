@@ -226,7 +226,7 @@ function renderConstellation(){
   const N=D.length; if(!N) return;
   // canvas sized to the hero region (responsive, full-bleed)
   const cv=document.createElement('canvas');
-  cv.style.cssText='display:block;width:100%;height:46vh;max-height:540px;min-height:300px;cursor:grab;touch-action:none;';
+  cv.style.cssText='display:block;width:100%;height:54vh;max-height:620px;min-height:340px;cursor:grab;touch-action:none;';
   host.appendChild(cv);
   // Vertical scrims: the Sky bleeds full-bleed, so its top/bottom stars must FADE into the
   // dark field instead of being guillotined at the seam with the opaque Masthead / Verb.
@@ -234,18 +234,18 @@ function renderConstellation(){
   // hint (below) so those stay crisp on top of the fade.
   const _homeBg='#070b08';
   const scrimTop=document.createElement('div');
-  scrimTop.style.cssText='position:absolute;left:0;right:0;top:0;height:60px;pointer-events:none;z-index:1;'+
-    'background:linear-gradient(to bottom,'+_homeBg+' 0%,'+_homeBg+'cc 34%,rgba(7,11,8,0) 100%);';
+  scrimTop.style.cssText='position:absolute;left:0;right:0;top:0;height:50px;pointer-events:none;z-index:1;'+
+    'background:linear-gradient(to bottom,rgba(7,11,8,0.9) 0%,rgba(7,11,8,0.32) 45%,rgba(7,11,8,0) 100%);';
   const scrimBot=document.createElement('div');
-  scrimBot.style.cssText='position:absolute;left:0;right:0;bottom:0;height:74px;pointer-events:none;z-index:1;'+
-    'background:linear-gradient(to top,'+_homeBg+' 0%,'+_homeBg+'cc 30%,rgba(7,11,8,0) 100%);';
+  scrimBot.style.cssText='position:absolute;left:0;right:0;bottom:0;height:64px;pointer-events:none;z-index:1;'+
+    'background:linear-gradient(to top,'+_homeBg+' 0%,rgba(7,11,8,0.45) 38%,rgba(7,11,8,0) 100%);';
   host.appendChild(scrimTop); host.appendChild(scrimBot);
   const ctx=cv.getContext('2d');
   const dpr=Math.max(1,Math.min(2,window.devicePixelRatio||1));
   const Wc=Math.max(280,cv.clientWidth||host.clientWidth||window.innerWidth||360);
   const Hc=Math.max(280,cv.clientHeight||360);
   cv.width=Wc*dpr; cv.height=Hc*dpr; ctx.scale(dpr,dpr);
-  const CX=Wc/2,CY=Hc/2,Rmax=Math.min(Wc,Hc)*0.46,Rmin=Rmax*0.18,FOC=Rmax*2.6,CAM=Rmax*2.6,EL=0.60;
+  const CX=Wc/2,CY=Hc/2,Rmax=Math.min(Wc,Hc)*0.58,Rmin=Rmax*0.18,FOC=Rmax*2.6,CAM=Rmax*2.6,EL=0.60;
   // sectors
   const counts={}; POS_SECTORS.forEach(s=>counts[s]=0);
   const posOf=new Array(N);
@@ -364,7 +364,7 @@ function renderConstellation(){
   cv.addEventListener('wheel',e=>{ e.preventDefault(); hideHint(); zoom=clampZoom(zoom*(1-e.deltaY*0.0030)); },{passive:false});
   // POS legend
   const leg=document.createElement('div');
-  leg.style.cssText='position:absolute;top:6px;left:8px;z-index:2;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';
+  leg.style.cssText='position:absolute;top:24px;left:8px;z-index:2;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';
   active.forEach(function(s){
     // The word itself carries the POS color (the dot was redundant) — saves the
     // glyph + gap so the legend packs tighter against the Sky.

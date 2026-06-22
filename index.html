@@ -41,8 +41,14 @@
      on viewports shorter than its content (every iPhone). -webkit-overflow-scrolling
      gives momentum scroll on iOS. */
   #home { flex:1; min-height:0; display:flex; flex-direction:column; padding:calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom)) 14px; gap:10px; overflow-y:auto; -webkit-overflow-scrolling:touch; background:#070b08; }
-  /* Dark map-mode home: constellation bleeds full-width, chrome de-weighted */
-  #home #map { margin:2px -14px 4px; border:none; padding:0; }
+  /* Dark map-mode home: constellation bleeds full-width AND up to the window top */
+  #home #skyWrap { position:relative; margin:calc(-14px - env(safe-area-inset-top)) -14px 8px; }
+  #home #map { margin:0; border:none; padding:0; }
+  #launchBar { display:flex; align-items:stretch; gap:10px; }
+  #launchIdentity { display:flex; flex-direction:column; justify-content:center; flex:0 0 auto; }
+  #launchIdentity .title { font-size:15px; letter-spacing:2px; text-align:left; margin:0; line-height:1.05; }
+  #launchIdentity #courseId { align-self:flex-start; }
+  #launchBar #startStudy { flex:1; margin:0; }
   #home .prog-wrap { border-width:1px; padding:6px 10px; }
   #home .prog-track { border-width:1px; }
   #home #startStudy { background:rgba(255,255,255,0.07); }
@@ -326,16 +332,22 @@
 <div id="app">
 
   <div id="home">
-    <!-- IDENTITY -->
-    <div class="title">EARWORM</div>
-    <div style="font-size:9px;text-align:center;letter-spacing:3px;cursor:pointer;border:2px solid;padding:4px 14px;align-self:center;margin-top:-2px;" id="courseId">MANDARIN CHINESE</div>
+    <!-- THE SKY (hero, full-bleed to the top of the window). #mapLabel is a sibling
+         overlay, NOT a child of #map, so renderConstellation's innerHTML='' won't wipe
+         it — its text (srs.js) and deck-manager onclick (events.js) keep working. -->
+    <div id="skyWrap">
+      <div id="map" class="panel"></div>
+      <div id="mapLabel" style="position:absolute;top:8px;left:10px;z-index:3;font-size:9px;opacity:.75;letter-spacing:2px;cursor:pointer;">FRONTIER 0</div>
+    </div>
 
-    <!-- CONSTELLATION (hero, full-bleed) -->
-    <div id="mapLabel" style="font-size:9px;opacity:.75;letter-spacing:2px;text-align:center;cursor:pointer;">FRONTIER 0</div>
-    <div id="map" class="panel"></div>
-
-    <!-- PRIMARY ACTION -->
-    <button class="btn" id="startStudy" style="font-size:16px;letter-spacing:2px">★ EXPLORE</button>
+    <!-- LAUNCH BAR — identity merged with the Verb, freeing the top band for the Sky -->
+    <div id="launchBar">
+      <div id="launchIdentity">
+        <div class="title">EARWORM</div>
+        <div id="courseId" style="font-size:9px;letter-spacing:2px;cursor:pointer;border:2px solid;padding:3px 9px;margin-top:4px;">MANDARIN CHINESE</div>
+      </div>
+      <button class="btn" id="startStudy" style="font-size:16px;letter-spacing:2px;">★ STUDY</button>
+    </div>
 
     <!-- PROGRESS BARS -->
     <div class="prog-wrap" id="yieldWrap">
