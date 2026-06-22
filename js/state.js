@@ -343,8 +343,11 @@ function renderConstellation(){
   const leg=document.createElement('div');
   leg.style.cssText='position:absolute;top:6px;left:8px;z-index:2;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';
   active.forEach(function(s){
-    const sp=document.createElement('span'); sp.style.color='#9ab';
-    sp.innerHTML='<span style="color:'+posRGB(s)+'">●</span>'+s.toLowerCase();
+    // The word itself carries the POS color (the dot was redundant) — saves the
+    // glyph + gap so the legend packs tighter against the Sky.
+    const sp=document.createElement('span');
+    sp.textContent=s.toLowerCase();
+    sp.style.color=posRGB(s);
     leg.appendChild(sp);
   });
   host.appendChild(leg);
