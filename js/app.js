@@ -2708,7 +2708,12 @@ function renderConstellation(){
         node.forEach((o,i)=>{ const rr=Rmax*Math.sqrt((i+0.5)/N),ang=i*GAr; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=0; });
         _edges=[]; let ws=0,wa=0; for(let i=0;i<N;i++){ const w=1/(i+1); wa+=w; if(node[i].seen) ws+=w; }
         const pct=wa?Math.round(ws/wa*100):0; _dim=function(o){ return o.seen?1:0.18; };
-        this.flex='you can read ~'+pct+'% of running text on sight'; } }
+        this.flex='you can read ~'+pct+'% of running text on sight'; } },
+    { id:'edge', name:'THE EDGE', flex:'',
+      apply:function(){ const fset={}; node.forEach((o,i)=>{ if(o.seen && o.st<3) fset[i]=1; });
+        node.forEach((o,i)=>{ o.tx=o.ax; o.ty=o.ay; o.tz=fset[i]?(o.az+Rmax*0.4):o.az; });
+        _edges=[]; _dim=function(o){ return fset[o.i]?1:0.16; };
+        const n=Object.keys(fset).length; this.flex=n?('your working edge — '+n+' word'+(n>1?'s':'')+' still landing'):'all caught up — explore for more'; } }
   ];
   let lensIdx=0, currentLens=LENSES[0];
   let yaw=0,zoom=1,dragging=false,lastX=0,moved=0,tapFx=null;
