@@ -1106,6 +1106,24 @@ function jumpToCard(i){
 // depth-gated lore box · footer. v1 = deterministic; LLM-composed examples drop into the
 // same lore seams later. Gates are DEFAULTED here, tuned live. Transition = plain show()
 // for now; the color-flood zoom (project_fibroid) slots into this seam.
+// The card's "LV" is the HOUSE'S LINE — its wager on how deeply you know the atom, NOT XP
+// you grind (reward≠measurement; [[negative space]] dealer). The rungs are the universal
+// "what it means to know a word" ladder, each backed by a real signal. PRODUCED/FLUENT need
+// the production bar (unbuilt) → they render LOCKED: honest that recognition ≠ capability,
+// and a visible "further to climb." Thresholds are defaults, tuned live.
+const ATOM_RUNGS=['SEEN','KNOWN','DISTINGUISHED','PLACED','PRODUCED','FLUENT'];
+const ATOM_RUNG_LOCKED_FROM=4; // PRODUCED and up require production evidence we don't have yet
+function atomHouseLine(i){
+  const ci=card(i);
+  if(!ci.seen && !(ci.exp>0)) return {rung:-1, name:'UNDISCOVERED'};
+  const ms=(ci.axisStage&&ci.axisStage.meaning)||0, ps=(ci.axisStage&&ci.axisStage.pos)||0;
+  let rung=0;                 // SEEN — encountered
+  if(ms>=1) rung=1;           // KNOWN — recalls meaning
+  if(ms>=2) rung=2;           // DISTINGUISHED — survived contrastive tests (negative space)
+  if(ps>=2 || ms>=4) rung=3;  // PLACED — used in the right grammatical role
+  // PRODUCED(4)/FLUENT(5): no production evidence yet → the house won't post a line that high.
+  return {rung, name:ATOM_RUNGS[rung]};
+}
 let atomCardFrom='home';
 function openAtomDetail(i, origin){
   if(i==null||i<0||!D[i]) return;
@@ -1152,7 +1170,14 @@ function openAtomDetail(i, origin){
       lore+='<div style="font-size:15px;opacity:.9;display:flex;gap:9px;align-items:baseline;"><span style="opacity:.45;font-size:10px;letter-spacing:1px;">BUILT FROM</span> <span>'+chips+'</span></div>';
     } }catch(e){}
   }
-  const lvl=isMastered(i)?'MAX':String(stage), pct=Math.round(Math.min(1,m/4)*100);
+  const hl=atomHouseLine(i);
+  let ladder='';
+  for(let s=0;s<6;s++){
+    const locked=s>=ATOM_RUNG_LOCKED_FROM, filled=(hl.rung>=0 && s<=hl.rung);
+    const seg=locked?'background:rgba(255,255,255,0.04);border:1px dashed rgba(255,255,255,0.18);':'background:'+(filled?colRGB:'rgba(255,255,255,0.12)')+';';
+    ladder+='<div title="'+ATOM_RUNGS[s]+(locked?' — needs production':'')+'" style="flex:1;height:8px;border-radius:2px;'+seg+'"></div>';
+  }
+  const lvLabel=hl.rung<0?'—':('LV '+hl.rung+' · '+hl.name);
   const stLabel=['undiscovered','learning','familiar','mastered'][st]||'';
   const html=
     '<div style="background:#0a0d0b;border:1px solid rgba(255,255,255,0.2);border-radius:14px;overflow:hidden;max-width:420px;width:100%;margin:0 auto;">'
@@ -1167,9 +1192,12 @@ function openAtomDetail(i, origin){
     +'<span id="atomCardSpeak" style="font-size:22px;cursor:pointer;opacity:.85;">🔊</span>'
     +'</div>'
     +(romanHTML?'<div style="text-align:center;font-size:15px;letter-spacing:1px;margin-bottom:16px;">'+romanHTML+'</div>':'<div style="height:6px;"></div>')
-    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">'
-    +'<span style="font-size:11px;opacity:.55;letter-spacing:1px;">LV '+lvl+'</span>'
-    +'<div style="flex:1;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;"><div style="width:'+pct+'%;height:100%;background:'+colRGB+';"></div></div>'
+    +'<div style="margin-bottom:16px;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">'
+    +'<span style="font-size:10px;letter-spacing:1px;opacity:.45;">HOUSE LINE</span>'
+    +'<span style="font-size:11px;letter-spacing:1px;">'+lvLabel+'</span>'
+    +'</div>'
+    +'<div style="display:flex;gap:3px;">'+ladder+'</div>'
     +'</div>'
     +'<div style="background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">'+lore+'</div>'
     +'<div style="font-size:11px;opacity:.45;margin-top:14px;letter-spacing:.5px;display:flex;gap:10px;flex-wrap:wrap;">'
