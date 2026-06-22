@@ -11,7 +11,8 @@
   if($('engNew')) $('engNew').textContent=newN;
   if($('engActive')) $('engActive').textContent=inAcq+'/'+acap;
   const course=activeCourse&&activeCourse();
-  $('mapLabel').textContent='FRONTIER '+frVal+'  ·  '+activeDeckName().toUpperCase()+' ▸';
+  if($('engDeck')) $('engDeck').textContent=activeDeckName().toUpperCase()+' ▸';
+  if($('studyDue')) $('studyDue').textContent=(dueN>0)?(dueN+' due'):'';
   const ll=$('courseId');
   if(ll&&course){ ll.textContent=course.langName.toUpperCase()+'  ▾'; ll.style.cursor='pointer'; }
 

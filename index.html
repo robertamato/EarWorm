@@ -48,7 +48,9 @@
   #launchIdentity { display:flex; flex-direction:column; justify-content:center; flex:0 0 auto; }
   #launchIdentity .title { font-size:15px; letter-spacing:2px; text-align:left; margin:0; line-height:1.05; }
   #launchIdentity #courseId { align-self:flex-start; }
+  #launchBar #studyWrap { position:relative; flex:1; display:flex; }
   #launchBar #startStudy { flex:1; margin:0; }
+  #studyDue { position:absolute; top:5px; right:9px; font-size:8px; letter-spacing:1px; opacity:.55; pointer-events:none; }
   #home .prog-wrap { border-width:1px; padding:6px 10px; }
   #home .prog-track { border-width:1px; }
   #home #startStudy { background:rgba(255,255,255,0.07); }
@@ -332,21 +334,25 @@
 <div id="app">
 
   <div id="home">
-    <!-- THE SKY (hero, full-bleed to the top of the window). #mapLabel is a sibling
-         overlay, NOT a child of #map, so renderConstellation's innerHTML='' won't wipe
-         it — its text (srs.js) and deck-manager onclick (events.js) keep working. -->
+    <!-- THE SKY (hero, full-bleed to the top of the window). Pure picture now — the
+         frontier shows as the dotted ring; ALL scalars live in the engine widget so the
+         fibroid stays a free canvas for redesign. Only fibroid-coupled overlays (POS
+         legend, drag hint) live on it, created inside renderConstellation. -->
     <div id="skyWrap">
       <div id="map" class="panel"></div>
-      <div id="mapLabel" style="position:absolute;top:8px;left:10px;z-index:3;font-size:9px;opacity:.75;letter-spacing:2px;cursor:pointer;">FRONTIER 0</div>
     </div>
 
-    <!-- LAUNCH BAR — identity merged with the Verb, freeing the top band for the Sky -->
+    <!-- LAUNCH BAR — identity merged with the Verb, freeing the top band for the Sky.
+         #studyDue is a sibling overlay (applyBilingualUI rewrites the button's content). -->
     <div id="launchBar">
       <div id="launchIdentity">
         <div class="title">EARWORM</div>
         <div id="courseId" style="font-size:9px;letter-spacing:2px;cursor:pointer;border:2px solid;padding:3px 9px;margin-top:4px;">MANDARIN CHINESE</div>
       </div>
-      <button class="btn" id="startStudy" style="font-size:16px;letter-spacing:2px;">★ STUDY</button>
+      <div id="studyWrap">
+        <button class="btn" id="startStudy" style="font-size:16px;letter-spacing:2px;">★ STUDY</button>
+        <span id="studyDue"></span>
+      </div>
     </div>
 
     <!-- PROGRESS BARS -->
@@ -364,21 +370,21 @@
       <div class="prog-milestone" id="milestoneProgNote"></div>
     </div>
 
-    <!-- ENGINE STRIP — what the acquisition engine actually tracks -->
-    <div style="display:flex;flex-direction:column;gap:5px;padding:2px;">
-      <div style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;">
+    <!-- ENGINE WIDGET — the one canonical home for engine scalars. Header = where am I
+         (frontier + deck, tap → deck manager); whisper = engine flow. DUE is badged on
+         STUDY; SEEN + the mastery breakdown retreated to Profile (the Sky IS the census). -->
+    <div id="engineWidget" style="display:flex;flex-direction:column;gap:4px;padding:2px;">
+      <div id="engHeader" style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;cursor:pointer;">
         <span>FRONTIER <span id="engFrontier">0</span></span>
-        <span>DUE <span id="engDue">0</span></span>
-        <span>ACTIVE <span id="engActive">0/6</span></span>
+        <span id="engDeck">CORE ▸</span>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:9px;opacity:.55;letter-spacing:1px;">
-        <span>SEEN <span id="uniqueCount">0</span></span>
-        <span id="masteryBreakdown" title="UNSEEN · LEARNING · FAMILIAR · MASTERED">0·0·0·0</span>
+      <div style="display:flex;justify-content:space-between;font-size:9px;opacity:.5;letter-spacing:1px;">
+        <span>ACTIVE <span id="engActive">0/6</span></span>
         <span>NEW <span id="engNew">0</span></span>
       </div>
     </div>
 
-    <button class="btn" id="profileBtn" style="font-size:9px;">◷ PROFILE</button>
+    <div id="profileBtn" style="font-size:8px;text-align:center;opacity:.45;cursor:pointer;letter-spacing:2px;padding:5px;">◷ PROFILE</div>
 
     <!-- DEBUG MODES (hidden by default) -->
     <div id="debugToggle" style="font-size:7px;text-align:center;opacity:.35;cursor:pointer;padding:4px;letter-spacing:2px;">▸ DEBUG MODES</div>
@@ -672,6 +678,11 @@
       <span>LV <span id="lvl">1</span></span>
       <span>STREAK <span id="streak">0</span></span>
       <span id="multDisplay">1x</span>
+    </div>
+    <!-- CENSUS (retreated off the home face — the Sky already renders this distribution) -->
+    <div style="display:flex;justify-content:space-between;font-size:9px;opacity:.6;letter-spacing:1px;padding:0 2px;">
+      <span>SEEN <span id="uniqueCount">0</span></span>
+      <span id="masteryBreakdown" title="UNSEEN · LEARNING · FAMILIAR · MASTERED">0·0·0·0</span>
     </div>
     <button class="btn" id="muteBtn" style="font-size:9px;">SOUND: AUTO</button>
     <div id="ttsStatus" style="font-size:7px;text-align:center;letter-spacing:2px;padding:2px 0;opacity:.4;"></div>

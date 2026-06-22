@@ -978,7 +978,7 @@ $('muteBtn').onclick=()=>{
   S.sound=S.sound==='auto'?'tap':S.sound==='tap'?'mute':'auto';
   save(); renderHome();
 };
-$('mapLabel').onclick=()=>{ rollBg(); renderDeckMgr(); show('deckMgr'); };
+if($('engHeader')) $('engHeader').onclick=()=>{ rollBg(); renderDeckMgr(); show('deckMgr'); };
 $('deckMgr-back').onclick=()=>{ goHome(); };
 if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   const inp=$('deckMgr-input');
