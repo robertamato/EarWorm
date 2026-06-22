@@ -3985,6 +3985,13 @@ function openAtomDetail(i, origin){
     if(rivals.length){ const r=rivals[0];
       lore+='<div style="font-size:13px;opacity:.85;">≠ <span class="atomLink" data-idx="'+r+'" style="border-bottom:1px solid rgba(255,255,255,0.35);cursor:pointer;'+CJKf+'">'+_esc(D[r][0])+'</span> <span style="opacity:.6;">'+_esc(D[r][2]||'')+'</span></div>';
     }
+    // morphology: component characters (ideographic courses). Standalone-atom chars are
+    // tappable → their own card; this is openCharDetail's territory, folded in as a layer.
+    try{ if((typeof _segMode!=='function'||_segMode()!=='space') && [...word].length>1){
+      const chips=[...word].map(function(c){ const ji=D.findIndex(function(d){return d[0]===c;});
+        return ji>=0?'<span class="atomLink" data-idx="'+ji+'" style="border-bottom:1px solid rgba(255,255,255,0.3);cursor:pointer;'+CJKf+'">'+_esc(c)+'</span>':'<span style="opacity:.7;'+CJKf+'">'+_esc(c)+'</span>'; }).join('&nbsp;&nbsp;');
+      lore+='<div style="font-size:15px;opacity:.9;display:flex;gap:9px;align-items:baseline;"><span style="opacity:.45;font-size:10px;letter-spacing:1px;">BUILT FROM</span> <span>'+chips+'</span></div>';
+    } }catch(e){}
   }
   const lvl=isMastered(i)?'MAX':String(stage), pct=Math.round(Math.min(1,m/4)*100);
   const stLabel=['undiscovered','learning','familiar','mastered'][st]||'';
@@ -5216,7 +5223,7 @@ function pickStudyMC(btn,chosen,correct,i){
   const ptEl=$('studyMCPromptText');
   if(ptEl&&!mcReverse){
     ptEl.style.cursor='pointer';
-    ptEl.onclick=(e)=>{ e.stopPropagation(); openCharDetail(D[i][0],0,i); };
+    ptEl.onclick=(e)=>{ e.stopPropagation(); openAtomDetail(i,'study'); };
   }
 
   if(isCorrect){
@@ -6286,7 +6293,7 @@ function renderCollBreakdown(components, fg){
         e.stopPropagation();
         const deckIdx=D.findIndex(([ch])=>ch===chars);
         if(deckIdx>=0){
-          openCharDetail(chars, 0, deckIdx);
+          openAtomDetail(deckIdx,'study');
         } else if([...chars].length===1){
           openRadDetail(chars);
         }
@@ -9024,7 +9031,7 @@ function showStudyCloze(i){
       logAnswer(i,isCorrect,'cloze',respMs);
       const finish=function(){
         promptEl.style.cursor='pointer';
-        promptEl.onclick=function(e){ e.stopPropagation(); openCharDetail(ch,0,i); };
+        promptEl.onclick=function(e){ e.stopPropagation(); openAtomDetail(i,'study'); };
         if(S.sound!=='mute') speak(zh,activeCourse().langCode);
         armTapAdvance($('studyMC'),function(){nextStudyCard();},0);
       };
@@ -10361,11 +10368,21 @@ $('charDetail-back').onclick=()=>{
     show('session'); renderCard();
   }
 };
-// Atom card back: 'sky'/walked-link → home WITHOUT re-render, so the constellation
-// closure keeps its yaw/zoom and the camera is exactly where you left it.
+// Atom card back: restore the exact origin. 'sky'/walked-link → home WITHOUT re-render,
+// so the constellation closure keeps its yaw/zoom (camera preserved). Session origins
+// mirror charDetail-back so you land back on the card you were on.
 if($('atomCard-back')) $('atomCard-back').onclick=()=>{
-  const dest=(atomCardFrom==='sky'||atomCardFrom==='atomCard'||!atomCardFrom)?'home':atomCardFrom;
-  show(dest);
+  const f=atomCardFrom;
+  if(f==='browser'){ show('home'); if(typeof renderCardBrowser==='function') renderCardBrowser(); return; }
+  if(f==='mc'){ show('mc'); return; }
+  if(f==='study'||f==='studyColl'||f==='studyGrammar'){
+    show('study');
+    try{ if(activeCardIdx>=0 && activeCardIdx<D.length) showStudyCard(activeCardIdx); else nextStudyCard(); }
+    catch(e){ nextStudyCard(); }
+    return;
+  }
+  if(f==='session'){ show('session'); renderCard(); return; }
+  show('home'); // 'sky' / 'atomCard' / default
 };
 $('startTone').onclick=()=>{
   if(_startStudyPending) return;
@@ -10625,7 +10642,7 @@ function renderCardBrowser(){
     else if(m>=MMAX){ tag='mastered'; col='#7dffc0'; }
     else { tag='learning'; col='#9fd'; }
     var ls=(ci._lastSeenAt?('seen@'+ci._lastSeenAt):'');
-    body+='<div style="display:flex;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04);'+(i===fr?'border-top:2px solid #4dffa0;':'')+'">'
+    body+='<div data-atomrow="'+i+'" style="display:flex;gap:8px;padding:2px 0;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);'+(i===fr?'border-top:2px solid #4dffa0;':'')+'">'
       +'<span style="width:34px;opacity:.5;flex-shrink:0;">#'+(i+1)+'</span>'
       +'<span style="width:26px;flex-shrink:0;font-size:14px;color:'+(seen?'#eafff4':'#566')+'">'+D[i][0]+'</span>'
       +'<span style="width:74px;flex-shrink:0;color:'+col+'">'+tag+'</span>'
@@ -10635,6 +10652,8 @@ function renderCardBrowser(){
   body+='</div>';
   ov.innerHTML=head+body;
   var cb=document.getElementById('cardBrowserClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
+  // each row → the unified atom card (the browser is your binder, origin 'browser')
+  ov.querySelectorAll('[data-atomrow]').forEach(function(el){ el.onclick=function(){ ov.style.display='none'; if(typeof openAtomDetail==='function') openAtomDetail(+el.getAttribute('data-atomrow'),'browser'); }; });
 }
 if($('debugCardBrowser')) $('debugCardBrowser').onclick=renderCardBrowser;
 

@@ -656,7 +656,7 @@ function showStudyCloze(i){
       logAnswer(i,isCorrect,'cloze',respMs);
       const finish=function(){
         promptEl.style.cursor='pointer';
-        promptEl.onclick=function(e){ e.stopPropagation(); openCharDetail(ch,0,i); };
+        promptEl.onclick=function(e){ e.stopPropagation(); openAtomDetail(i,'study'); };
         if(S.sound!=='mute') speak(zh,activeCourse().langCode);
         armTapAdvance($('studyMC'),function(){nextStudyCard();},0);
       };

@@ -1145,7 +1145,7 @@ function pickStudyMC(btn,chosen,correct,i){
   const ptEl=$('studyMCPromptText');
   if(ptEl&&!mcReverse){
     ptEl.style.cursor='pointer';
-    ptEl.onclick=(e)=>{ e.stopPropagation(); openCharDetail(D[i][0],0,i); };
+    ptEl.onclick=(e)=>{ e.stopPropagation(); openAtomDetail(i,'study'); };
   }
 
   if(isCorrect){
@@ -2215,7 +2215,7 @@ function renderCollBreakdown(components, fg){
         e.stopPropagation();
         const deckIdx=D.findIndex(([ch])=>ch===chars);
         if(deckIdx>=0){
-          openCharDetail(chars, 0, deckIdx);
+          openAtomDetail(deckIdx,'study');
         } else if([...chars].length===1){
           openRadDetail(chars);
         }

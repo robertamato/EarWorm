@@ -1144,6 +1144,13 @@ function openAtomDetail(i, origin){
     if(rivals.length){ const r=rivals[0];
       lore+='<div style="font-size:13px;opacity:.85;">≠ <span class="atomLink" data-idx="'+r+'" style="border-bottom:1px solid rgba(255,255,255,0.35);cursor:pointer;'+CJKf+'">'+_esc(D[r][0])+'</span> <span style="opacity:.6;">'+_esc(D[r][2]||'')+'</span></div>';
     }
+    // morphology: component characters (ideographic courses). Standalone-atom chars are
+    // tappable → their own card; this is openCharDetail's territory, folded in as a layer.
+    try{ if((typeof _segMode!=='function'||_segMode()!=='space') && [...word].length>1){
+      const chips=[...word].map(function(c){ const ji=D.findIndex(function(d){return d[0]===c;});
+        return ji>=0?'<span class="atomLink" data-idx="'+ji+'" style="border-bottom:1px solid rgba(255,255,255,0.3);cursor:pointer;'+CJKf+'">'+_esc(c)+'</span>':'<span style="opacity:.7;'+CJKf+'">'+_esc(c)+'</span>'; }).join('&nbsp;&nbsp;');
+      lore+='<div style="font-size:15px;opacity:.9;display:flex;gap:9px;align-items:baseline;"><span style="opacity:.45;font-size:10px;letter-spacing:1px;">BUILT FROM</span> <span>'+chips+'</span></div>';
+    } }catch(e){}
   }
   const lvl=isMastered(i)?'MAX':String(stage), pct=Math.round(Math.min(1,m/4)*100);
   const stLabel=['undiscovered','learning','familiar','mastered'][st]||'';

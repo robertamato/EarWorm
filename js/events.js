@@ -358,11 +358,21 @@ $('charDetail-back').onclick=()=>{
     show('session'); renderCard();
   }
 };
-// Atom card back: 'sky'/walked-link → home WITHOUT re-render, so the constellation
-// closure keeps its yaw/zoom and the camera is exactly where you left it.
+// Atom card back: restore the exact origin. 'sky'/walked-link → home WITHOUT re-render,
+// so the constellation closure keeps its yaw/zoom (camera preserved). Session origins
+// mirror charDetail-back so you land back on the card you were on.
 if($('atomCard-back')) $('atomCard-back').onclick=()=>{
-  const dest=(atomCardFrom==='sky'||atomCardFrom==='atomCard'||!atomCardFrom)?'home':atomCardFrom;
-  show(dest);
+  const f=atomCardFrom;
+  if(f==='browser'){ show('home'); if(typeof renderCardBrowser==='function') renderCardBrowser(); return; }
+  if(f==='mc'){ show('mc'); return; }
+  if(f==='study'||f==='studyColl'||f==='studyGrammar'){
+    show('study');
+    try{ if(activeCardIdx>=0 && activeCardIdx<D.length) showStudyCard(activeCardIdx); else nextStudyCard(); }
+    catch(e){ nextStudyCard(); }
+    return;
+  }
+  if(f==='session'){ show('session'); renderCard(); return; }
+  show('home'); // 'sky' / 'atomCard' / default
 };
 $('startTone').onclick=()=>{
   if(_startStudyPending) return;
@@ -622,7 +632,7 @@ function renderCardBrowser(){
     else if(m>=MMAX){ tag='mastered'; col='#7dffc0'; }
     else { tag='learning'; col='#9fd'; }
     var ls=(ci._lastSeenAt?('seen@'+ci._lastSeenAt):'');
-    body+='<div style="display:flex;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04);'+(i===fr?'border-top:2px solid #4dffa0;':'')+'">'
+    body+='<div data-atomrow="'+i+'" style="display:flex;gap:8px;padding:2px 0;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);'+(i===fr?'border-top:2px solid #4dffa0;':'')+'">'
       +'<span style="width:34px;opacity:.5;flex-shrink:0;">#'+(i+1)+'</span>'
       +'<span style="width:26px;flex-shrink:0;font-size:14px;color:'+(seen?'#eafff4':'#566')+'">'+D[i][0]+'</span>'
       +'<span style="width:74px;flex-shrink:0;color:'+col+'">'+tag+'</span>'
@@ -632,6 +642,8 @@ function renderCardBrowser(){
   body+='</div>';
   ov.innerHTML=head+body;
   var cb=document.getElementById('cardBrowserClose'); if(cb) cb.onclick=function(){ ov.style.display='none'; };
+  // each row → the unified atom card (the browser is your binder, origin 'browser')
+  ov.querySelectorAll('[data-atomrow]').forEach(function(el){ el.onclick=function(){ ov.style.display='none'; if(typeof openAtomDetail==='function') openAtomDetail(+el.getAttribute('data-atomrow'),'browser'); }; });
 }
 if($('debugCardBrowser')) $('debugCardBrowser').onclick=renderCardBrowser;
 
