@@ -205,6 +205,18 @@ function renderConstellation(){
   const cv=document.createElement('canvas');
   cv.style.cssText='display:block;width:100%;height:46vh;max-height:540px;min-height:300px;cursor:grab;touch-action:none;';
   host.appendChild(cv);
+  // Vertical scrims: the Sky bleeds full-bleed, so its top/bottom stars must FADE into the
+  // dark field instead of being guillotined at the seam with the opaque Masthead / Verb.
+  // pointer-events:none so drag/zoom pass straight through; appended before the legend +
+  // hint (below) so those stay crisp on top of the fade.
+  const _homeBg='#070b08';
+  const scrimTop=document.createElement('div');
+  scrimTop.style.cssText='position:absolute;left:0;right:0;top:0;height:60px;pointer-events:none;z-index:1;'+
+    'background:linear-gradient(to bottom,'+_homeBg+' 0%,'+_homeBg+'cc 34%,rgba(7,11,8,0) 100%);';
+  const scrimBot=document.createElement('div');
+  scrimBot.style.cssText='position:absolute;left:0;right:0;bottom:0;height:74px;pointer-events:none;z-index:1;'+
+    'background:linear-gradient(to top,'+_homeBg+' 0%,'+_homeBg+'cc 30%,rgba(7,11,8,0) 100%);';
+  host.appendChild(scrimTop); host.appendChild(scrimBot);
   const ctx=cv.getContext('2d');
   const dpr=Math.max(1,Math.min(2,window.devicePixelRatio||1));
   const Wc=Math.max(280,cv.clientWidth||host.clientWidth||window.innerWidth||360);
@@ -329,7 +341,7 @@ function renderConstellation(){
   cv.addEventListener('wheel',e=>{ e.preventDefault(); hideHint(); zoom=clampZoom(zoom*(1-e.deltaY*0.0030)); },{passive:false});
   // POS legend
   const leg=document.createElement('div');
-  leg.style.cssText='position:absolute;top:6px;left:8px;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';
+  leg.style.cssText='position:absolute;top:6px;left:8px;z-index:2;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';
   active.forEach(function(s){
     const sp=document.createElement('span'); sp.style.color='#9ab';
     sp.innerHTML='<span style="color:'+posRGB(s)+'">●</span>'+s.toLowerCase();
@@ -338,7 +350,7 @@ function renderConstellation(){
   host.appendChild(leg);
   // faint control hint (fades on first interaction); word detail now lives on the stars
   const hint=document.createElement('div'); hint.id='mapHint';
-  hint.style.cssText='position:absolute;left:8px;bottom:6px;font-size:9px;letter-spacing:1px;color:#9fd;opacity:.4;transition:opacity .5s;pointer-events:none;';
+  hint.style.cssText='position:absolute;left:8px;bottom:6px;z-index:2;font-size:9px;letter-spacing:1px;color:#9fd;opacity:.4;transition:opacity .5s;pointer-events:none;';
   hint.textContent='drag · pinch or scroll to zoom · tap to hear';
   host.appendChild(hint);
   loop();
