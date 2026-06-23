@@ -2865,8 +2865,11 @@ function renderConstellation(){
     const ps=node.map(o=>{const p=proj(o); p.o=o; o._sx=null; return p;}).sort((a,b)=>b.depth-a.depth);
     let _minD=1e9,_maxD=-1e9; for(let q=0;q<ps.length;q++){ const d=ps[q].depth; if(d<_minD)_minD=d; if(d>_maxD)_maxD=d; } const _dR=(_maxD-_minD)||1;
     const _fog=function(dep){ return 1-0.55*((dep-_minD)/_dR); }; // depth cueing: near=bright, far recedes → 3-D reads (auto no-op when the layout is flat)
-    const _webE=(_lensId==='web'), _engE=(_lensId==='engine');
-    for(let e=0;e<_edges.length;e++){const a=proj(_edges[e][0]),b=proj(_edges[e][1]); ctx.globalAlpha=_fog((a.depth+b.depth)*0.5); ctx.strokeStyle=_webE?'rgba(255,255,255,0.30)':(_engE?'rgba(125,255,192,0.45)':'rgba(125,255,192,0.15)'); ctx.lineWidth=(_webE||_engE)?1:0.7; ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();} ctx.globalAlpha=1;
+    const _webE=(_lensId==='web'), _engE=(_lensId==='engine'), _terE=(_lensId==='territory');
+    for(let e=0;e<_edges.length;e++){const na=_edges[e][0],nb=_edges[e][1],a=proj(na),b=proj(nb); ctx.globalAlpha=_fog((a.depth+b.depth)*0.5);
+      if(_terE&&_lensColor){ const c0=_lensColor(na),c1=_lensColor(nb),same=(c0[0]===c1[0]&&c0[1]===c1[1]&&c0[2]===c1[2]); ctx.strokeStyle=same?'rgba('+c0[0]+','+c0[1]+','+c0[2]+',0.55)':'rgba(150,160,158,0.12)'; ctx.lineWidth=same?1:0.6; }
+      else { ctx.strokeStyle=_webE?'rgba(255,255,255,0.30)':(_engE?'rgba(125,255,192,0.45)':'rgba(125,255,192,0.15)'); ctx.lineWidth=(_webE||_engE)?1:0.7; }
+      ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();} ctx.globalAlpha=1;
     const labels=[];
     for(let q=0;q<ps.length;q++){
       const p=ps[q],o=p.o,c=(_lensColor?_lensColor(o):posColor(o.pos)),dm=(_dim?_dim(o):1)*_fog(p.depth);
@@ -2969,7 +2972,7 @@ function renderConstellation(){
   // faint control hint (fades on first interaction); word detail now lives on the stars
   const hint=document.createElement('div'); hint.id='mapHint';
   hint.style.cssText='position:absolute;left:8px;bottom:6px;z-index:2;font-size:9px;letter-spacing:1px;color:#9fd;opacity:.4;transition:opacity .5s;pointer-events:none;';
-  hint.textContent='drag · pinch or scroll to zoom · tap to hear';
+  hint.textContent='drag · scroll to zoom · tap to hear · hold for card';
   host.appendChild(hint);
   // lens switcher (top-right) — cycle the lenses; shows the active lens + its flex line
   const lensCtl=document.createElement('div');
