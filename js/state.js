@@ -517,7 +517,19 @@ function renderConstellation(){
     if(tapFx){
       const dt=now-tapFx.t0;
       if(dt>520) tapFx=null;
-      else{ const o=node[tapFx.i]; if(o&&o._sx!=null){ const k=dt/520; ctx.strokeStyle='rgba(255,255,255,'+(0.6*(1-k))+')'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(o._sx,o._sy,5+k*28,0,7); ctx.stroke(); } }
+      else{ const o=node[tapFx.i]; if(o&&o._sx!=null){ const k=dt/520, a=1-k, c=(_lensColor?_lensColor(o):posColor(o.pos));
+        // one-shot WEB FLASH: a tap lights the word's connections for a beat (the GLANCE; the pluck is
+        // the sustained version) — makes the only free Sky feedback feel alive + teaches the web exists.
+        if(tapFx.nbrs){ for(let n=0;n<tapFx.nbrs.length;n++){ const nb=tapFx.nbrs[n][0]; if(nb._sx==null)continue;
+          ctx.strokeStyle='rgba('+c[0]+','+c[1]+','+c[2]+','+(0.55*a)+')'; ctx.lineWidth=0.4+1.1*a;
+          ctx.beginPath(); ctx.moveTo(o._sx,o._sy); ctx.lineTo(nb._sx,nb._sy); ctx.stroke();
+          ctx.fillStyle='rgba('+c[0]+','+c[1]+','+c[2]+','+(0.4*a)+')'; ctx.beginPath(); ctx.arc(nb._sx,nb._sy,1.2+3*a,0,7); ctx.fill(); } }
+        // focus bloom (in the star's color, synesthetic w/ the card flood) + the original expanding ring
+        const br=18*(0.5+k), g=ctx.createRadialGradient(o._sx,o._sy,0,o._sx,o._sy,br);
+        g.addColorStop(0,'rgba('+c[0]+','+c[1]+','+c[2]+','+(0.45*a)+')'); g.addColorStop(1,'rgba('+c[0]+','+c[1]+','+c[2]+',0)');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(o._sx,o._sy,br,0,7); ctx.fill();
+        ctx.strokeStyle='rgba('+c[0]+','+c[1]+','+c[2]+','+(0.7*a)+')'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(o._sx,o._sy,5+k*28,0,7); ctx.stroke();
+      } }
     }
     // PLUCK tension overlay — the strained threads to the tugged neighbors brighten/thicken with
     // tension × bond-weight (you SEE the strong bonds resist), and a ring on the fruit fills with
@@ -544,7 +556,7 @@ function renderConstellation(){
   function starAtPx(mx,my){ let best=null,bd=1e9; for(let i=0;i<N;i++){const o=node[i]; if(!o.seen||o._sx==null)continue; const d=(o._sx-mx)*(o._sx-mx)+(o._sy-my)*(o._sy-my); if(d<bd){bd=d;best=o;}} return (best&&bd<420)?best:null; }
   function handleTap(e){
     const best=starAtPx(px(e),py(e));
-    if(best){ if(S.sound!=='mute') speak(D[best.i][0],activeCourse().langCode); tapFx={i:best.i,t0:performance.now()}; }
+    if(best){ if(S.sound!=='mute') speak(D[best.i][0],activeCourse().langCode); const nb=neighborsOf(best); tapFx={i:best.i,t0:performance.now(),nbrs:nb.list}; }
   }
   // spring every displaced atom back to rest (target=0) with a bounce — the recoil on release/cancel
   function releaseSprings(){ for(let q=0;q<node.length;q++){ const o=node[q]; o.tdx=0;o.tdy=0;o.tdz=0; } _springLive=true; }
