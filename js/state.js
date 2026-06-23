@@ -233,6 +233,31 @@ function constellationPMI(){
     const pmi=Math.log((c*S)/((cnt[a]||1)*(cnt[b]||1))); if(pmi>0.25) out.push([a,b,pmi]); });
   _pmiCache=out;_pmiCacheD=D;return out;
 }
+// Label-propagation community detection over the top-3 sparse PMI graph (the dense full
+// graph is one community). Each node adopts its neighbors' strongest-weighted label until
+// stable → semantic communities ("neighborhoods") for THE TERRITORY island layout.
+let _commCache=null,_commCacheD=null;
+function constellationCommunities(){
+  if(_commCache&&_commCacheD===D) return _commCache;
+  const pm=(typeof constellationPMI==='function')?constellationPMI():[], N2=D.length;
+  const byN={}; for(let e=0;e<pm.length;e++){ const a=pm[e][0],b=pm[e][1]; (byN[a]=byN[a]||[]).push(e); (byN[b]=byN[b]||[]).push(e); }
+  const keep={}; Object.keys(byN).forEach(function(n){ const arr=byN[n].sort(function(x,y){return pm[y][2]-pm[x][2];}); for(let j=0;j<arr.length&&j<3;j++) keep[arr[j]]=1; });
+  const adj=new Array(N2); for(let i=0;i<N2;i++) adj[i]=[];
+  Object.keys(keep).forEach(function(i){ const e=pm[+i]; if(e[0]<N2&&e[1]<N2){ adj[e[0]].push([e[1],e[2]]); adj[e[1]].push([e[0],e[2]]); } });
+  const label=new Int32Array(N2); for(let i=0;i<N2;i++) label[i]=i;
+  const order=[]; for(let i=0;i<N2;i++) order.push(i);
+  for(let it=0;it<30;it++){
+    for(let i=order.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0,t=order[i]; order[i]=order[j]; order[j]=t; }
+    let changed=0;
+    for(let oi=0;oi<order.length;oi++){ const i=order[oi]; if(!adj[i].length) continue;
+      const sc={}; for(let a=0;a<adj[i].length;a++){ const j=adj[i][a][0],w=adj[i][a][1]; sc[label[j]]=(sc[label[j]]||0)+w; }
+      let best=label[i],bestS=-1; for(const l in sc){ if(sc[l]>bestS){ bestS=sc[l]; best=+l; } }
+      if(best!==label[i]){ label[i]=best; changed++; }
+    }
+    if(!changed) break;
+  }
+  _commCache=label;_commCacheD=D;return label;
+}
 let _cnGen=0;
 function renderConstellation(){
   const host=$('map'); if(!host) return;
@@ -331,27 +356,21 @@ function renderConstellation(){
       // (meaning) — content words cluster into neighborhoods, function words drift to the rim.
       // A poor-man's embedding from local data; upgradeable to real vectors later.
       apply:function(){ const pm=(typeof constellationPMI==='function')?constellationPMI():[];
-        // SPARSIFY: keep each node's top-3 PMI links. The full graph is one dense component
-        // (a blob); the sparse one fragments into distinct communities FR can pull apart.
-        const byN={}; for(let e=0;e<pm.length;e++){ const a=pm[e][0],b=pm[e][1]; (byN[a]=byN[a]||[]).push(e); (byN[b]=byN[b]||[]).push(e); }
-        const keep={}; Object.keys(byN).forEach(function(n){ const arr=byN[n].sort(function(x,y){return pm[y][2]-pm[x][2];}); for(let j=0;j<arr.length&&j<3;j++) keep[arr[j]]=1; });
-        const E=Object.keys(keep).map(function(i){ return pm[+i]; });
-        let maxw=0.01; for(let e=0;e<E.length;e++) if(E[e][2]>maxw) maxw=E[e][2];
-        const px=node.map(o=>o.ax), py=node.map(o=>o.ay);
-        const area=Math.PI*Rmax*Rmax, k=Math.sqrt(area/Math.max(1,N))*1.5, GRAV=0.06; let temp=Rmax*0.38;
-        for(let it=0;it<160;it++){ const dx0=new Float64Array(N), dy0=new Float64Array(N);
-          for(let a=0;a<N;a++){ for(let b=0;b<N;b++){ if(a===b)continue; let dx=px[a]-px[b],dy=py[a]-py[b],d=Math.hypot(dx,dy)||0.01,r=k*k/d; dx0[a]+=(dx/d)*r; dy0[a]+=(dy/d)*r; } }
-          for(let e=0;e<E.length;e++){ const a=E[e][0],b=E[e][1]; if(a>=N||b>=N)continue; const w=E[e][2]/maxw; let dx=px[a]-px[b],dy=py[a]-py[b],d=Math.hypot(dx,dy)||0.01; const t=(d*d/k)*w; dx0[a]-=(dx/d)*t; dy0[a]-=(dy/d)*t; dx0[b]+=(dx/d)*t; dy0[b]+=(dy/d)*t; }
-          for(let i=0;i<N;i++){ dx0[i]-=px[i]*GRAV; dy0[i]-=py[i]*GRAV; const dl=Math.hypot(dx0[i],dy0[i])||0.01; px[i]+=(dx0[i]/dl)*Math.min(dl,temp); py[i]+=(dy0[i]/dl)*Math.min(dl,temp); } temp*=0.978; }
-        let cx=0,cy=0; for(let i=0;i<N;i++){ cx+=px[i]; cy+=py[i]; } cx/=N; cy/=N;
-        for(let i=0;i<N;i++){ px[i]-=cx; py[i]-=cy; }
-        // scale to the SEEN atoms (the words that matter visually) — the dim unseen atoms
-        // ring out and shouldn't set the scale; let them extend past the rim.
-        const radii=[]; for(let i=0;i<N;i++){ if(node[i].seen) radii.push(Math.hypot(px[i],py[i])); } radii.sort(function(a,b){return a-b;});
-        const pr=(radii.length?radii[Math.floor(radii.length*0.92)]:1)||1, sc=(Rmax*0.92)/pr;
-        node.forEach((o,i)=>{ o.tx=px[i]*sc; o.ty=py[i]*sc; o.tz=0; });
-        _edges=E.filter(e=>e[0]<N&&e[1]<N&&node[e[0]].seen&&node[e[1]].seen).map(e=>[node[e[0]],node[e[1]]]); _dim=null;
-        this.flex=E.length?'you own these neighborhoods — words by the company they keep':'neighborhoods forming — keep playing'; } }
+        const lab=(typeof constellationCommunities==='function')?constellationCommunities():null;
+        if(!lab){ node.forEach(o=>{o.tx=o.ax;o.ty=o.ay;o.tz=o.az;}); _edges=[]; _dim=null; this.flex='neighborhoods forming — keep playing'; return; }
+        // ISLAND LAYOUT: each label-propagation community is a separated neighborhood. Centroids
+        // are phyllotaxis-packed (biggest near the middle); members form a mini-cluster around
+        // their centroid; loose atoms (no community) settle faint at the rim.
+        const groups={}; for(let i=0;i<N;i++){ (groups[lab[i]]=groups[lab[i]]||[]).push(i); }
+        const real=Object.keys(groups).map(l=>groups[l]).filter(c=>c.length>=3).sort((a,b)=>b.length-a.length);
+        const isLoose=new Uint8Array(N); for(let i=0;i<N;i++) isLoose[i]=1;
+        const GAr=2.39996, K=Math.max(1,real.length);
+        real.forEach((mem,ci)=>{ const cr=Rmax*0.64*Math.sqrt((ci+0.4)/K), ca=ci*GAr, cx=cr*Math.cos(ca), cy=cr*Math.sin(ca), isz=Rmax*0.11*Math.sqrt(mem.length);
+          mem.forEach((m,kk)=>{ isLoose[m]=0; const rr=isz*Math.sqrt((kk+0.4)/mem.length), a=kk*GAr*1.3+ci; node[m].tx=cx+rr*Math.cos(a); node[m].ty=cy+rr*Math.sin(a); node[m].tz=0; }); });
+        let li=0; for(let i=0;i<N;i++){ if(isLoose[i]){ const a=li*GAr, rr=Rmax*(0.92+0.1*((li%3)/3)); node[i].tx=rr*Math.cos(a); node[i].ty=rr*Math.sin(a); node[i].tz=-Rmax*0.25; li++; } }
+        _edges=pm.filter(e=>e[0]<N&&e[1]<N&&node[e[0]].seen&&node[e[1]].seen&&lab[e[0]]===lab[e[1]]).map(e=>[node[e[0]],node[e[1]]]);
+        _dim=function(o){ return isLoose[o.i]?0.3:1; };
+        this.flex=real.length+' neighborhoods — you own these'; } }
   ];
   let lensIdx=0, currentLens=LENSES[0];
   let yaw=0,zoom=1,dragging=false,lastX=0,moved=0,tapFx=null;
