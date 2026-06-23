@@ -306,10 +306,14 @@ function renderConstellation(){
     const frac=(k*0.6180339)%1, a=wd[0]+0.10*(wd[1]-wd[0])+frac*0.80*(wd[1]-wd[0]);
     const r=(k===0)?Rmin:Rmin+(Rmax-Rmin)*Math.sqrt(i/N);
     const seen=S.cards[i]&&S.cards[i].seen, st=state(i);
-    const fwd=!seen?-Rmax*0.30:(st-1)*Rmax*0.19, z=fwd+(hash(i+1)-0.5)*Rmax*0.62;
+    // Z = the FIBER coordinate: the house-line RUNG (the fibration's graduation height — the
+    // SAME quantity the atom card renders as a ladder). Lens-INVARIANT: only the ground plane
+    // (x,y) changes per lens; elevation = how far up acquisition each atom has climbed.
+    const rung=(typeof atomHouseLine==='function')?atomHouseLine(i).rung:(seen?st:-1);
+    const fz=((rung<0?-0.55:(-0.2+(rung/5)*0.7))+(hash(i+1)-0.5)*0.10)*Rmax;
     const nx=r*Math.cos(a), ny=r*Math.sin(a);
-    // ax/ay/az = anatomy base; tx/ty/tz = current lens target (draw loop eases x/y/z → t*)
-    node[i]={i:i,pos:s,seen:seen,st:st,x:nx,y:ny,z:z,ax:nx,ay:ny,az:z,tx:nx,ty:ny,tz:z,_sx:null,_sy:null};
+    // ax/ay = anatomy ground; fz = fiber height (Z, lens-invariant); tx/ty/tz = lens target
+    node[i]={i:i,pos:s,seen:seen,st:st,rung:rung,x:nx,y:ny,z:fz,ax:nx,ay:ny,az:fz,fz:fz,tx:nx,ty:ny,tz:fz,_sx:null,_sy:null};
   }
   // fibers between introduced atoms
   const fibers=constellationFibers(),edges=[];
@@ -322,12 +326,12 @@ function renderConstellation(){
   function _confusionPairs(){ const map={}; if(S.confusion){ Object.keys(S.confusion).forEach(a=>{ const ai=+a; Object.keys(S.confusion[ai]||{}).forEach(b=>{ const bi=+b; if(node[ai]&&node[bi]&&node[ai].seen&&node[bi].seen){ const n=(S.confusion[ai][bi]&&S.confusion[ai][bi].n)||0; if(n>0){ const key=ai<bi?ai+'_'+bi:bi+'_'+ai; map[key]=(map[key]||0)+n; } } }); }); } return Object.keys(map).map(k=>{ const p=k.split('_'); return [+p[0],+p[1],map[k]]; }); }
   const LENSES=[
     { id:'anatomy', name:'ANATOMY', flex:'your words, mapped by grammar',
-      apply:function(){ node.forEach(o=>{ o.tx=o.ax; o.ty=o.ay; o.tz=o.az; }); _edges=edges; _dim=null; } },
+      apply:function(){ node.forEach(o=>{ o.tx=o.ax; o.ty=o.ay; o.tz=o.fz; }); _edges=edges; _dim=null; } },
     { id:'web', name:'THE WEB', flex:'',
       apply:function(){ const pairs=_confusionPairs(); const px=node.map(o=>o.ax), py=node.map(o=>o.ay), inv={};
         for(let q=0;q<pairs.length;q++){ inv[pairs[q][0]]=1; inv[pairs[q][1]]=1; }
         for(let it=0;it<45;it++){ for(let q=0;q<pairs.length;q++){ const a=pairs[q][0],b=pairs[q][1],mx=(px[a]+px[b])/2,my=(py[a]+py[b])/2,f=0.05; px[a]+=(mx-px[a])*f; py[a]+=(my-py[a])*f; px[b]+=(mx-px[b])*f; py[b]+=(my-py[b])*f; } }
-        node.forEach((o,i)=>{ o.tx=px[i]; o.ty=py[i]; o.tz=o.az*0.35; });
+        node.forEach((o,i)=>{ o.tx=px[i]; o.ty=py[i]; o.tz=o.fz; });
         _edges=pairs.map(p=>[node[p[0]],node[p[1]]]); _dim=function(o){ return inv[o.i]?1:0.25; };
         this.flex=pairs.length?(pairs.length+' blur'+(pairs.length>1?'s':'')+' — drawn together, decaying as you tell them apart'):'no blurs caught yet — keep playing'; } },
     { id:'engine', name:'THE ENGINE', flex:'',
@@ -335,19 +339,19 @@ function renderConstellation(){
         const tierOf={}; let T=0,basisSize=0,deepest=0;
         if(gb){ T=gb.tiers.length; basisSize=gb.basisSize; gb.tiers.forEach((t,ti)=>{ t.atoms.forEach(a=>{ tierOf[a.rank]=ti; if(a.rank>deepest)deepest=a.rank; }); }); }
         const GAr=2.39996, tc={};
-        node.forEach((o,i)=>{ if(tierOf[i]!=null){ const t=tierOf[i],k=(tc[t]=(tc[t]||0)); tc[t]++; const rr=Rmin+(Rmax-Rmin)*((t+1)/(T+1)),ang=k*GAr+t*0.7; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=0; } else { const ang=i*GAr,rr=Rmax*1.12; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=-Rmax*0.4; } });
+        node.forEach((o,i)=>{ if(tierOf[i]!=null){ const t=tierOf[i],k=(tc[t]=(tc[t]||0)); tc[t]++; const rr=Rmin+(Rmax-Rmin)*((t+1)/(T+1)),ang=k*GAr+t*0.7; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=o.fz; } else { const ang=i*GAr,rr=Rmax*1.12; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=o.fz; } });
         _edges=[]; _dim=function(o){ return tierOf[o.i]!=null?1:0.18; };
         const reach=basisSize?Math.round(deepest/basisSize*10)/10:0;
         this.flex=basisSize?(basisSize+'-atom basis → '+reach+'× reach · a generator, not a memorizer'):'basis forming…'; } },
     { id:'reading', name:'THE READING', flex:'',
       apply:function(){ const GAr=2.39996;
-        node.forEach((o,i)=>{ const rr=Rmax*Math.sqrt((i+0.5)/N),ang=i*GAr; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=0; });
+        node.forEach((o,i)=>{ const rr=Rmax*Math.sqrt((i+0.5)/N),ang=i*GAr; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=o.fz; });
         _edges=[]; let ws=0,wa=0; for(let i=0;i<N;i++){ const w=1/(i+1); wa+=w; if(node[i].seen) ws+=w; }
         const pct=wa?Math.round(ws/wa*100):0; _dim=function(o){ return o.seen?1:0.18; };
         this.flex='you can read ~'+pct+'% of running text on sight'; } },
     { id:'edge', name:'THE EDGE', flex:'',
       apply:function(){ const fset={}; node.forEach((o,i)=>{ if(o.seen && o.st<3) fset[i]=1; });
-        node.forEach((o,i)=>{ o.tx=o.ax; o.ty=o.ay; o.tz=fset[i]?(o.az+Rmax*0.4):o.az; });
+        node.forEach((o,i)=>{ o.tx=o.ax; o.ty=o.ay; o.tz=o.fz; });
         _edges=[]; _dim=function(o){ return fset[o.i]?1:0.16; };
         const n=Object.keys(fset).length; this.flex=n?('your working edge — '+n+' word'+(n>1?'s':'')+' still landing'):'all caught up — explore for more'; } },
     { id:'territory', name:'THE TERRITORY', flex:'',
@@ -357,7 +361,7 @@ function renderConstellation(){
       // A poor-man's embedding from local data; upgradeable to real vectors later.
       apply:function(){ const pm=(typeof constellationPMI==='function')?constellationPMI():[];
         const lab=(typeof constellationCommunities==='function')?constellationCommunities():null;
-        if(!lab){ node.forEach(o=>{o.tx=o.ax;o.ty=o.ay;o.tz=o.az;}); _edges=[]; _dim=null; this.flex='neighborhoods forming — keep playing'; return; }
+        if(!lab){ node.forEach(o=>{o.tx=o.ax;o.ty=o.ay;o.tz=o.fz;}); _edges=[]; _dim=null; this.flex='neighborhoods forming — keep playing'; return; }
         // ISLAND LAYOUT: each label-propagation community is a separated neighborhood. Centroids
         // are phyllotaxis-packed (biggest near the middle); members form a mini-cluster around
         // their centroid; loose atoms (no community) settle faint at the rim.
@@ -366,8 +370,8 @@ function renderConstellation(){
         const isLoose=new Uint8Array(N); for(let i=0;i<N;i++) isLoose[i]=1;
         const GAr=2.39996, K=Math.max(1,real.length);
         real.forEach((mem,ci)=>{ const cr=Rmax*0.64*Math.sqrt((ci+0.4)/K), ca=ci*GAr, cx=cr*Math.cos(ca), cy=cr*Math.sin(ca), isz=Rmax*0.11*Math.sqrt(mem.length);
-          mem.forEach((m,kk)=>{ isLoose[m]=0; const rr=isz*Math.sqrt((kk+0.4)/mem.length), a=kk*GAr*1.3+ci; node[m].tx=cx+rr*Math.cos(a); node[m].ty=cy+rr*Math.sin(a); node[m].tz=0; }); });
-        let li=0; for(let i=0;i<N;i++){ if(isLoose[i]){ const a=li*GAr, rr=Rmax*(0.92+0.1*((li%3)/3)); node[i].tx=rr*Math.cos(a); node[i].ty=rr*Math.sin(a); node[i].tz=-Rmax*0.25; li++; } }
+          mem.forEach((m,kk)=>{ isLoose[m]=0; const rr=isz*Math.sqrt((kk+0.4)/mem.length), a=kk*GAr*1.3+ci; node[m].tx=cx+rr*Math.cos(a); node[m].ty=cy+rr*Math.sin(a); node[m].tz=node[m].fz; }); });
+        let li=0; for(let i=0;i<N;i++){ if(isLoose[i]){ const a=li*GAr, rr=Rmax*(0.92+0.1*((li%3)/3)); node[i].tx=rr*Math.cos(a); node[i].ty=rr*Math.sin(a); node[i].tz=node[i].fz; li++; } }
         _edges=pm.filter(e=>e[0]<N&&e[1]<N&&node[e[0]].seen&&node[e[1]].seen&&lab[e[0]]===lab[e[1]]).map(e=>[node[e[0]],node[e[1]]]);
         _dim=function(o){ return isLoose[o.i]?0.3:1; };
         this.flex=real.length+' neighborhoods — you own these'; } }
