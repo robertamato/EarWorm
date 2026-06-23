@@ -2975,7 +2975,10 @@ function renderConstellation(){
   const lensCtl=document.createElement('div');
   lensCtl.style.cssText='position:absolute;top:6px;right:8px;z-index:3;text-align:right;cursor:pointer;font-size:9px;letter-spacing:1px;max-width:54%;';
   host.appendChild(lensCtl);
-  function updateLensUI(){ lensCtl.innerHTML='<div style="opacity:.85;">◳ '+currentLens.name+' ▸</div><div style="font-size:8px;opacity:.5;margin-top:2px;line-height:1.3;">'+(currentLens.flex||'')+'</div>'; }
+  function updateLensUI(){
+    let pips=''; for(let i=0;i<LENSES.length;i++){ pips+='<span style="display:inline-block;width:5px;height:5px;border-radius:50%;margin-left:4px;background:'+(i===lensIdx?'currentColor':'rgba(255,255,255,0.22)')+';"></span>'; }
+    lensCtl.innerHTML='<div style="opacity:.85;">◳ '+currentLens.name+' ▸</div><div style="margin-top:4px;">'+pips+'</div><div style="font-size:8px;opacity:.5;margin-top:3px;line-height:1.3;">'+(currentLens.flex||'')+'</div>';
+  }
   function applyLens(idx){ lensIdx=((idx%LENSES.length)+LENSES.length)%LENSES.length; currentLens=LENSES[lensIdx]; _lensId=currentLens.id; _lensColor=null; currentLens.apply(); elTarget=(currentLens.el!=null?currentLens.el:EL);
     if(leg) leg.style.display=_lensColor?'none':'flex'; // POS legend only when the lens colors by POS (hidden on community-colored TERRITORY)
     updateLensUI(); }
