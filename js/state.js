@@ -321,7 +321,7 @@ function renderConstellation(){
   // Camera elevation is PER-LENS (eased in draw, like positions). Flat-structure lenses
   // (sunflower/islands/DAG) tilt toward top-down → their (x,y) renders face-on AND the fiber
   // lift becomes pure screen depth (in/out). Cloud lenses keep the turntable tilt EL.
-  let elCur=EL, elTarget=EL;
+  let elCur=EL, elTarget=EL, camDist=CAM, camTarget=CAM, camDist0=CAM, _lastDownT=0;
   // sectors
   const counts={}; POS_SECTORS.forEach(s=>counts[s]=0);
   const posOf=new Array(N);
@@ -435,8 +435,8 @@ function renderConstellation(){
     const x1=gx*cf+gz*sf, z1=-gx*sf+gz*cf;
     const ca=Math.cos(elCur),sa=Math.sin(elCur);
     const y2=gy*ca+z1*sa, z2=-gy*sa+z1*ca;
-    const sc=FOC/(FOC+CAM+z2)*zoom;
-    return {sx:CX+x1*sc,sy:CY-y2*sc,sc:sc,depth:z2};
+    const denom=FOC+camDist+z2, sc=FOC/denom;       // camDist is the dolly distance (zoom flies it in)
+    return {sx:CX+x1*sc,sy:CY-y2*sc,sc:sc,depth:z2,vis:denom>FOC*0.08}; // vis=false → behind/at camera → cull
   }
   function draw(){
     const now=performance.now();
@@ -446,8 +446,10 @@ function renderConstellation(){
     if(!dragging){ yaw+=yawVel; elTarget=Math.max(0.12,Math.min(1.52,elTarget+pitchVel)); }
     yawVel*=0.9; pitchVel*=0.9; if(Math.abs(yawVel)<1e-4)yawVel=0; if(Math.abs(pitchVel)<1e-5)pitchVel=0;
     elCur+=(elTarget-elCur)*0.14; // tilt the camera toward the active lens's elevation
+    camDist+=(camTarget-camDist)*0.16; // dolly toward/through the cloud — zoom flies you in
+    const _zoomNow=FOC/Math.max(0.08*FOC, FOC+camDist); // closeness proxy (replaces the old zoom magnifier)
     for(let q=0;q<node.length;q++){ const o=node[q]; o.x+=(o.tx-o.x)*0.14; o.y+=(o.ty-o.y)*0.14; o.z+=(o.tz-o.z)*0.14; }
-    if(_lensId==='anatomy'){
+    if(_lensId==='anatomy' && _zoomNow<3){
       ctx.strokeStyle='rgba(77,255,160,0.22)'; ctx.setLineDash([2,7]); ctx.lineWidth=1; ctx.beginPath();
       for(let t=0;t<=64;t++){const aa=t/64*2*Math.PI,p=proj({x:frR*Math.cos(aa),y:frR*Math.sin(aa),z:0}); if(t===0)ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);} ctx.stroke(); ctx.setLineDash([]);
     }
@@ -455,13 +457,13 @@ function renderConstellation(){
     let _minD=1e9,_maxD=-1e9; for(let q=0;q<ps.length;q++){ const d=ps[q].depth; if(d<_minD)_minD=d; if(d>_maxD)_maxD=d; } const _dR=(_maxD-_minD)||1;
     const _fog=function(dep){ return 1-0.55*((dep-_minD)/_dR); }; // depth cueing: near=bright, far recedes → 3-D reads (auto no-op when the layout is flat)
     const _webE=(_lensId==='web'), _engE=(_lensId==='engine'), _terE=(_lensId==='territory');
-    for(let e=0;e<_edges.length;e++){const na=_edges[e][0],nb=_edges[e][1],a=proj(na),b=proj(nb); ctx.globalAlpha=_fog((a.depth+b.depth)*0.5);
+    for(let e=0;e<_edges.length;e++){const na=_edges[e][0],nb=_edges[e][1],a=proj(na),b=proj(nb); if(!a.vis||!b.vis)continue; ctx.globalAlpha=_fog((a.depth+b.depth)*0.5);
       if(_terE&&_lensColor){ const c0=_lensColor(na),c1=_lensColor(nb),same=(c0[0]===c1[0]&&c0[1]===c1[1]&&c0[2]===c1[2]); ctx.strokeStyle=same?'rgba('+c0[0]+','+c0[1]+','+c0[2]+',0.55)':'rgba(150,160,158,0.12)'; ctx.lineWidth=same?1:0.6; }
       else { ctx.strokeStyle=_webE?'rgba(255,255,255,0.30)':(_engE?'rgba(125,255,192,0.45)':'rgba(125,255,192,0.15)'); ctx.lineWidth=(_webE||_engE)?1:0.7; }
       ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();} ctx.globalAlpha=1;
     const labels=[];
     for(let q=0;q<ps.length;q++){
-      const p=ps[q],o=p.o,c=(_lensColor?_lensColor(o):posColor(o.pos)),dm=(_dim?_dim(o):1)*_fog(p.depth);
+      const p=ps[q]; if(!p.vis) continue; const o=p.o,c=(_lensColor?_lensColor(o):posColor(o.pos)),dm=(_dim?_dim(o):1)*_fog(p.depth);
       if(!o.seen){ ctx.fillStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.12)'; ctx.beginPath(); ctx.arc(p.sx,p.sy,1.5*p.sc,0,7); ctx.fill(); continue; }
       const halo=(o.st>=3?13:o.st>=2?10:8)*p.sc, ha=(o.st>=3?0.34:o.st>=2?0.22:0.15)*dm;
       const g=ctx.createRadialGradient(p.sx,p.sy,0,p.sx,p.sy,halo);
@@ -475,7 +477,7 @@ function renderConstellation(){
       ctx.globalAlpha=1;
       o._sx=p.sx; o._sy=p.sy;
       // detail-on-demand: once zoomed in, on-screen seen stars earn a label
-      if(zoom>=2.0 && p.sx>-30&&p.sx<Wc+30&&p.sy>-30&&p.sy<Hc+50) labels.push({p:p,o:o,c:c,core:core});
+      if(_zoomNow>=1.5 && p.sx>-30&&p.sx<Wc+30&&p.sy>-30&&p.sy<Hc+50) labels.push({p:p,o:o,c:c,core:core});
     }
     // label pass on top: glyph (target language), then gloss (parent) when closer
     for(let l=0;l<labels.length;l++){
@@ -484,7 +486,7 @@ function renderConstellation(){
       ctx.font='600 '+gs+'px '+CJK;
       ctx.fillStyle='rgba(255,255,255,0.94)';
       ctx.fillText(D[o.i][0], p.sx, p.sy+L.core+3);
-      if(zoom>=3.4){
+      if(_zoomNow>=3.0){
         const ds=Math.max(9,gs*0.4);
         ctx.font=ds+'px ui-monospace,monospace';
         ctx.fillStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.9)';
@@ -526,13 +528,15 @@ function renderConstellation(){
     try{cv.setPointerCapture(e.pointerId);}catch(_){}
     pts.set(e.pointerId,{x:px(e),y:py(e)}); hideHint();
     if(pts.size===1){ dragging=true; moved=0; lastX=px(e); lastY=py(e); yawVel=0; pitchVel=0; cv.style.cursor='grabbing';
-      holdFired=false; cancelHold(); const hs=starAtPx(px(e),py(e)); if(hs){ holdStar=hs; holdT0=performance.now(); holdTimer=setTimeout(openHeldAtom,HOLD_MS); } }
-    else if(pts.size===2){ dragging=false; cancelHold(); const a=[...pts.values()]; pinchD0=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1; zoom0=zoom; }
+      holdFired=false; cancelHold(); const hs=starAtPx(px(e),py(e));
+      const _nt=performance.now(); if(_nt-_lastDownT<320 && !hs){ camTarget=CAM; elTarget=(currentLens&&currentLens.el!=null?currentLens.el:EL); } _lastDownT=_nt; // double-tap empty space → ease back out
+      if(hs){ holdStar=hs; holdT0=performance.now(); holdTimer=setTimeout(openHeldAtom,HOLD_MS); } }
+    else if(pts.size===2){ dragging=false; cancelHold(); const a=[...pts.values()]; pinchD0=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1; camDist0=camTarget; }
   });
   cv.addEventListener('pointermove',e=>{
     if(!pts.has(e.pointerId)) return;
     pts.set(e.pointerId,{x:px(e),y:py(e)});
-    if(pts.size>=2){ cancelHold(); const a=[...pts.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y); zoom=clampZoom(zoom0*(d/(pinchD0||1))); }
+    if(pts.size>=2){ cancelHold(); const a=[...pts.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),ratio=d/(pinchD0||1); camTarget=Math.max(-FOC*0.9, Math.min(CAM*2.4, camDist0-(ratio-1)*Rmax*2.2)); }
     else if(dragging){ const x=px(e),y=py(e),dx=x-lastX,dy=y-lastY; lastX=x; lastY=y; moved+=Math.abs(dx)+Math.abs(dy); yaw+=dx*0.006; yawVel=dx*0.006; elTarget=Math.max(0.12,Math.min(1.52,elTarget+dy*0.004)); pitchVel=dy*0.004; if(moved>6&&holdStar) cancelHold(); }
   });
   function endPtr(e){
@@ -543,7 +547,7 @@ function renderConstellation(){
   }
   cv.addEventListener('pointerup',endPtr);
   cv.addEventListener('pointercancel',endPtr);
-  cv.addEventListener('wheel',e=>{ e.preventDefault(); hideHint(); zoom=clampZoom(zoom*(1-e.deltaY*0.0030)); },{passive:false});
+  cv.addEventListener('wheel',e=>{ e.preventDefault(); hideHint(); camTarget=Math.max(-FOC*0.9, Math.min(CAM*2.4, camTarget+e.deltaY*Rmax*0.004)); },{passive:false});
   // right-click a star → open its atom card (desktop power shortcut for press-and-hold)
   cv.addEventListener('contextmenu',e=>{ e.preventDefault(); const hs=starAtPx(px(e),py(e)); if(hs && typeof openAtomDetail==='function'){ try{ _atomFloodXY=floodFrom(hs)||{x:e.clientX,y:e.clientY}; }catch(_){ _atomFloodXY={x:e.clientX,y:e.clientY}; } openAtomDetail(hs.i,'sky'); } });
   // POS legend
