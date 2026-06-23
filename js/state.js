@@ -324,7 +324,7 @@ function renderConstellation(){
   let elCur=EL, elTarget=EL, camDist=CAM, camTarget=CAM, camDist0=CAM, _lastDownT=0;
   // look-at TARGET (eased): dolly flies toward this. Panned toward the cursor on zoom so you
   // steer to peripheral atoms, not just the center. Recenters when you back out.
-  let tcx=0,tcy=0,tcz=0, ttx=0,tty=0,ttz=0;
+  let tcx=0,tcy=0,tcz=0, ttx=0,tty=0,ttz=0, fovNow=1;
   // sectors
   const counts={}; POS_SECTORS.forEach(s=>counts[s]=0);
   const posOf=new Array(N);
@@ -438,7 +438,7 @@ function renderConstellation(){
     const x1=gx*cf+gz*sf, z1=-gx*sf+gz*cf;
     const ca=Math.cos(elCur),sa=Math.sin(elCur);
     const y2=gy*ca+z1*sa, z2=-gy*sa+z1*ca;
-    const denom=FOC+camDist+z2, sc=FOC/denom;       // camDist is the dolly distance (zoom flies it in)
+    const denom=FOC+camDist+z2*fovNow, sc=FOC/denom; // fovNow amplifies depth divergence inside → wider FOV, center scale unchanged
     return {sx:CX+x1*sc,sy:CY-y2*sc,sc:sc,depth:z2,vis:denom>FOC*0.08}; // vis=false → behind/at camera → cull
   }
   function draw(){
@@ -452,7 +452,9 @@ function renderConstellation(){
     camDist+=(camTarget-camDist)*0.16; // dolly toward/through the cloud — zoom flies you in
     tcx+=(ttx-tcx)*0.16; tcy+=(tty-tcy)*0.16; tcz+=(ttz-tcz)*0.16; // ease the look-at target
     if(camDist>CAM*0.7){ ttx*=0.94; tty*=0.94; ttz*=0.94; } // recenter as you back out to orbit
-    const _zoomNow=FOC/Math.max(0.08*FOC, FOC+camDist); // closeness proxy (replaces the old zoom magnifier)
+    const _fovT=1+0.8*(1-Math.max(0,Math.min(1, camDist/(CAM*0.55)))); // inside → 1.8 (wide), outside → 1.0 (clean)
+    fovNow+=(_fovT-fovNow)*0.12;
+    const _zoomNow=FOC/Math.max(0.08*FOC, FOC+camDist); // closeness proxy
     for(let q=0;q<node.length;q++){ const o=node[q]; o.x+=(o.tx-o.x)*0.14; o.y+=(o.ty-o.y)*0.14; o.z+=(o.tz-o.z)*0.14; }
     if(_lensId==='anatomy' && _zoomNow<3){
       ctx.strokeStyle='rgba(77,255,160,0.22)'; ctx.setLineDash([2,7]); ctx.lineWidth=1; ctx.beginPath();
