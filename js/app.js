@@ -2900,19 +2900,15 @@ function renderConstellation(){
       // detail-on-demand: once zoomed in, on-screen seen stars earn a label
       if(_zoomNow>=1.5 && p.sx>-30&&p.sx<Wc+30&&p.sy>-30&&p.sy<Hc+50) labels.push({p:p,o:o,c:c,core:core});
     }
-    // label pass on top: glyph (target language), then gloss (parent) when closer
+    // label pass on top: TARGET GLYPH ONLY. No parent-language gloss — the Sky is a stress-free
+    // recognition playground (tap = hear it · hold = open the dex entry for the meaning). The L1
+    // crutch lives in the dictionary card, never on the star.
     for(let l=0;l<labels.length;l++){
       const L=labels[l],p=L.p,o=L.o,c=L.c, gs=Math.max(12,Math.min(40,8+L.core*1.6));
       ctx.textAlign='center'; ctx.textBaseline='top';
       ctx.font='600 '+gs+'px '+CJK;
       ctx.fillStyle='rgba(255,255,255,0.94)';
       ctx.fillText(D[o.i][0], p.sx, p.sy+L.core+3);
-      if(_zoomNow>=3.0){
-        const ds=Math.max(9,gs*0.4);
-        ctx.font=ds+'px ui-monospace,monospace';
-        ctx.fillStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.9)';
-        ctx.fillText(D[o.i][2], p.sx, p.sy+L.core+3+gs+2);
-      }
     }
     if(tapFx){
       const dt=now-tapFx.t0;
