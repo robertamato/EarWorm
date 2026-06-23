@@ -397,6 +397,34 @@ function getPuzzleSentences(i){
   }catch(e){ return []; }
 }
 
+// ── EXPOSURE LOG ───────────────────────────────────────────────────────────
+// The learner's personal record of which sentences they have actually been SHOWN in
+// a session. The atom card's "in the wild" reads this (not the corpus): the entry
+// starts empty and GROWS as you play — surfacing the evidence log, filtered per atom.
+// project_fibroid. Stored on S.sentSeen keyed by sentence text → {n,t,en} (deduped,
+// count + last-seen + its gloss). Persisted by the normal study-loop save().
+function logSentenceSeen(zh, en){
+  try{
+    if(!zh) return;
+    if(!S.sentSeen) S.sentSeen={};
+    const e=S.sentSeen[zh]||{n:0,t:0,en:''};
+    e.n++; e.t=Date.now(); if(en&&!e.en) e.en=en;
+    S.sentSeen[zh]=e;
+  }catch(_){}
+}
+// Sentences the learner has been exposed to that contain atom i → [zh, _, en, n, t].
+function getSeenSentences(i){
+  const out=[];
+  try{
+    if(!S.sentSeen||!D[i]) return out;
+    const ch=D[i][0];
+    Object.keys(S.sentSeen).forEach(function(zh){
+      if(sentenceContainsAtom(zh,ch)){ const e=S.sentSeen[zh]; out.push([zh,null,e.en||'',e.n||1,e.t||0]); }
+    });
+  }catch(_){}
+  return out;
+}
+
 function clozeUnlocked(i){
   // Require at least one sentence that passes the runtime sentenceAllIntroduced gate.
   // Raw .length is insufficient: LLM sentences can be in cache but blocked until vocab is introduced.
@@ -532,6 +560,7 @@ function showStudyCloze(i){
   if(!distractors.length){ showStudyMC(i,false); return; }  // fall back to MC, don't waste the turn
   const choices=shuffle([ch,...distractors]);
 
+  logSentenceSeen(zh,en); // exposure: the learner is now meeting this sentence in the wild
   // Render into study panel — reuse MC panel
   show('study');
   $('studySession').style.display='none';
@@ -761,6 +790,7 @@ function showStudyComprehension(i){
   if(S.sound!=='mute'){ const _card=activeCardIdx; setTimeout(()=>{ if(activeCardIdx===_card) speak(zh,activeCourse().langCode); },30); }
   cardShownAtMC=Date.now();
 
+  logSentenceSeen(zh,en); // exposure: heard the whole sentence in the wild
   show('study');
   $('studySession').style.display='none';
   $('studyMC').style.display='flex';
@@ -907,6 +937,7 @@ function showWordOrderDrill(i){
   $('studyMode').textContent='WORD ORDER';
   cardShownAtMC=Date.now();
 
+  logSentenceSeen(zh,en); // exposure: assembled this sentence in the wild
   show('study');
   $('studySession').style.display='none';
   $('studyMC').style.display='flex';
