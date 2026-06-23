@@ -2785,7 +2785,7 @@ function renderConstellation(){
   const LENSES=[
     { id:'anatomy', name:'ANATOMY', flex:'your words, mapped by grammar',
       apply:function(){ node.forEach(o=>{ o.tx=o.ax; o.ty=o.ay; o.tz=o.fz; }); _edges=edges; _dim=null; } },
-    { id:'web', name:'THE WEB', flex:'', pluckShare:0.66, pluckDamp:0.83,
+    { id:'web', name:'THE WEB', flex:'', pluckShare:0.66, pluckDamp:0.83, legend:{type:'grad',from:'resolving',to:'confused',hueA:172,hueB:22},
       apply:function(){ const pairs=_confusionPairs(); const px=node.map(o=>o.ax), py=node.map(o=>o.ay), inv={};
         for(let q=0;q<pairs.length;q++){ inv[pairs[q][0]]=1; inv[pairs[q][1]]=1; }
         for(let it=0;it<45;it++){ for(let q=0;q<pairs.length;q++){ const a=pairs[q][0],b=pairs[q][1],mx=(px[a]+px[b])/2,my=(py[a]+py[b])/2,f=0.05; px[a]+=(mx-px[a])*f; py[a]+=(my-py[a])*f; px[b]+=(mx-px[b])*f; py[b]+=(my-py[b])*f; } }
@@ -2797,7 +2797,7 @@ function renderConstellation(){
         for(const k in heat){ if(heat[k]>maxH) maxH=heat[k]; }
         _lensColor=function(o){ if(!inv[o.i]) return [120,130,128]; const t=Math.min(1,(heat[o.i]||0)/maxH); return hslToRgb(172-150*t,72,60); };
         this.flex=pairs.length?(pairs.length+' blur'+(pairs.length>1?'s':'')+' — drawn together, decaying as you tell them apart'):'no blurs caught yet — keep playing'; } },
-    { id:'engine', name:'THE ENGINE', flex:'', el:1.30, pluckShare:0.30, pluckDamp:0.72,
+    { id:'engine', name:'THE ENGINE', flex:'', el:1.30, pluckShare:0.30, pluckDamp:0.72, legend:{type:'grad',from:'core',to:'reach',hueA:45,hueB:200},
       apply:function(){ let gb; try{ gb=computeGenerativeBasis(); }catch(e){ gb=null; }
         const tierOf={}; let T=0,basisSize=0,deepest=0;
         if(gb){ T=gb.tiers.length; basisSize=gb.basisSize; gb.tiers.forEach((t,ti)=>{ t.atoms.forEach(a=>{ tierOf[a.rank]=ti; if(a.rank>deepest)deepest=a.rank; }); }); }
@@ -2817,12 +2817,14 @@ function renderConstellation(){
         _edges=[]; let ws=0,wa=0; for(let i=0;i<N;i++){ const w=1/(i+1); wa+=w; if(node[i].seen) ws+=w; }
         const pct=wa?Math.round(ws/wa*100):0; _dim=function(o){ return o.seen?1:0.18; };
         this.flex='you can read ~'+pct+'% of running text on sight'; } },
-    { id:'edge', name:'THE EDGE', flex:'',
+    { id:'edge', name:'THE EDGE', flex:'', legend:{type:'grad',from:'fresh',to:'landing',hueA:22,hueB:150},
       apply:function(){ const fset={}; node.forEach((o,i)=>{ if(o.seen && o.st<3) fset[i]=1; });
         node.forEach((o,i)=>{ o.tx=o.ax; o.ty=o.ay; o.tz=o.fz; });
         _edges=[]; _dim=function(o){ return fset[o.i]?1:0.16; };
+        // HUE = how close each in-flight word is to LANDING: fresh (hot) → almost-mastered (cool).
+        _lensColor=function(o){ if(!fset[o.i]) return [110,120,118]; const m=(typeof card==='function'?(card(o.i).m||0):0); return hslToRgb(22+Math.min(1,m/4)*128,72,60); };
         const n=Object.keys(fset).length; this.flex=n?('your working edge — '+n+' word'+(n>1?'s':'')+' still landing'):'all caught up — explore for more'; } },
-    { id:'territory', name:'THE TERRITORY', flex:'', pluckShare:0.72, pluckDamp:0.84,
+    { id:'territory', name:'THE TERRITORY', flex:'', pluckShare:0.72, pluckDamp:0.84, legend:{type:'none'},
       // The crown jewel as an honest DENSE FIELD: a true 3-D force-directed embedding of the
       // PMI semantic graph. Depth here carries STRUCTURE, not mastery (mastery rides on
       // size/brightness) — all three spatial axes embed the meaning, and you ORBIT it. Tilted
@@ -3045,17 +3047,25 @@ function renderConstellation(){
   },{passive:false});
   // right-click a star → open its atom card (desktop power shortcut for press-and-hold)
   cv.addEventListener('contextmenu',e=>{ e.preventDefault(); const hs=starAtPx(px(e),py(e)); if(hs && typeof openAtomDetail==='function'){ try{ _atomFloodXY=floodFrom(hs)||{x:e.clientX,y:e.clientY}; }catch(_){ _atomFloodXY={x:e.clientX,y:e.clientY}; } try{ _skyAtomRGB=colorOf(hs); }catch(_){ _skyAtomRGB=null; } openAtomDetail(hs.i,'sky'); } });
-  // POS legend
+  // LEGEND = the active lens's HUE KEY (swaps with the lens, like the flex line). POS lenses show the
+  // colored POS words; continuous-hue lenses (Web heat / Engine tier / Edge landing) show a gradient
+  // bar with two end labels; Territory (community, no fixed key) shows none.
   const leg=document.createElement('div');
-  leg.style.cssText='position:absolute;top:24px;left:8px;z-index:2;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';
-  active.forEach(function(s){
-    // The word itself carries the POS color (the dot was redundant) — saves the
-    // glyph + gap so the legend packs tighter against the Sky.
-    const sp=document.createElement('span');
-    sp.textContent=s.toLowerCase();
-    sp.style.color=posRGB(s);
-    leg.appendChild(sp);
-  });
+  leg.style.cssText='position:absolute;top:24px;left:8px;z-index:2;font-size:8px;letter-spacing:1px;max-width:62%;';
+  // the word itself carries the POS color (dot was redundant) — packs tight against the Sky
+  let _posLegHTML=''; active.forEach(function(s){ _posLegHTML+='<span style="color:'+posRGB(s)+';margin-right:8px;">'+s.toLowerCase()+'</span>'; });
+  function renderLegend(){
+    const lg=(currentLens&&currentLens.legend)||{type:'pos'};
+    if(lg.type==='none'){ leg.style.display='none'; return; }
+    leg.style.display='block';
+    if(lg.type==='grad'){
+      const a=hslToRgb(lg.hueA,72,60), b=hslToRgb(lg.hueB,72,60);
+      const c0='rgb('+a[0]+','+a[1]+','+a[2]+')', c1='rgb('+b[0]+','+b[1]+','+b[2]+')';
+      leg.innerHTML='<div style="display:flex;align-items:center;gap:5px;opacity:.78;"><span>'+lg.from+'</span>'
+        +'<span style="display:inline-block;width:44px;height:5px;border-radius:3px;background:linear-gradient(to right,'+c0+','+c1+');"></span>'
+        +'<span>'+lg.to+'</span></div>';
+    } else { leg.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:2px 0;">'+_posLegHTML+'</div>'; }
+  }
   host.appendChild(leg);
   // faint control hint (fades on first interaction); word detail now lives on the stars
   const hint=document.createElement('div'); hint.id='mapHint';
@@ -3071,7 +3081,7 @@ function renderConstellation(){
     lensCtl.innerHTML='<div style="opacity:.85;">◳ '+currentLens.name+' ▸</div><div style="margin-top:4px;">'+pips+'</div><div style="font-size:8px;opacity:.5;margin-top:3px;line-height:1.3;">'+(currentLens.flex||'')+'</div>';
   }
   function applyLens(idx){ lensIdx=((idx%LENSES.length)+LENSES.length)%LENSES.length; currentLens=LENSES[lensIdx]; _lensId=currentLens.id; _lensColor=null; currentLens.apply(); elTarget=(currentLens.el!=null?currentLens.el:EL);
-    if(leg) leg.style.display=_lensColor?'none':'flex'; // POS legend only when the lens colors by POS (hidden on community-colored TERRITORY)
+    if(leg) renderLegend(); // the legend is the active lens's hue key (POS words / gradient bar / none)
     updateLensUI(); }
   lensCtl.onclick=function(e){ e.stopPropagation(); applyLens(lensIdx+1); try{ S.lens=currentLens.id; if(typeof save==='function') save(); }catch(_){} };
   // restore the last-used lens (persisted on switch); default ANATOMY
