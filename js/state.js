@@ -421,7 +421,7 @@ function renderConstellation(){
         this.flex=realL.length+' neighborhoods — orbit your semantic space'; } }
   ];
   let lensIdx=0, currentLens=LENSES[0];
-  let yaw=0,zoom=1,dragging=false,lastX=0,moved=0,tapFx=null;
+  let yaw=0,zoom=1,dragging=false,lastX=0,lastY=0,moved=0,tapFx=null,yawVel=0,pitchVel=0;
   // Press-and-hold → open the atom's detail card (tap stays pure TTS). project_fibroid.
   let holdStar=null,holdT0=0,holdFired=false,holdTimer=null; const HOLD_MS=450;
   const pts=new Map(); let pinchD0=0,zoom0=1;
@@ -442,6 +442,9 @@ function renderConstellation(){
     const now=performance.now();
     ctx.clearRect(0,0,Wc,Hc);
     // morph: ease every node toward its current lens target — a lens switch animates here
+    // camera inertia: yaw + pitch coast on release and ease to a stop (pitch stays clamped/anchored)
+    if(!dragging){ yaw+=yawVel; elTarget=Math.max(0.12,Math.min(1.52,elTarget+pitchVel)); }
+    yawVel*=0.9; pitchVel*=0.9; if(Math.abs(yawVel)<1e-4)yawVel=0; if(Math.abs(pitchVel)<1e-5)pitchVel=0;
     elCur+=(elTarget-elCur)*0.14; // tilt the camera toward the active lens's elevation
     for(let q=0;q<node.length;q++){ const o=node[q]; o.x+=(o.tx-o.x)*0.14; o.y+=(o.ty-o.y)*0.14; o.z+=(o.tz-o.z)*0.14; }
     if(_lensId==='anatomy'){
@@ -522,7 +525,7 @@ function renderConstellation(){
   cv.addEventListener('pointerdown',e=>{
     try{cv.setPointerCapture(e.pointerId);}catch(_){}
     pts.set(e.pointerId,{x:px(e),y:py(e)}); hideHint();
-    if(pts.size===1){ dragging=true; moved=0; lastX=px(e); cv.style.cursor='grabbing';
+    if(pts.size===1){ dragging=true; moved=0; lastX=px(e); lastY=py(e); yawVel=0; pitchVel=0; cv.style.cursor='grabbing';
       holdFired=false; cancelHold(); const hs=starAtPx(px(e),py(e)); if(hs){ holdStar=hs; holdT0=performance.now(); holdTimer=setTimeout(openHeldAtom,HOLD_MS); } }
     else if(pts.size===2){ dragging=false; cancelHold(); const a=[...pts.values()]; pinchD0=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1; zoom0=zoom; }
   });
@@ -530,7 +533,7 @@ function renderConstellation(){
     if(!pts.has(e.pointerId)) return;
     pts.set(e.pointerId,{x:px(e),y:py(e)});
     if(pts.size>=2){ cancelHold(); const a=[...pts.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y); zoom=clampZoom(zoom0*(d/(pinchD0||1))); }
-    else if(dragging){ const x=px(e),dx=x-lastX; lastX=x; moved+=Math.abs(dx); yaw+=dx*0.006; if(moved>6&&holdStar) cancelHold(); }
+    else if(dragging){ const x=px(e),y=py(e),dx=x-lastX,dy=y-lastY; lastX=x; lastY=y; moved+=Math.abs(dx)+Math.abs(dy); yaw+=dx*0.006; yawVel=dx*0.006; elTarget=Math.max(0.12,Math.min(1.52,elTarget+dy*0.004)); pitchVel=dy*0.004; if(moved>6&&holdStar) cancelHold(); }
   });
   function endPtr(e){
     const wasTap=(pts.size===1 && dragging && moved<6);
