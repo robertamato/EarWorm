@@ -4266,14 +4266,34 @@ function openAtomDetail(i, origin){
   // ── LORE (depth-gated) ──
   let lore='<div style="font-size:14px;opacity:.92;">'+_esc(def)+'</div>';
   if(st>=2){
+    // ── IN THE WILD: the usage concordance the PLUCK-POP earns. Every sentence the atom appears
+    // in, sorted EASIEST-FIRST (ones you can already read fully → ones that still stretch you). The
+    // flex = "you can read N sentences with this word." project_fibroid stage 2.
     try{
       const sents=(typeof getPuzzleSentences==='function')?(getPuzzleSentences(i)||[]):[];
-      const valid=sents.filter(s=>s&&s[0]&&(typeof sentenceAllIntroduced!=='function'||sentenceAllIntroduced(s[0])));
-      if(valid.length){
-        const sent=valid[0], showEn=(st<3);
-        lore+='<div style="border-top:0.5px solid rgba(255,255,255,0.1);padding-top:10px;">'
-            +'<div style="font-size:18px;'+CJKf+'">'+_esc(sent[0])+'</div>'
-            +((showEn&&sent[2])?'<div style="font-size:12px;opacity:.55;margin-top:3px;">'+_esc(sent[2])+'</div>':'')+'</div>';
+      const seenOf=j=>!!(S.cards[j]&&S.cards[j].seen);
+      const newWords=zh=>{ let n=0; try{
+          if(typeof _segMode==='function'&&_segMode()==='space'){ const had={}; (_tokenizeSpace(_spaceWords(zh))||[]).forEach(t=>{ if(t.idx>=0&&t.idx!==i&&!seenOf(t.idx)&&!had[t.idx]){had[t.idx]=1;n++;} }); }
+          else { for(let j=0;j<D.length;j++){ if(j===i)continue; if(zh.indexOf(D[j][0])>=0 && !seenOf(j)) n++; } }
+        }catch(_){ } return n; };
+      const cover=zh=>(typeof sentenceAllIntroduced!=='function')||sentenceAllIntroduced(zh);
+      const scored=sents.filter(s=>s&&s[0]).map(s=>({s:s,cov:cover(s[0]),nw:newWords(s[0]),len:[...s[0]].length}));
+      if(scored.length){
+        const readable=scored.filter(x=>x.cov).length;
+        scored.sort((a,b)=> a.cov!==b.cov ? (a.cov?-1:1) : (a.nw-b.nw || a.len-b.len) ); // readable first, then fewest-new, then shortest
+        const showEn=(st<3), w=_esc(word);
+        const hi=zh=>{ const e=_esc(zh); return w?e.split(w).join('<span style="color:'+colRGB+';font-weight:600;">'+w+'</span>'):e; }; // the focus word lit in the wild
+        let rows='';
+        scored.slice(0,4).forEach(x=>{ const s=x.s;
+          rows+='<div style="'+(x.cov?'':'opacity:.5;')+'">'
+              +'<div style="font-size:17px;'+CJKf+'">'+hi(s[0])+(x.cov?'':' <span style="font-size:10px;opacity:.8;color:'+colRGB+';font-family:ui-monospace,monospace;">+'+x.nw+'</span>')+'</div>'
+              +((showEn&&s[2])?'<div style="font-size:11px;opacity:.5;margin-top:2px;">'+_esc(s[2])+'</div>':'')+'</div>';
+        });
+        const flex=readable>0?('you can read '+readable+' sentence'+(readable>1?'s':'')+' with this word'):('seen in '+scored.length+' sentence'+(scored.length>1?'s':''));
+        lore+='<div style="border-top:0.5px solid rgba(255,255,255,0.1);padding-top:10px;display:flex;flex-direction:column;gap:8px;">'
+            +'<div style="font-size:9px;letter-spacing:1.5px;opacity:.4;">IN THE WILD</div>'
+            +'<div style="font-size:11px;color:'+colRGB+';opacity:.85;margin-top:-5px;">'+flex+'</div>'
+            +rows+'</div>';
       }
     }catch(e){}
     const rivals=(typeof confusionDistractorIdx==='function')?confusionDistractorIdx(i,1):[];
