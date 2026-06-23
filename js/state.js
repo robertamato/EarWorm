@@ -305,6 +305,10 @@ function renderConstellation(){
         node.forEach((o,i)=>{ o.tx=o.ax; o.ty=o.ay; o.tz=fset[i]?(o.az+Rmax*0.4):o.az; });
         _edges=[]; _dim=function(o){ return fset[o.i]?1:0.16; };
         const n=Object.keys(fset).length; this.flex=n?('your working edge — '+n+' word'+(n>1?'s':'')+' still landing'):'all caught up — explore for more'; } }
+    // THE TERRITORY (semantic neighborhoods) is intentionally NOT here yet: a co-occurrence
+    // Fruchterman-Reingold layout collapses to a hub hairball (function words co-occur with
+    // everything), so it doesn't read as neighborhoods. It needs PMI-weighted counts or real
+    // embeddings — the precompute task in project_fibroid. Deferred honestly, not faked.
   ];
   let lensIdx=0, currentLens=LENSES[0];
   let yaw=0,zoom=1,dragging=false,lastX=0,moved=0,tapFx=null;
