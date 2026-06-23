@@ -2672,6 +2672,33 @@ function constellationCommunities(){
   }
   _commCache=label;_commCacheD=D;return label;
 }
+// Spectral embedding for THE TERRITORY: the top eigenvectors of the symmetric PPMI matrix ARE
+// the classical distributional word-embedding (Levy & Goldberg 2014: SPPMI factorization ≈
+// word2vec). Real embedding from local co-occurrence, not a force heuristic. Power iteration +
+// deflation for the top 4; eigvec 0 is the dominant degree/frequency axis (skipped), so
+// eigvecs 1-3 (weighted by √eigenvalue) become the x/y/z of the semantic manifold.
+let _embedCache=null,_embedCacheD=null;
+function constellationEmbed(){
+  if(_embedCache&&_embedCacheD===D) return _embedCache;
+  const pm=(typeof constellationPMI==='function')?constellationPMI():[], N2=D.length;
+  const M=new Array(N2); for(let i=0;i<N2;i++) M[i]=new Float64Array(N2);
+  for(let e=0;e<pm.length;e++){ const a=pm[e][0],b=pm[e][1],w=pm[e][2]; if(a<N2&&b<N2){ M[a][b]=w; M[b][a]=w; } }
+  const K=4, vecs=[], vals=[], tmp=new Float64Array(N2);
+  for(let kk=0;kk<K;kk++){
+    let v=new Float64Array(N2); for(let i=0;i<N2;i++) v[i]=Math.sin((i+1)*(kk+1)*1.7)+0.001;
+    for(let it=0;it<100;it++){
+      for(let i=0;i<N2;i++){ let s=0; const Mi=M[i]; for(let j=0;j<N2;j++) s+=Mi[j]*v[j]; tmp[i]=s; }
+      for(let p=0;p<vecs.length;p++){ let d=0; for(let i=0;i<N2;i++) d+=tmp[i]*vecs[p][i]; for(let i=0;i<N2;i++) tmp[i]-=d*vecs[p][i]; }
+      let nrm=0; for(let i=0;i<N2;i++) nrm+=tmp[i]*tmp[i]; nrm=Math.sqrt(nrm)||1;
+      for(let i=0;i<N2;i++) v[i]=tmp[i]/nrm;
+    }
+    let lam=0; for(let i=0;i<N2;i++){ let s=0; const Mi=M[i]; for(let j=0;j<N2;j++) s+=Mi[j]*v[j]; lam+=v[i]*s; }
+    vecs.push(v.slice()); vals.push(lam);
+  }
+  const idx=[1,2,3], wt=idx.map(k=>Math.sqrt(Math.abs(vals[k]||0.001)));
+  const out=[]; for(let i=0;i<N2;i++) out.push([ (vecs[idx[0]]||vecs[0])[i]*wt[0], (vecs[idx[1]]||vecs[0])[i]*wt[1], (vecs[idx[2]]||vecs[0])[i]*wt[2] ]);
+  _embedCache=out; _embedCacheD=D; return out;
+}
 let _cnGen=0;
 function renderConstellation(){
   const host=$('map'); if(!host) return;
@@ -2787,24 +2814,18 @@ function renderConstellation(){
       // neighborhoods read even through the web. The honest "how an LLM sees it" render.
       apply:function(){ const pm=(typeof constellationPMI==='function')?constellationPMI():[];
         const lab=(typeof constellationCommunities==='function')?constellationCommunities():null;
-        if(!pm.length||!lab){ node.forEach(o=>{o.tx=o.ax;o.ty=o.ay;o.tz=o.fz;}); _edges=[]; _dim=null; _lensColor=null; this.flex='neighborhoods forming — keep playing'; return; }
+        const emb=(typeof constellationEmbed==='function')?constellationEmbed():null;
+        if(!pm.length||!lab||!emb){ node.forEach(o=>{o.tx=o.ax;o.ty=o.ay;o.tz=o.fz;}); _edges=[]; _dim=null; _lensColor=null; this.flex='neighborhoods forming — keep playing'; return; }
         // top-3 sparse edges (cleaner attraction) + their weights
         const byN={}; for(let e=0;e<pm.length;e++){ const a=pm[e][0],b=pm[e][1]; (byN[a]=byN[a]||[]).push(e); (byN[b]=byN[b]||[]).push(e); }
         const keep={}; Object.keys(byN).forEach(function(n){ const arr=byN[n].sort(function(x,y){return pm[y][2]-pm[x][2];}); for(let j=0;j<arr.length&&j<3;j++) keep[arr[j]]=1; });
         const E=Object.keys(keep).map(function(i){ return pm[+i]; });
         let maxw=0.01; for(let e=0;e<E.length;e++) if(E[e][2]>maxw) maxw=E[e][2];
-        // 3-D force-directed embedding
-        const px=new Float64Array(N), py=new Float64Array(N), pz=new Float64Array(N);
-        for(let i=0;i<N;i++){ px[i]=(Math.random()-0.5)*Rmax; py[i]=(Math.random()-0.5)*Rmax; pz[i]=(Math.random()-0.5)*Rmax; }
-        const k=Math.cbrt((4.19*Rmax*Rmax*Rmax)/Math.max(1,N))*2.4, GRAV=0.012; let temp=Rmax*0.42;
-        for(let it=0;it<110;it++){ const dx0=new Float64Array(N), dy0=new Float64Array(N), dz0=new Float64Array(N);
-          for(let a=0;a<N;a++){ for(let b=0;b<N;b++){ if(a===b)continue; let dx=px[a]-px[b],dy=py[a]-py[b],dz=pz[a]-pz[b],d=Math.sqrt(dx*dx+dy*dy+dz*dz)||0.01,r=k*k/d; if(lab[a]!==lab[b]) r*=1.4; dx0[a]+=(dx/d)*r; dy0[a]+=(dy/d)*r; dz0[a]+=(dz/d)*r; } }
-          for(let e=0;e<E.length;e++){ const a=E[e][0],b=E[e][1]; if(a>=N||b>=N)continue; const w=E[e][2]/maxw*(lab[a]===lab[b]?1.8:0.6); let dx=px[a]-px[b],dy=py[a]-py[b],dz=pz[a]-pz[b],d=Math.sqrt(dx*dx+dy*dy+dz*dz)||0.01,t=(d*d/k)*w; dx0[a]-=(dx/d)*t; dy0[a]-=(dy/d)*t; dz0[a]-=(dz/d)*t; dx0[b]+=(dx/d)*t; dy0[b]+=(dy/d)*t; dz0[b]+=(dz/d)*t; }
-          for(let i=0;i<N;i++){ dx0[i]-=px[i]*GRAV; dy0[i]-=py[i]*GRAV; dz0[i]-=pz[i]*GRAV; const dl=Math.sqrt(dx0[i]*dx0[i]+dy0[i]*dy0[i]+dz0[i]*dz0[i])||0.01; px[i]+=(dx0[i]/dl)*Math.min(dl,temp); py[i]+=(dy0[i]/dl)*Math.min(dl,temp); pz[i]+=(dz0[i]/dl)*Math.min(dl,temp); } temp*=0.975; }
-        let cx=0,cy=0,cz=0; for(let i=0;i<N;i++){ cx+=px[i]; cy+=py[i]; cz+=pz[i]; } cx/=N;cy/=N;cz/=N;
-        const radii=[]; for(let i=0;i<N;i++){ px[i]-=cx; py[i]-=cy; pz[i]-=cz; if(node[i].seen) radii.push(Math.sqrt(px[i]*px[i]+py[i]*py[i]+pz[i]*pz[i])); }
+        // spectral embedding → centered + uniformly scaled positions (depth = a real semantic axis)
+        let cx=0,cy=0,cz=0; for(let i=0;i<N;i++){ cx+=emb[i][0]; cy+=emb[i][1]; cz+=emb[i][2]; } cx/=N;cy/=N;cz/=N;
+        const p3=[], radii=[]; for(let i=0;i<N;i++){ const x=emb[i][0]-cx,y=emb[i][1]-cy,z=emb[i][2]-cz; p3.push([x,y,z]); if(node[i].seen) radii.push(Math.sqrt(x*x+y*y+z*z)); }
         radii.sort(function(a,b){return a-b;}); const pr=(radii.length?radii[Math.floor(radii.length*0.9)]:1)||1, sc=(Rmax*0.86)/pr;
-        node.forEach((o,i)=>{ o.tx=px[i]*sc; o.ty=py[i]*sc; o.tz=pz[i]*sc; });
+        node.forEach((o,i)=>{ o.tx=p3[i][0]*sc; o.ty=p3[i][1]*sc; o.tz=p3[i][2]*sc; });
         _edges=E.filter(e=>e[0]<N&&e[1]<N&&node[e[0]].seen&&node[e[1]].seen).map(e=>[node[e[0]],node[e[1]]]); _dim=null;
         // color by COMMUNITY (golden-angle per neighborhood) so the 3-D clusters read
         const groups={}; for(let i=0;i<N;i++){ (groups[lab[i]]=groups[lab[i]]||[]).push(i); }
