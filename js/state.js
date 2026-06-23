@@ -331,20 +331,27 @@ function renderConstellation(){
       // (meaning) — content words cluster into neighborhoods, function words drift to the rim.
       // A poor-man's embedding from local data; upgradeable to real vectors later.
       apply:function(){ const pm=(typeof constellationPMI==='function')?constellationPMI():[];
-        let maxw=0.01; for(let e=0;e<pm.length;e++) if(pm[e][2]>maxw) maxw=pm[e][2];
-        const hasEdge=new Uint8Array(N); for(let e=0;e<pm.length;e++){ const a=pm[e][0],b=pm[e][1]; if(a<N&&b<N){ hasEdge[a]=1; hasEdge[b]=1; } }
+        // SPARSIFY: keep each node's top-3 PMI links. The full graph is one dense component
+        // (a blob); the sparse one fragments into distinct communities FR can pull apart.
+        const byN={}; for(let e=0;e<pm.length;e++){ const a=pm[e][0],b=pm[e][1]; (byN[a]=byN[a]||[]).push(e); (byN[b]=byN[b]||[]).push(e); }
+        const keep={}; Object.keys(byN).forEach(function(n){ const arr=byN[n].sort(function(x,y){return pm[y][2]-pm[x][2];}); for(let j=0;j<arr.length&&j<3;j++) keep[arr[j]]=1; });
+        const E=Object.keys(keep).map(function(i){ return pm[+i]; });
+        let maxw=0.01; for(let e=0;e<E.length;e++) if(E[e][2]>maxw) maxw=E[e][2];
         const px=node.map(o=>o.ax), py=node.map(o=>o.ay);
-        const area=Math.PI*Rmax*Rmax, k=Math.sqrt(area/Math.max(1,N))*1.1; let temp=Rmax*0.30;
-        for(let it=0;it<150;it++){ const dx0=new Float64Array(N), dy0=new Float64Array(N);
+        const area=Math.PI*Rmax*Rmax, k=Math.sqrt(area/Math.max(1,N))*1.5, GRAV=0.06; let temp=Rmax*0.38;
+        for(let it=0;it<160;it++){ const dx0=new Float64Array(N), dy0=new Float64Array(N);
           for(let a=0;a<N;a++){ for(let b=0;b<N;b++){ if(a===b)continue; let dx=px[a]-px[b],dy=py[a]-py[b],d=Math.hypot(dx,dy)||0.01,r=k*k/d; dx0[a]+=(dx/d)*r; dy0[a]+=(dy/d)*r; } }
-          for(let e=0;e<pm.length;e++){ const a=pm[e][0],b=pm[e][1]; if(a>=N||b>=N)continue; const w=pm[e][2]/maxw; let dx=px[a]-px[b],dy=py[a]-py[b],d=Math.hypot(dx,dy)||0.01; const t=(d*d/k)*w; dx0[a]-=(dx/d)*t; dy0[a]-=(dy/d)*t; dx0[b]+=(dx/d)*t; dy0[b]+=(dy/d)*t; }
-          for(let i=0;i<N;i++){ const dl=Math.hypot(dx0[i],dy0[i])||0.01; px[i]+=(dx0[i]/dl)*Math.min(dl,temp); py[i]+=(dy0[i]/dl)*Math.min(dl,temp); } temp*=0.975; }
-        let cx=0,cy=0; for(let i=0;i<N;i++){ cx+=px[i]; cy+=py[i]; } cx/=N; cy/=N; let mr=1;
-        for(let i=0;i<N;i++){ px[i]-=cx; py[i]-=cy; const r=Math.hypot(px[i],py[i]); if(r>mr)mr=r; }
-        const sc=(Rmax*0.92)/mr;
+          for(let e=0;e<E.length;e++){ const a=E[e][0],b=E[e][1]; if(a>=N||b>=N)continue; const w=E[e][2]/maxw; let dx=px[a]-px[b],dy=py[a]-py[b],d=Math.hypot(dx,dy)||0.01; const t=(d*d/k)*w; dx0[a]-=(dx/d)*t; dy0[a]-=(dy/d)*t; dx0[b]+=(dx/d)*t; dy0[b]+=(dy/d)*t; }
+          for(let i=0;i<N;i++){ dx0[i]-=px[i]*GRAV; dy0[i]-=py[i]*GRAV; const dl=Math.hypot(dx0[i],dy0[i])||0.01; px[i]+=(dx0[i]/dl)*Math.min(dl,temp); py[i]+=(dy0[i]/dl)*Math.min(dl,temp); } temp*=0.978; }
+        let cx=0,cy=0; for(let i=0;i<N;i++){ cx+=px[i]; cy+=py[i]; } cx/=N; cy/=N;
+        for(let i=0;i<N;i++){ px[i]-=cx; py[i]-=cy; }
+        // scale to the SEEN atoms (the words that matter visually) — the dim unseen atoms
+        // ring out and shouldn't set the scale; let them extend past the rim.
+        const radii=[]; for(let i=0;i<N;i++){ if(node[i].seen) radii.push(Math.hypot(px[i],py[i])); } radii.sort(function(a,b){return a-b;});
+        const pr=(radii.length?radii[Math.floor(radii.length*0.92)]:1)||1, sc=(Rmax*0.92)/pr;
         node.forEach((o,i)=>{ o.tx=px[i]*sc; o.ty=py[i]*sc; o.tz=0; });
-        _edges=pm.filter(e=>e[0]<N&&e[1]<N&&node[e[0]].seen&&node[e[1]].seen).map(e=>[node[e[0]],node[e[1]]]); _dim=null;
-        this.flex=pm.length?'you own these neighborhoods — words by the company they keep':'neighborhoods forming — keep playing'; } }
+        _edges=E.filter(e=>e[0]<N&&e[1]<N&&node[e[0]].seen&&node[e[1]].seen).map(e=>[node[e[0]],node[e[1]]]); _dim=null;
+        this.flex=E.length?'you own these neighborhoods — words by the company they keep':'neighborhoods forming — keep playing'; } }
   ];
   let lensIdx=0, currentLens=LENSES[0];
   let yaw=0,zoom=1,dragging=false,lastX=0,moved=0,tapFx=null;
