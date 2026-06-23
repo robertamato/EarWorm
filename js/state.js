@@ -310,7 +310,12 @@ function renderConstellation(){
     // SAME quantity the atom card renders as a ladder). Lens-INVARIANT: only the ground plane
     // (x,y) changes per lens; elevation = how far up acquisition each atom has climbed.
     const rung=(typeof atomHouseLine==='function')?atomHouseLine(i).rung:(seen?st:-1);
-    const fz=((rung<0?-0.55:(-0.2+(rung/5)*0.7))+(hash(i+1)-0.5)*0.10)*Rmax;
+    // Z = fiber depth, INVERTED: less-mastered floats SHALLOW (toward the viewer), mastered
+    // sinks DEEP (back). A modest lean + a volumetric jitter that restores the cloud's screen
+    // in/out body (the old large random jitter, lost in the first migration). Kept gentle so
+    // the flat lenses (READING spiral, TERRITORY islands) read their (x,y) structure cleanly.
+    const lean=(rung<0?0.18:(0.16-(rung/5)*0.30));
+    const fz=(lean+(hash(i+1)-0.5)*0.22)*Rmax;
     const nx=r*Math.cos(a), ny=r*Math.sin(a);
     // ax/ay = anatomy ground; fz = fiber height (Z, lens-invariant); tx/ty/tz = lens target
     node[i]={i:i,pos:s,seen:seen,st:st,rung:rung,x:nx,y:ny,z:fz,ax:nx,ay:ny,az:fz,fz:fz,tx:nx,ty:ny,tz:fz,_sx:null,_sy:null};
