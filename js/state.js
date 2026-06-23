@@ -289,6 +289,7 @@ let _cnGen=0;
 // Published by the live constellation closure so other screens (the atom card's "find in sky")
 // can fly the camera to a specific atom. Points at the latest closure; null until home renders.
 let _skyFlyTo=null;
+let _skyAtomRGB=null; // the plucked star's CURRENT lens color → carried into the flood + card accent
 function renderConstellation(){
   const host=$('map'); if(!host) return;
   _cnGen++; const gen=_cnGen;                 // invalidate any prior animation loop
@@ -376,6 +377,11 @@ function renderConstellation(){
         for(let it=0;it<45;it++){ for(let q=0;q<pairs.length;q++){ const a=pairs[q][0],b=pairs[q][1],mx=(px[a]+px[b])/2,my=(py[a]+py[b])/2,f=0.05; px[a]+=(mx-px[a])*f; py[a]+=(my-py[a])*f; px[b]+=(mx-px[b])*f; py[b]+=(my-py[b])*f; } }
         node.forEach((o,i)=>{ o.tx=px[i]; o.ty=py[i]; o.tz=o.fz; });
         _edges=pairs.map(p=>[node[p[0]],node[p[1]],p[2]]); _dim=function(o){ return inv[o.i]?1:0.25; };
+        // HUE = confusion heat: an atom's total remaining blur (sum of its pair weights), hot (still
+        // confused) → cool (resolving). Makes "your blur is resolving" a color you watch cool down.
+        const heat={}; let maxH=0.0001; for(let q=0;q<pairs.length;q++){ const w=pairs[q][2]; heat[pairs[q][0]]=(heat[pairs[q][0]]||0)+w; heat[pairs[q][1]]=(heat[pairs[q][1]]||0)+w; }
+        for(const k in heat){ if(heat[k]>maxH) maxH=heat[k]; }
+        _lensColor=function(o){ if(!inv[o.i]) return [120,130,128]; const t=Math.min(1,(heat[o.i]||0)/maxH); return hslToRgb(172-150*t,72,60); };
         this.flex=pairs.length?(pairs.length+' blur'+(pairs.length>1?'s':'')+' — drawn together, decaying as you tell them apart'):'no blurs caught yet — keep playing'; } },
     { id:'engine', name:'THE ENGINE', flex:'', el:1.30, pluckShare:0.30, pluckDamp:0.72,
       apply:function(){ let gb; try{ gb=computeGenerativeBasis(); }catch(e){ gb=null; }
@@ -386,6 +392,9 @@ function renderConstellation(){
         // Hasse covering edges: each basis atom → the atom it generatively rests on (THEORY §14)
         const covEdges=[]; if(gb&&gb.basis){ gb.basis.forEach(a=>{ if(a.covers>=0 && a.rank<N && a.covers<N) covEdges.push([node[a.rank], node[a.covers], 1]); }); }
         _edges=covEdges; _dim=function(o){ return tierOf[o.i]!=null?1:0.18; };
+        // HUE = generative tier: the core that generates everything (gold) → the reach it unlocks
+        // (cyan). Concentric colored shells = "a generator, fanning out from a tiny core."
+        _lensColor=function(o){ const t=tierOf[o.i]; if(t==null) return [110,120,118]; const f=(T>1)?t/(T-1):0; return hslToRgb(45+f*155,72,60); };
         const reach=basisSize?Math.round(deepest/basisSize*10)/10:0;
         this.flex=basisSize?(basisSize+'-atom basis → '+reach+'× reach · a generator, not a memorizer'):'basis forming…'; } },
     { id:'reading', name:'THE READING', flex:'', el:1.42,
@@ -570,7 +579,8 @@ function renderConstellation(){
   function floodFrom(o){ if(!o||o._sx==null) return null; const r=cv.getBoundingClientRect(); return {x:r.left+(o._sx/Wc)*r.width, y:r.top+(o._sy/Hc)*r.height}; }
   // the POP: pulled past threshold → the fruit breaks free → color-flood into its dex card. The flood
   // bursts from the DISPLACED star (where your finger pulled it), then the web recoils home behind it.
-  function doPop(){ if(!holdStar||pluckFired) return; pluckFired=true; const idx=holdStar.i; try{ _atomFloodXY=floodFrom(holdStar); }catch(e){ _atomFloodXY=null; } releaseSprings(); holdStar=null; pluck=null; dragging=false; if(typeof openAtomDetail==='function') openAtomDetail(idx,'sky'); }
+  function colorOf(o){ const c=(_lensColor?_lensColor(o):posColor(o.pos)); return 'rgb('+c[0]+','+c[1]+','+c[2]+')'; } // the star's CURRENT lens color, as an rgb string
+  function doPop(){ if(!holdStar||pluckFired) return; pluckFired=true; const idx=holdStar.i; try{ _atomFloodXY=floodFrom(holdStar); }catch(e){ _atomFloodXY=null; } try{ _skyAtomRGB=colorOf(holdStar); }catch(_){ _skyAtomRGB=null; } releaseSprings(); holdStar=null; pluck=null; dragging=false; if(typeof openAtomDetail==='function') openAtomDetail(idx,'sky'); }
   cv.addEventListener('pointerdown',e=>{
     try{cv.setPointerCapture(e.pointerId);}catch(_){}
     pts.set(e.pointerId,{x:px(e),y:py(e)}); hideHint();
@@ -620,7 +630,7 @@ function renderConstellation(){
     ttx+=(cf*ox + (-sf*sa)*oy)*f; tty+=(sf*ox + (cf*sa)*oy)*f; ttz+=(ca*oy)*f;
   },{passive:false});
   // right-click a star → open its atom card (desktop power shortcut for press-and-hold)
-  cv.addEventListener('contextmenu',e=>{ e.preventDefault(); const hs=starAtPx(px(e),py(e)); if(hs && typeof openAtomDetail==='function'){ try{ _atomFloodXY=floodFrom(hs)||{x:e.clientX,y:e.clientY}; }catch(_){ _atomFloodXY={x:e.clientX,y:e.clientY}; } openAtomDetail(hs.i,'sky'); } });
+  cv.addEventListener('contextmenu',e=>{ e.preventDefault(); const hs=starAtPx(px(e),py(e)); if(hs && typeof openAtomDetail==='function'){ try{ _atomFloodXY=floodFrom(hs)||{x:e.clientX,y:e.clientY}; }catch(_){ _atomFloodXY={x:e.clientX,y:e.clientY}; } try{ _skyAtomRGB=colorOf(hs); }catch(_){ _skyAtomRGB=null; } openAtomDetail(hs.i,'sky'); } });
   // POS legend
   const leg=document.createElement('div');
   leg.style.cssText='position:absolute;top:24px;left:8px;z-index:2;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:8px;letter-spacing:1px;max-width:62%;';

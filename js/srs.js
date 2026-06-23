@@ -1160,7 +1160,10 @@ function openAtomDetail(i, origin){
   const fg='#e8efe9';
   const sector=(typeof macroPOS==='function')?macroPOS(posStr):'MISC';
   const col=(typeof posColor==='function')?posColor(sector):[160,180,170];
-  const colRGB='rgb('+col[0]+','+col[1]+','+col[2]+')', colSoft='rgba('+col[0]+','+col[1]+','+col[2]+',0.16)';
+  let colRGB='rgb('+col[0]+','+col[1]+','+col[2]+')', colSoft='rgba('+col[0]+','+col[1]+','+col[2]+',0.16)';
+  // Opened from the Sky: accent + flood = the star's CURRENT lens color, so the color that flew off
+  // the star carries straight into its card. POS elsewhere (study/browser). (Card revamp TBD.)
+  if(origin==='sky' && typeof _skyAtomRGB==='string' && _skyAtomRGB){ colRGB=_skyAtomRGB; colSoft=_skyAtomRGB.replace('rgb(','rgba(').replace(')',',0.16)'); }
   const m=masteryScore(i), st=state(i), stage=(ci.axisStage&&ci.axisStage.meaning)||0;
   const dexNum='#'+String(i+1).padStart(3,'0'), seenCount=ci.exp||0;
   const CJKf=(typeof charFont==='function')?charFont():"font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
