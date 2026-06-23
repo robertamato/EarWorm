@@ -2736,6 +2736,9 @@ function renderConstellation(){
   // (sunflower/islands/DAG) tilt toward top-down → their (x,y) renders face-on AND the fiber
   // lift becomes pure screen depth (in/out). Cloud lenses keep the turntable tilt EL.
   let elCur=EL, elTarget=EL, camDist=CAM, camTarget=CAM, camDist0=CAM, _lastDownT=0;
+  // look-at TARGET (eased): dolly flies toward this. Panned toward the cursor on zoom so you
+  // steer to peripheral atoms, not just the center. Recenters when you back out.
+  let tcx=0,tcy=0,tcz=0, ttx=0,tty=0,ttz=0;
   // sectors
   const counts={}; POS_SECTORS.forEach(s=>counts[s]=0);
   const posOf=new Array(N);
@@ -2844,7 +2847,7 @@ function renderConstellation(){
     // disc lies on the ground plane (o.x,o.y); o.z is vertical lift.
     // Turntable: spin about the vertical axis (yaw), then view from a
     // fixed elevation. Yaw axis ⟂ disc → constant ellipse, no sliver.
-    const gx=o.x,gz=o.y,gy=o.z;
+    const gx=o.x-tcx,gz=o.y-tcy,gy=o.z-tcz;  // relative to the (pannable) look-at target
     const cf=Math.cos(yaw),sf=Math.sin(yaw);
     const x1=gx*cf+gz*sf, z1=-gx*sf+gz*cf;
     const ca=Math.cos(elCur),sa=Math.sin(elCur);
@@ -2861,6 +2864,8 @@ function renderConstellation(){
     yawVel*=0.9; pitchVel*=0.9; if(Math.abs(yawVel)<1e-4)yawVel=0; if(Math.abs(pitchVel)<1e-5)pitchVel=0;
     elCur+=(elTarget-elCur)*0.14; // tilt the camera toward the active lens's elevation
     camDist+=(camTarget-camDist)*0.16; // dolly toward/through the cloud — zoom flies you in
+    tcx+=(ttx-tcx)*0.16; tcy+=(tty-tcy)*0.16; tcz+=(ttz-tcz)*0.16; // ease the look-at target
+    if(camDist>CAM*0.7){ ttx*=0.94; tty*=0.94; ttz*=0.94; } // recenter as you back out to orbit
     const _zoomNow=FOC/Math.max(0.08*FOC, FOC+camDist); // closeness proxy (replaces the old zoom magnifier)
     for(let q=0;q<node.length;q++){ const o=node[q]; o.x+=(o.tx-o.x)*0.14; o.y+=(o.ty-o.y)*0.14; o.z+=(o.tz-o.z)*0.14; }
     if(_lensId==='anatomy' && _zoomNow<3){
@@ -2943,7 +2948,7 @@ function renderConstellation(){
     pts.set(e.pointerId,{x:px(e),y:py(e)}); hideHint();
     if(pts.size===1){ dragging=true; moved=0; lastX=px(e); lastY=py(e); yawVel=0; pitchVel=0; cv.style.cursor='grabbing';
       holdFired=false; cancelHold(); const hs=starAtPx(px(e),py(e));
-      const _nt=performance.now(); if(_nt-_lastDownT<320 && !hs){ camTarget=CAM; elTarget=(currentLens&&currentLens.el!=null?currentLens.el:EL); } _lastDownT=_nt; // double-tap empty space → ease back out
+      const _nt=performance.now(); if(_nt-_lastDownT<320 && !hs){ camTarget=CAM; elTarget=(currentLens&&currentLens.el!=null?currentLens.el:EL); ttx=0; tty=0; ttz=0; } _lastDownT=_nt; // double-tap empty space → ease back out + recenter
       if(hs){ holdStar=hs; holdT0=performance.now(); holdTimer=setTimeout(openHeldAtom,HOLD_MS); } }
     else if(pts.size===2){ dragging=false; cancelHold(); const a=[...pts.values()]; pinchD0=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1; camDist0=camTarget; }
   });
@@ -2961,7 +2966,15 @@ function renderConstellation(){
   }
   cv.addEventListener('pointerup',endPtr);
   cv.addEventListener('pointercancel',endPtr);
-  cv.addEventListener('wheel',e=>{ e.preventDefault(); hideHint(); camTarget=Math.max(-FOC*0.9, Math.min(CAM*2.4, camTarget+e.deltaY*Rmax*0.004)); },{passive:false});
+  cv.addEventListener('wheel',e=>{ e.preventDefault(); hideHint();
+    const mx=px(e),my=py(e), scOld=FOC/Math.max(0.08*FOC, FOC+camTarget);
+    camTarget=Math.max(-FOC*0.9, Math.min(CAM*2.4, camTarget+e.deltaY*Rmax*0.004));
+    // zoom-to-cursor: pan the look-at target so the world point under the cursor stays put —
+    // you fly toward what you point at (reaching periphery), not toward the fixed center.
+    const scNew=FOC/Math.max(0.08*FOC, FOC+camTarget), f=(1/scOld - 1/scNew);
+    const cf=Math.cos(yaw),sf=Math.sin(yaw),sa=Math.sin(elCur),ca=Math.cos(elCur), ox=(mx-CX), oy=(CY-my);
+    ttx+=(cf*ox + (-sf*sa)*oy)*f; tty+=(sf*ox + (cf*sa)*oy)*f; ttz+=(ca*oy)*f;
+  },{passive:false});
   // right-click a star → open its atom card (desktop power shortcut for press-and-hold)
   cv.addEventListener('contextmenu',e=>{ e.preventDefault(); const hs=starAtPx(px(e),py(e)); if(hs && typeof openAtomDetail==='function'){ try{ _atomFloodXY=floodFrom(hs)||{x:e.clientX,y:e.clientY}; }catch(_){ _atomFloodXY={x:e.clientX,y:e.clientY}; } openAtomDetail(hs.i,'sky'); } });
   // POS legend
