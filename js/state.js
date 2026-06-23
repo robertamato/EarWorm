@@ -286,6 +286,9 @@ function constellationEmbed(){
   _embedCache=out; _embedCacheD=D; return out;
 }
 let _cnGen=0;
+// Published by the live constellation closure so other screens (the atom card's "find in sky")
+// can fly the camera to a specific atom. Points at the latest closure; null until home renders.
+let _skyFlyTo=null;
 function renderConstellation(){
   const host=$('map'); if(!host) return;
   _cnGen++; const gen=_cnGen;                 // invalidate any prior animation loop
@@ -649,6 +652,9 @@ function renderConstellation(){
   lensCtl.onclick=function(e){ e.stopPropagation(); applyLens(lensIdx+1); try{ S.lens=currentLens.id; if(typeof save==='function') save(); }catch(_){} };
   // restore the last-used lens (persisted on switch); default ANATOMY
   applyLens(Math.max(0, LENSES.findIndex(function(l){ return l.id===(typeof S!=='undefined'&&S.lens); })));
+  // "find in sky" (from the atom card) flies the camera to an atom: dolly onto it + fire the
+  // web-flash so it glows on arrival. Published from THIS closure so it steers the live camera.
+  _skyFlyTo=function(idx){ const o=node[idx]; if(!o) return; ttx=o.tx; tty=o.ty; ttz=o.tz; camTarget=Rmax*0.5; tapFx={i:idx,t0:performance.now(),nbrs:neighborsOf(o).list}; hideHint(); };
   loop();
 }
 function renderHome(){

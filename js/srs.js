@@ -1249,7 +1249,7 @@ function openAtomDetail(i, origin){
   const body=$('atomCardBody');
   if(body){ body.innerHTML=html; body.style.color=fg; }
   const sp=$('atomCardSpeak'); if(sp) sp.onclick=()=>{ if(S.sound!=='mute') speak(word,activeCourse().langCode); };
-  const fs=$('atomFindSky'); if(fs) fs.onclick=()=>{ show('home'); };
+  const fs=$('atomFindSky'); if(fs) fs.onclick=()=>{ show('home'); try{ if(typeof _skyFlyTo==='function') _skyFlyTo(i); }catch(_){} }; // jump to the Sky and fly the camera onto this atom
   if(body) body.querySelectorAll('.atomLink').forEach(el=>{ el.onclick=()=>{ openAtomDetail(+el.getAttribute('data-idx'),'atomCard'); }; });
   if(S.sound!=='mute') speak(word,activeCourse().langCode); // the "cry"
   if(origin==='sky' && _atomFloodXY){ _atomFloodRGB=colRGB; const f=_atomFloodXY; atomFloodOpen(f.x,f.y,colRGB,function(){ show('atomCard'); }); }

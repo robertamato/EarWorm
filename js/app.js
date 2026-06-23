@@ -2700,6 +2700,9 @@ function constellationEmbed(){
   _embedCache=out; _embedCacheD=D; return out;
 }
 let _cnGen=0;
+// Published by the live constellation closure so other screens (the atom card's "find in sky")
+// can fly the camera to a specific atom. Points at the latest closure; null until home renders.
+let _skyFlyTo=null;
 function renderConstellation(){
   const host=$('map'); if(!host) return;
   _cnGen++; const gen=_cnGen;                 // invalidate any prior animation loop
@@ -3063,6 +3066,9 @@ function renderConstellation(){
   lensCtl.onclick=function(e){ e.stopPropagation(); applyLens(lensIdx+1); try{ S.lens=currentLens.id; if(typeof save==='function') save(); }catch(_){} };
   // restore the last-used lens (persisted on switch); default ANATOMY
   applyLens(Math.max(0, LENSES.findIndex(function(l){ return l.id===(typeof S!=='undefined'&&S.lens); })));
+  // "find in sky" (from the atom card) flies the camera to an atom: dolly onto it + fire the
+  // web-flash so it glows on arrival. Published from THIS closure so it steers the live camera.
+  _skyFlyTo=function(idx){ const o=node[idx]; if(!o) return; ttx=o.tx; tty=o.ty; ttz=o.tz; camTarget=Rmax*0.5; tapFx={i:idx,t0:performance.now(),nbrs:neighborsOf(o).list}; hideHint(); };
   loop();
 }
 function renderHome(){
@@ -4352,7 +4358,7 @@ function openAtomDetail(i, origin){
   const body=$('atomCardBody');
   if(body){ body.innerHTML=html; body.style.color=fg; }
   const sp=$('atomCardSpeak'); if(sp) sp.onclick=()=>{ if(S.sound!=='mute') speak(word,activeCourse().langCode); };
-  const fs=$('atomFindSky'); if(fs) fs.onclick=()=>{ show('home'); };
+  const fs=$('atomFindSky'); if(fs) fs.onclick=()=>{ show('home'); try{ if(typeof _skyFlyTo==='function') _skyFlyTo(i); }catch(_){} }; // jump to the Sky and fly the camera onto this atom
   if(body) body.querySelectorAll('.atomLink').forEach(el=>{ el.onclick=()=>{ openAtomDetail(+el.getAttribute('data-idx'),'atomCard'); }; });
   if(S.sound!=='mute') speak(word,activeCourse().langCode); // the "cry"
   if(origin==='sky' && _atomFloodXY){ _atomFloodRGB=colRGB; const f=_atomFloodXY; atomFloodOpen(f.x,f.y,colRGB,function(){ show('atomCard'); }); }
