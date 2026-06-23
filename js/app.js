@@ -2622,6 +2622,26 @@ function constellationFibers(){
   }
   _fiberCache=pairs;_fiberCacheD=D;return pairs;
 }
+// PMI-weighted co-occurrence (for THE TERRITORY lens). Raw co-occurrence collapses on hub
+// words (的/我 appear everywhere); PMI = log( P(a,b) / P(a)P(b) ) divides that expectation
+// out, so only SURPRISING pairings (semantic relatedness) keep weight. Returns [a,b,ppmi].
+let _pmiCache=null,_pmiCacheD=null;
+function constellationPMI(){
+  if(_pmiCache&&_pmiCacheD===D) return _pmiCache;
+  const sents=(typeof EXAMPLE_SENTENCES!=='undefined')?EXAMPLE_SENTENCES:{};
+  const cnt={},co={}; let S=0;
+  for(const key in sents){ (sents[key]||[]).forEach(function(s){
+    const text=(s&&s[0])||'';
+    const present=(typeof decomposeSentence==='function')?decomposeSentence(text):[];
+    const seenA={},uniq=[]; for(let i=0;i<present.length;i++){ const a=present[i]; if(!seenA[a]){ seenA[a]=1; uniq.push(a); } }
+    if(!uniq.length) return; S++;
+    for(let i=0;i<uniq.length;i++){ cnt[uniq[i]]=(cnt[uniq[i]]||0)+1; for(let j=i+1;j<uniq.length;j++){ const x=uniq[i],y=uniq[j],k=x<y?x+'_'+y:y+'_'+x; co[k]=(co[k]||0)+1; } }
+  }); }
+  const out=[];
+  if(S>0) Object.keys(co).forEach(function(k){ const c=co[k]; const p=k.split('_'),a=+p[0],b=+p[1];
+    const pmi=Math.log((c*S)/((cnt[a]||1)*(cnt[b]||1))); if(pmi>0.25) out.push([a,b,pmi]); });
+  _pmiCache=out;_pmiCacheD=D;return out;
+}
 let _cnGen=0;
 function renderConstellation(){
   const host=$('map'); if(!host) return;
@@ -2713,11 +2733,27 @@ function renderConstellation(){
       apply:function(){ const fset={}; node.forEach((o,i)=>{ if(o.seen && o.st<3) fset[i]=1; });
         node.forEach((o,i)=>{ o.tx=o.ax; o.ty=o.ay; o.tz=fset[i]?(o.az+Rmax*0.4):o.az; });
         _edges=[]; _dim=function(o){ return fset[o.i]?1:0.16; };
-        const n=Object.keys(fset).length; this.flex=n?('your working edge — '+n+' word'+(n>1?'s':'')+' still landing'):'all caught up — explore for more'; } }
-    // THE TERRITORY (semantic neighborhoods) is intentionally NOT here yet: a co-occurrence
-    // Fruchterman-Reingold layout collapses to a hub hairball (function words co-occur with
-    // everything), so it doesn't read as neighborhoods. It needs PMI-weighted counts or real
-    // embeddings — the precompute task in project_fibroid. Deferred honestly, not faked.
+        const n=Object.keys(fset).length; this.flex=n?('your working edge — '+n+' word'+(n>1?'s':'')+' still landing'):'all caught up — explore for more'; } },
+    { id:'territory', name:'THE TERRITORY', flex:'',
+      // Distributional semantics done right: a force layout over the PMI-weighted co-occurrence
+      // graph. PMI divides out hub-word expectation, so attraction follows SURPRISING pairings
+      // (meaning) — content words cluster into neighborhoods, function words drift to the rim.
+      // A poor-man's embedding from local data; upgradeable to real vectors later.
+      apply:function(){ const pm=(typeof constellationPMI==='function')?constellationPMI():[];
+        let maxw=0.01; for(let e=0;e<pm.length;e++) if(pm[e][2]>maxw) maxw=pm[e][2];
+        const hasEdge=new Uint8Array(N); for(let e=0;e<pm.length;e++){ const a=pm[e][0],b=pm[e][1]; if(a<N&&b<N){ hasEdge[a]=1; hasEdge[b]=1; } }
+        const px=node.map(o=>o.ax), py=node.map(o=>o.ay);
+        const area=Math.PI*Rmax*Rmax, k=Math.sqrt(area/Math.max(1,N))*1.1; let temp=Rmax*0.30;
+        for(let it=0;it<150;it++){ const dx0=new Float64Array(N), dy0=new Float64Array(N);
+          for(let a=0;a<N;a++){ for(let b=0;b<N;b++){ if(a===b)continue; let dx=px[a]-px[b],dy=py[a]-py[b],d=Math.hypot(dx,dy)||0.01,r=k*k/d; dx0[a]+=(dx/d)*r; dy0[a]+=(dy/d)*r; } }
+          for(let e=0;e<pm.length;e++){ const a=pm[e][0],b=pm[e][1]; if(a>=N||b>=N)continue; const w=pm[e][2]/maxw; let dx=px[a]-px[b],dy=py[a]-py[b],d=Math.hypot(dx,dy)||0.01; const t=(d*d/k)*w; dx0[a]-=(dx/d)*t; dy0[a]-=(dy/d)*t; dx0[b]+=(dx/d)*t; dy0[b]+=(dy/d)*t; }
+          for(let i=0;i<N;i++){ const dl=Math.hypot(dx0[i],dy0[i])||0.01; px[i]+=(dx0[i]/dl)*Math.min(dl,temp); py[i]+=(dy0[i]/dl)*Math.min(dl,temp); } temp*=0.975; }
+        let cx=0,cy=0; for(let i=0;i<N;i++){ cx+=px[i]; cy+=py[i]; } cx/=N; cy/=N; let mr=1;
+        for(let i=0;i<N;i++){ px[i]-=cx; py[i]-=cy; const r=Math.hypot(px[i],py[i]); if(r>mr)mr=r; }
+        const sc=(Rmax*0.92)/mr;
+        node.forEach((o,i)=>{ o.tx=px[i]*sc; o.ty=py[i]*sc; o.tz=0; });
+        _edges=pm.filter(e=>e[0]<N&&e[1]<N&&node[e[0]].seen&&node[e[1]].seen).map(e=>[node[e[0]],node[e[1]]]); _dim=null;
+        this.flex=pm.length?'you own these neighborhoods — words by the company they keep':'neighborhoods forming — keep playing'; } }
   ];
   let lensIdx=0, currentLens=LENSES[0];
   let yaw=0,zoom=1,dragging=false,lastX=0,moved=0,tapFx=null;
