@@ -566,3 +566,56 @@ incidental channel disambiguates exactly the live-fuzzy boundaries — recall ai
 no-confusion guardrail in one. Measurement stays clean: graduation requires context
 /production (color-independent) and survival across the nightly shuffle, so durable
 capability can't be color-cued.
+
+---
+
+## 14. The object the lenses render — a structured atom set with a fibered state
+
+The atom set `A` (§0) is not bare. Acquisition equips it with a **family of structures**, and
+the constellation ("the fibroid") is a viewport that foregrounds one at a time — a **lens
+engine**. Two kinds of structure, separated by what they depend on:
+
+**Language structures** — intrinsic to the (L₁,L₂) pair and the corpus; *fixed per deck*, the
+curriculum's substrate:
+- **φ — frequency grading** (§1): a total preorder on `A` (Zipf rank).
+- **γ — the generative basis / lattice of bases** (§2, §6): a graded poset, tiers
+  `T₁ ⊂ … ⊂ T_k`, with a covering relation (which acquisitions enlarge generative reach).
+- **POS partition**: an equivalence relation grouping atoms by syntactic class (a fibration
+  over a POS base).
+- **δ — the distributional metric**: a weighted graph on `A` from PMI co-occurrence over the
+  example corpus, `δ(a,b) = log P(a,b) / P(a)P(b)`, with a community structure (label
+  propagation). The empirical shadow of meaning ("a word by the company it keeps"); the σ
+  axis (§3) is its (L₁,L₂)-relative cousin.
+
+**Learner structures** — functions of the evidence log; *evolve with the learner*, the
+estimator's posterior (§10):
+- **The acquisition fibration** `π : E → B` (ENGINE.md §2): base = meaning, fibers = the
+  dependent axes gated over the base; `state(a) ∈ E`. Its scalar graduation height is the
+  **rung** (SEEN ≺ KNOWN ≺ DISTINGUISHED ≺ PLACED ≺ PRODUCED ≺ FLUENT) — base-, then-fiber-,
+  then-production, a total-order refinement of the climb.
+- **κ — the confusion metric** (§13): a learner-specific weighted graph — what *this* learner
+  blurs. The negative space; the spine the estimator reads.
+
+> **The object.** `(A, {φ, γ, POS, δ}, {π, κ})` — one atom set carrying four *language*
+> structures (fixed) and two *learner* structures (inferred). The measurement renders (§10)
+> and the lenses are **projections** of this single object; nothing in the UI is a new
+> subsystem, only a new view.
+
+**The lenses are projections.** A lens fixes a structure `S` and a layout `A → ℝ²` realizing
+`S` on the **ground plane**; the **vertical axis Z is always the fiber height** — the rung of
+`π` — *lens-invariant*. Switching a lens is a base-space reshuffle under a constant fiber: the
+mastery landscape is held while the arrangement morphs. Current lenses: ANATOMY = POS ·
+READING = φ · ENGINE = γ · TERRITORY = δ (+ its communities as islands) · WEB = κ · EDGE =
+the frontier of `π` (the filter-crossing band). The atom card's rung ladder and a star's
+elevation are therefore the **same coordinate, two renders**.
+
+**Why the split matters.** The language structures *are* `C(L₁,L₂)` (§4) — the product moat,
+authored per pair. The learner structures are the posterior — the personalization, inferred
+per learner. The lens engine is that claim made visual: *here is your language as a fixed
+shape, and here is you moving through it.*
+
+> **Open — the covering relation.** γ is currently rendered as tier *rings* (its grading); its
+> **covering edges** — the Hasse diagram, which single acquisition immediately enlarges reach —
+> are not drawn, because the runtime carries tier *membership*, not a per-atom covering DAG.
+> Drawing the Hasse diagram first requires pinning the covering relation in the basis data;
+> until then THE ENGINE shows the order's *grading*, not its *edges*.
