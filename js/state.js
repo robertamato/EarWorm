@@ -366,7 +366,7 @@ function renderConstellation(){
   // ── LENS ENGINE: the same star field, re-projected. Each lens sets per-node targets
   // (tx,ty,tz); the draw loop eases toward them, so switching MORPHS the constellation.
   // It also swaps the edges + a dim() emphasis. New insight = a new lens, not a new screen.
-  let _edges=edges, _dim=null, _lensId='anatomy', _lensColor=null;
+  let _edges=edges, _dim=null, _lensId='anatomy', _lensColor=null, _engRings=null;
   function _confusionPairs(){ const map={}; if(S.confusion){ Object.keys(S.confusion).forEach(a=>{ const ai=+a; Object.keys(S.confusion[ai]||{}).forEach(b=>{ const bi=+b; if(node[ai]&&node[bi]&&node[ai].seen&&node[bi].seen){ const n=(S.confusion[ai][bi]&&S.confusion[ai][bi].n)||0; if(n>0){ const key=ai<bi?ai+'_'+bi:bi+'_'+ai; map[key]=(map[key]||0)+n; } } }); }); } return Object.keys(map).map(k=>{ const p=k.split('_'); return [+p[0],+p[1],map[k]]; }); }
   const LENSES=[
     { id:'anatomy', name:'ANATOMY', flex:'your words, mapped by grammar',
@@ -383,7 +383,7 @@ function renderConstellation(){
         for(const k in heat){ if(heat[k]>maxH) maxH=heat[k]; }
         _lensColor=function(o){ if(!inv[o.i]) return [120,130,128]; const t=Math.min(1,(heat[o.i]||0)/maxH); return hslToRgb(172-150*t,72,60); };
         this.flex=pairs.length?(pairs.length+' blur'+(pairs.length>1?'s':'')+' — drawn together, decaying as you tell them apart'):'no blurs caught yet — keep playing'; } },
-    { id:'engine', name:'THE ENGINE', flex:'', el:1.30, pluckShare:0.30, pluckDamp:0.72, legend:{type:'grad',from:'core',to:'reach',hueA:45,hueB:200},
+    { id:'engine', name:'THE ENGINE', flex:'', el:1.30, pluckShare:0.30, pluckDamp:0.72, legend:{type:'pos'},
       apply:function(){ let gb; try{ gb=computeGenerativeBasis(); }catch(e){ gb=null; }
         const tierOf={}; let T=0,basisSize=0,deepest=0;
         if(gb){ T=gb.tiers.length; basisSize=gb.basisSize; gb.tiers.forEach((t,ti)=>{ t.atoms.forEach(a=>{ tierOf[a.rank]=ti; if(a.rank>deepest)deepest=a.rank; }); }); }
@@ -392,9 +392,10 @@ function renderConstellation(){
         // Hasse covering edges: each basis atom → the atom it generatively rests on (THEORY §14)
         const covEdges=[]; if(gb&&gb.basis){ gb.basis.forEach(a=>{ if(a.covers>=0 && a.rank<N && a.covers<N) covEdges.push([node[a.rank], node[a.covers], 1]); }); }
         _edges=covEdges; _dim=function(o){ return tierOf[o.i]!=null?1:0.18; };
-        // HUE = generative tier: the core that generates everything (gold) → the reach it unlocks
-        // (cyan). Concentric colored shells = "a generator, fanning out from a tiny core."
-        _lensColor=function(o){ const t=tierOf[o.i]; if(t==null) return [110,120,118]; const f=(T>1)?t/(T-1):0; return hslToRgb(45+f*155,72,60); };
+        // TIER lives on POSITION (rings) + the DAG; faint ring guides (drawn in the loop) keep the
+        // shells visible so HUE is free for POS — you read the generative tiers AND the grammatical
+        // makeup of the basis at once (both, not either/or). _lensColor stays null → POS.
+        _engRings=[]; for(let t=0;t<T;t++) _engRings.push(Rmin+(Rmax-Rmin)*((t+1)/(T+1)));
         const reach=basisSize?Math.round(deepest/basisSize*10)/10:0;
         this.flex=basisSize?(basisSize+'-atom basis → '+reach+'× reach · a generator, not a memorizer'):'basis forming…'; } },
     { id:'reading', name:'THE READING', flex:'', el:1.42,
@@ -491,6 +492,10 @@ function renderConstellation(){
     if(_lensId==='anatomy' && _zoomNow<3){
       ctx.strokeStyle='rgba(77,255,160,0.22)'; ctx.setLineDash([2,7]); ctx.lineWidth=1; ctx.beginPath();
       for(let t=0;t<=64;t++){const aa=t/64*2*Math.PI,p=proj({x:frR*Math.cos(aa),y:frR*Math.sin(aa),z:0}); if(t===0)ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);} ctx.stroke(); ctx.setLineDash([]);
+    }
+    if(_lensId==='engine' && _engRings && _zoomNow<3){ // faint tier shells: tier stays legible while hue carries POS
+      ctx.strokeStyle='rgba(125,255,192,0.10)'; ctx.lineWidth=1;
+      for(let ri=0;ri<_engRings.length;ri++){ const R=_engRings[ri]; ctx.beginPath(); for(let t=0;t<=64;t++){const aa=t/64*2*Math.PI,p=proj({x:R*Math.cos(aa),y:R*Math.sin(aa),z:0}); if(t===0)ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);} ctx.stroke(); }
     }
     const ps=node.map(o=>{const p=proj(o); p.o=o; o._sx=null; return p;}).sort((a,b)=>b.depth-a.depth);
     let _minD=1e9,_maxD=-1e9; for(let q=0;q<ps.length;q++){ const d=ps[q].depth; if(d<_minD)_minD=d; if(d>_maxD)_maxD=d; } const _dR=(_maxD-_minD)||1;
@@ -666,7 +671,7 @@ function renderConstellation(){
     let pips=''; for(let i=0;i<LENSES.length;i++){ pips+='<span style="display:inline-block;width:5px;height:5px;border-radius:50%;margin-left:4px;background:'+(i===lensIdx?'currentColor':'rgba(255,255,255,0.22)')+';"></span>'; }
     lensCtl.innerHTML='<div style="opacity:.85;">◳ '+currentLens.name+' ▸</div><div style="margin-top:4px;">'+pips+'</div><div style="font-size:8px;opacity:.5;margin-top:3px;line-height:1.3;">'+(currentLens.flex||'')+'</div>';
   }
-  function applyLens(idx){ lensIdx=((idx%LENSES.length)+LENSES.length)%LENSES.length; currentLens=LENSES[lensIdx]; _lensId=currentLens.id; _lensColor=null; currentLens.apply(); elTarget=(currentLens.el!=null?currentLens.el:EL);
+  function applyLens(idx){ lensIdx=((idx%LENSES.length)+LENSES.length)%LENSES.length; currentLens=LENSES[lensIdx]; _lensId=currentLens.id; _lensColor=null; _engRings=null; currentLens.apply(); elTarget=(currentLens.el!=null?currentLens.el:EL);
     if(leg) renderLegend(); // the legend is the active lens's hue key (POS words / gradient bar / none)
     updateLensUI(); }
   lensCtl.onclick=function(e){ e.stopPropagation(); applyLens(lensIdx+1); try{ S.lens=currentLens.id; if(typeof save==='function') save(); }catch(_){} };
