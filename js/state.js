@@ -331,7 +331,7 @@ function renderConstellation(){
   // ── LENS ENGINE: the same star field, re-projected. Each lens sets per-node targets
   // (tx,ty,tz); the draw loop eases toward them, so switching MORPHS the constellation.
   // It also swaps the edges + a dim() emphasis. New insight = a new lens, not a new screen.
-  let _edges=edges, _dim=null, _lensId='anatomy';
+  let _edges=edges, _dim=null, _lensId='anatomy', _lensColor=null;
   function _confusionPairs(){ const map={}; if(S.confusion){ Object.keys(S.confusion).forEach(a=>{ const ai=+a; Object.keys(S.confusion[ai]||{}).forEach(b=>{ const bi=+b; if(node[ai]&&node[bi]&&node[ai].seen&&node[bi].seen){ const n=(S.confusion[ai][bi]&&S.confusion[ai][bi].n)||0; if(n>0){ const key=ai<bi?ai+'_'+bi:bi+'_'+ai; map[key]=(map[key]||0)+n; } } }); }); } return Object.keys(map).map(k=>{ const p=k.split('_'); return [+p[0],+p[1],map[k]]; }); }
   const LENSES=[
     { id:'anatomy', name:'ANATOMY', flex:'your words, mapped by grammar',
@@ -365,27 +365,39 @@ function renderConstellation(){
         node.forEach((o,i)=>{ o.tx=o.ax; o.ty=o.ay; o.tz=o.fz; });
         _edges=[]; _dim=function(o){ return fset[o.i]?1:0.16; };
         const n=Object.keys(fset).length; this.flex=n?('your working edge — '+n+' word'+(n>1?'s':'')+' still landing'):'all caught up — explore for more'; } },
-    { id:'territory', name:'THE TERRITORY', flex:'', el:1.42,
-      // Distributional semantics done right: a force layout over the PMI-weighted co-occurrence
-      // graph. PMI divides out hub-word expectation, so attraction follows SURPRISING pairings
-      // (meaning) — content words cluster into neighborhoods, function words drift to the rim.
-      // A poor-man's embedding from local data; upgradeable to real vectors later.
+    { id:'territory', name:'THE TERRITORY', flex:'',
+      // The crown jewel as an honest DENSE FIELD: a true 3-D force-directed embedding of the
+      // PMI semantic graph. Depth here carries STRUCTURE, not mastery (mastery rides on
+      // size/brightness) — all three spatial axes embed the meaning, and you ORBIT it. Tilted
+      // (default EL) so dragging rotates the manifold. Colored by community so the 3-D
+      // neighborhoods read even through the web. The honest "how an LLM sees it" render.
       apply:function(){ const pm=(typeof constellationPMI==='function')?constellationPMI():[];
         const lab=(typeof constellationCommunities==='function')?constellationCommunities():null;
-        if(!lab){ node.forEach(o=>{o.tx=o.ax;o.ty=o.ay;o.tz=o.fz;}); _edges=[]; _dim=null; this.flex='neighborhoods forming — keep playing'; return; }
-        // ISLAND LAYOUT: each label-propagation community is a separated neighborhood. Centroids
-        // are phyllotaxis-packed (biggest near the middle); members form a mini-cluster around
-        // their centroid; loose atoms (no community) settle faint at the rim.
+        if(!pm.length||!lab){ node.forEach(o=>{o.tx=o.ax;o.ty=o.ay;o.tz=o.fz;}); _edges=[]; _dim=null; _lensColor=null; this.flex='neighborhoods forming — keep playing'; return; }
+        // top-3 sparse edges (cleaner attraction) + their weights
+        const byN={}; for(let e=0;e<pm.length;e++){ const a=pm[e][0],b=pm[e][1]; (byN[a]=byN[a]||[]).push(e); (byN[b]=byN[b]||[]).push(e); }
+        const keep={}; Object.keys(byN).forEach(function(n){ const arr=byN[n].sort(function(x,y){return pm[y][2]-pm[x][2];}); for(let j=0;j<arr.length&&j<3;j++) keep[arr[j]]=1; });
+        const E=Object.keys(keep).map(function(i){ return pm[+i]; });
+        let maxw=0.01; for(let e=0;e<E.length;e++) if(E[e][2]>maxw) maxw=E[e][2];
+        // 3-D force-directed embedding
+        const px=new Float64Array(N), py=new Float64Array(N), pz=new Float64Array(N);
+        for(let i=0;i<N;i++){ px[i]=(Math.random()-0.5)*Rmax; py[i]=(Math.random()-0.5)*Rmax; pz[i]=(Math.random()-0.5)*Rmax; }
+        const k=Math.cbrt((4.19*Rmax*Rmax*Rmax)/Math.max(1,N))*2.4, GRAV=0.012; let temp=Rmax*0.42;
+        for(let it=0;it<110;it++){ const dx0=new Float64Array(N), dy0=new Float64Array(N), dz0=new Float64Array(N);
+          for(let a=0;a<N;a++){ for(let b=0;b<N;b++){ if(a===b)continue; let dx=px[a]-px[b],dy=py[a]-py[b],dz=pz[a]-pz[b],d=Math.sqrt(dx*dx+dy*dy+dz*dz)||0.01,r=k*k/d; if(lab[a]!==lab[b]) r*=1.4; dx0[a]+=(dx/d)*r; dy0[a]+=(dy/d)*r; dz0[a]+=(dz/d)*r; } }
+          for(let e=0;e<E.length;e++){ const a=E[e][0],b=E[e][1]; if(a>=N||b>=N)continue; const w=E[e][2]/maxw*(lab[a]===lab[b]?1.8:0.6); let dx=px[a]-px[b],dy=py[a]-py[b],dz=pz[a]-pz[b],d=Math.sqrt(dx*dx+dy*dy+dz*dz)||0.01,t=(d*d/k)*w; dx0[a]-=(dx/d)*t; dy0[a]-=(dy/d)*t; dz0[a]-=(dz/d)*t; dx0[b]+=(dx/d)*t; dy0[b]+=(dy/d)*t; dz0[b]+=(dz/d)*t; }
+          for(let i=0;i<N;i++){ dx0[i]-=px[i]*GRAV; dy0[i]-=py[i]*GRAV; dz0[i]-=pz[i]*GRAV; const dl=Math.sqrt(dx0[i]*dx0[i]+dy0[i]*dy0[i]+dz0[i]*dz0[i])||0.01; px[i]+=(dx0[i]/dl)*Math.min(dl,temp); py[i]+=(dy0[i]/dl)*Math.min(dl,temp); pz[i]+=(dz0[i]/dl)*Math.min(dl,temp); } temp*=0.975; }
+        let cx=0,cy=0,cz=0; for(let i=0;i<N;i++){ cx+=px[i]; cy+=py[i]; cz+=pz[i]; } cx/=N;cy/=N;cz/=N;
+        const radii=[]; for(let i=0;i<N;i++){ px[i]-=cx; py[i]-=cy; pz[i]-=cz; if(node[i].seen) radii.push(Math.sqrt(px[i]*px[i]+py[i]*py[i]+pz[i]*pz[i])); }
+        radii.sort(function(a,b){return a-b;}); const pr=(radii.length?radii[Math.floor(radii.length*0.9)]:1)||1, sc=(Rmax*0.86)/pr;
+        node.forEach((o,i)=>{ o.tx=px[i]*sc; o.ty=py[i]*sc; o.tz=pz[i]*sc; });
+        _edges=E.filter(e=>e[0]<N&&e[1]<N&&node[e[0]].seen&&node[e[1]].seen).map(e=>[node[e[0]],node[e[1]]]); _dim=null;
+        // color by COMMUNITY (golden-angle per neighborhood) so the 3-D clusters read
         const groups={}; for(let i=0;i<N;i++){ (groups[lab[i]]=groups[lab[i]]||[]).push(i); }
-        const real=Object.keys(groups).map(l=>groups[l]).filter(c=>c.length>=3).sort((a,b)=>b.length-a.length);
-        const isLoose=new Uint8Array(N); for(let i=0;i<N;i++) isLoose[i]=1;
-        const GAr=2.39996, K=Math.max(1,real.length);
-        real.forEach((mem,ci)=>{ const cr=Rmax*0.64*Math.sqrt((ci+0.4)/K), ca=ci*GAr, cx=cr*Math.cos(ca), cy=cr*Math.sin(ca), isz=Rmax*0.11*Math.sqrt(mem.length);
-          mem.forEach((m,kk)=>{ isLoose[m]=0; const rr=isz*Math.sqrt((kk+0.4)/mem.length), a=kk*GAr*1.3+ci; node[m].tx=cx+rr*Math.cos(a); node[m].ty=cy+rr*Math.sin(a); node[m].tz=node[m].fz; }); });
-        let li=0; for(let i=0;i<N;i++){ if(isLoose[i]){ const a=li*GAr, rr=Rmax*(0.92+0.1*((li%3)/3)); node[i].tx=rr*Math.cos(a); node[i].ty=rr*Math.sin(a); node[i].tz=node[i].fz; li++; } }
-        _edges=pm.filter(e=>e[0]<N&&e[1]<N&&node[e[0]].seen&&node[e[1]].seen&&lab[e[0]]===lab[e[1]]).map(e=>[node[e[0]],node[e[1]]]);
-        _dim=function(o){ return isLoose[o.i]?0.3:1; };
-        this.flex=real.length+' neighborhoods — you own these'; } }
+        const realL=Object.keys(groups).filter(l=>groups[l].length>=3).sort((a,b)=>groups[b].length-groups[a].length);
+        const cHue={}; realL.forEach((l,ci)=>{ cHue[l]=(ci*137.508)%360; });
+        _lensColor=function(o){ const l=lab[o.i]; return (cHue[l]!=null)?hslToRgb(cHue[l],68,60):[120,130,128]; };
+        this.flex=realL.length+' neighborhoods — orbit your semantic space'; } }
   ];
   let lensIdx=0, currentLens=LENSES[0];
   let yaw=0,zoom=1,dragging=false,lastX=0,moved=0,tapFx=null;
@@ -420,7 +432,7 @@ function renderConstellation(){
     const ps=node.map(o=>{const p=proj(o); p.o=o; o._sx=null; return p;}).sort((a,b)=>b.depth-a.depth);
     const labels=[];
     for(let q=0;q<ps.length;q++){
-      const p=ps[q],o=p.o,c=posColor(o.pos),dm=_dim?_dim(o):1;
+      const p=ps[q],o=p.o,c=(_lensColor?_lensColor(o):posColor(o.pos)),dm=_dim?_dim(o):1;
       if(!o.seen){ ctx.fillStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.12)'; ctx.beginPath(); ctx.arc(p.sx,p.sy,1.5*p.sc,0,7); ctx.fill(); continue; }
       const halo=(o.st>=3?13:o.st>=2?10:8)*p.sc, ha=(o.st>=3?0.34:o.st>=2?0.22:0.15)*dm;
       const g=ctx.createRadialGradient(p.sx,p.sy,0,p.sx,p.sy,halo);
@@ -527,7 +539,7 @@ function renderConstellation(){
   lensCtl.style.cssText='position:absolute;top:6px;right:8px;z-index:3;text-align:right;cursor:pointer;font-size:9px;letter-spacing:1px;max-width:54%;';
   host.appendChild(lensCtl);
   function updateLensUI(){ lensCtl.innerHTML='<div style="opacity:.85;">◳ '+currentLens.name+' ▸</div><div style="font-size:8px;opacity:.5;margin-top:2px;line-height:1.3;">'+(currentLens.flex||'')+'</div>'; }
-  function applyLens(idx){ lensIdx=((idx%LENSES.length)+LENSES.length)%LENSES.length; currentLens=LENSES[lensIdx]; _lensId=currentLens.id; currentLens.apply(); elTarget=(currentLens.el!=null?currentLens.el:EL); updateLensUI(); }
+  function applyLens(idx){ lensIdx=((idx%LENSES.length)+LENSES.length)%LENSES.length; currentLens=LENSES[lensIdx]; _lensId=currentLens.id; _lensColor=null; currentLens.apply(); elTarget=(currentLens.el!=null?currentLens.el:EL); updateLensUI(); }
   lensCtl.onclick=function(e){ e.stopPropagation(); applyLens(lensIdx+1); };
   applyLens(0);
   loop();
