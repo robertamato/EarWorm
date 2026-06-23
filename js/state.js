@@ -562,9 +562,12 @@ function renderConstellation(){
   lensCtl.style.cssText='position:absolute;top:6px;right:8px;z-index:3;text-align:right;cursor:pointer;font-size:9px;letter-spacing:1px;max-width:54%;';
   host.appendChild(lensCtl);
   function updateLensUI(){ lensCtl.innerHTML='<div style="opacity:.85;">◳ '+currentLens.name+' ▸</div><div style="font-size:8px;opacity:.5;margin-top:2px;line-height:1.3;">'+(currentLens.flex||'')+'</div>'; }
-  function applyLens(idx){ lensIdx=((idx%LENSES.length)+LENSES.length)%LENSES.length; currentLens=LENSES[lensIdx]; _lensId=currentLens.id; _lensColor=null; currentLens.apply(); elTarget=(currentLens.el!=null?currentLens.el:EL); updateLensUI(); }
-  lensCtl.onclick=function(e){ e.stopPropagation(); applyLens(lensIdx+1); };
-  applyLens(0);
+  function applyLens(idx){ lensIdx=((idx%LENSES.length)+LENSES.length)%LENSES.length; currentLens=LENSES[lensIdx]; _lensId=currentLens.id; _lensColor=null; currentLens.apply(); elTarget=(currentLens.el!=null?currentLens.el:EL);
+    if(leg) leg.style.display=_lensColor?'none':'flex'; // POS legend only when the lens colors by POS (hidden on community-colored TERRITORY)
+    updateLensUI(); }
+  lensCtl.onclick=function(e){ e.stopPropagation(); applyLens(lensIdx+1); try{ S.lens=currentLens.id; if(typeof save==='function') save(); }catch(_){} };
+  // restore the last-used lens (persisted on switch); default ANATOMY
+  applyLens(Math.max(0, LENSES.findIndex(function(l){ return l.id===(typeof S!=='undefined'&&S.lens); })));
   loop();
 }
 function renderHome(){
