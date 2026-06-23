@@ -318,6 +318,7 @@ function renderConstellation(){
   const Hc=Math.max(280,cv.clientHeight||360);
   cv.width=Wc*dpr; cv.height=Hc*dpr; ctx.scale(dpr,dpr);
   const CX=Wc/2,CY=Hc/2,Rmax=Math.min(Wc,Hc)*0.58,Rmin=Rmax*0.18,FOC=Rmax*2.6,CAM=Rmax*2.6,EL=0.60;
+  const POP=Math.min(Wc,Hc)*0.30; // pull-to-pop: finger travel (canvas px) past which the fruit BREAKS → opens the card
   // Camera elevation is PER-LENS (eased in draw, like positions). Flat-structure lenses
   // (sunflower/islands/DAG) tilt toward top-down → their (x,y) renders face-on AND the fiber
   // lift becomes pure screen depth (in/out). Cloud lenses keep the turntable tilt EL.
@@ -356,7 +357,7 @@ function renderConstellation(){
   }
   // fibers between introduced atoms
   const fibers=constellationFibers(),edges=[];
-  for(let f=0;f<fibers.length;f++){const a=fibers[f][0],b=fibers[f][1]; if(node[a].seen&&node[b].seen) edges.push([node[a],node[b]]);}
+  for(let f=0;f<fibers.length;f++){const a=fibers[f][0],b=fibers[f][1]; if(node[a].seen&&node[b].seen) edges.push([node[a],node[b],1]);}
   const frR=Rmin+(Rmax-Rmin)*Math.sqrt(Math.min(frontier(),N)/N);
   // ── LENS ENGINE: the same star field, re-projected. Each lens sets per-node targets
   // (tx,ty,tz); the draw loop eases toward them, so switching MORPHS the constellation.
@@ -371,7 +372,7 @@ function renderConstellation(){
         for(let q=0;q<pairs.length;q++){ inv[pairs[q][0]]=1; inv[pairs[q][1]]=1; }
         for(let it=0;it<45;it++){ for(let q=0;q<pairs.length;q++){ const a=pairs[q][0],b=pairs[q][1],mx=(px[a]+px[b])/2,my=(py[a]+py[b])/2,f=0.05; px[a]+=(mx-px[a])*f; py[a]+=(my-py[a])*f; px[b]+=(mx-px[b])*f; py[b]+=(my-py[b])*f; } }
         node.forEach((o,i)=>{ o.tx=px[i]; o.ty=py[i]; o.tz=o.fz; });
-        _edges=pairs.map(p=>[node[p[0]],node[p[1]]]); _dim=function(o){ return inv[o.i]?1:0.25; };
+        _edges=pairs.map(p=>[node[p[0]],node[p[1]],p[2]]); _dim=function(o){ return inv[o.i]?1:0.25; };
         this.flex=pairs.length?(pairs.length+' blur'+(pairs.length>1?'s':'')+' — drawn together, decaying as you tell them apart'):'no blurs caught yet — keep playing'; } },
     { id:'engine', name:'THE ENGINE', flex:'', el:1.30,
       apply:function(){ let gb; try{ gb=computeGenerativeBasis(); }catch(e){ gb=null; }
@@ -380,7 +381,7 @@ function renderConstellation(){
         const GAr=2.39996, tc={};
         node.forEach((o,i)=>{ if(tierOf[i]!=null){ const t=tierOf[i],k=(tc[t]=(tc[t]||0)); tc[t]++; const rr=Rmin+(Rmax-Rmin)*((t+1)/(T+1)),ang=k*GAr+t*0.7; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=o.fz; } else { const ang=i*GAr,rr=Rmax*1.12; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=o.fz; } });
         // Hasse covering edges: each basis atom → the atom it generatively rests on (THEORY §14)
-        const covEdges=[]; if(gb&&gb.basis){ gb.basis.forEach(a=>{ if(a.covers>=0 && a.rank<N && a.covers<N) covEdges.push([node[a.rank], node[a.covers]]); }); }
+        const covEdges=[]; if(gb&&gb.basis){ gb.basis.forEach(a=>{ if(a.covers>=0 && a.rank<N && a.covers<N) covEdges.push([node[a.rank], node[a.covers], 1]); }); }
         _edges=covEdges; _dim=function(o){ return tierOf[o.i]!=null?1:0.18; };
         const reach=basisSize?Math.round(deepest/basisSize*10)/10:0;
         this.flex=basisSize?(basisSize+'-atom basis → '+reach+'× reach · a generator, not a memorizer'):'basis forming…'; } },
@@ -415,7 +416,7 @@ function renderConstellation(){
         const p3=[], radii=[]; for(let i=0;i<N;i++){ const x=emb[i][0]-cx,y=emb[i][1]-cy,z=emb[i][2]-cz; p3.push([x,y,z]); if(node[i].seen) radii.push(Math.sqrt(x*x+y*y+z*z)); }
         radii.sort(function(a,b){return a-b;}); const pr=(radii.length?radii[Math.floor(radii.length*0.9)]:1)||1, sc=(Rmax*0.86)/pr;
         node.forEach((o,i)=>{ o.tx=p3[i][0]*sc; o.ty=p3[i][1]*sc; o.tz=p3[i][2]*sc; });
-        _edges=E.filter(e=>e[0]<N&&e[1]<N&&node[e[0]].seen&&node[e[1]].seen).map(e=>[node[e[0]],node[e[1]]]); _dim=null;
+        _edges=E.filter(e=>e[0]<N&&e[1]<N&&node[e[0]].seen&&node[e[1]].seen).map(e=>[node[e[0]],node[e[1]],e[2]]); _dim=null;
         // color by COMMUNITY (golden-angle per neighborhood) so the 3-D clusters read
         const groups={}; for(let i=0;i<N;i++){ (groups[lab[i]]=groups[lab[i]]||[]).push(i); }
         const realL=Object.keys(groups).filter(l=>groups[l].length>=3).sort((a,b)=>groups[b].length-groups[a].length);
@@ -425,15 +426,17 @@ function renderConstellation(){
   ];
   let lensIdx=0, currentLens=LENSES[0];
   let yaw=0,zoom=1,dragging=false,lastX=0,lastY=0,moved=0,tapFx=null,yawVel=0,pitchVel=0;
-  // Press-and-hold → open the atom's detail card (tap stays pure TTS). project_fibroid.
-  let holdStar=null,holdT0=0,holdFired=false,holdTimer=null; const HOLD_MS=450;
+  // PLUCK → tug a star like fruit on an elastic branch; pull past POP and it BREAKS → opens the
+  // card (replaces press-and-hold; tension, not a timer). tap stays pure TTS. project_fibroid.
+  let holdStar=null,holdFired=false;
+  let pluck=null,pluckFired=false,pluckGX=0,pluckGY=0,pluckSC=0.5,_springLive=false;
   const pts=new Map(); let pinchD0=0,zoom0=1;
   const CJK="'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
   function proj(o){
     // disc lies on the ground plane (o.x,o.y); o.z is vertical lift.
     // Turntable: spin about the vertical axis (yaw), then view from a
     // fixed elevation. Yaw axis ⟂ disc → constant ellipse, no sliver.
-    const gx=o.x-tcx,gz=o.y-tcy,gy=o.z-tcz;  // relative to the (pannable) look-at target
+    const gx=(o.x+(o.dx||0))-tcx,gz=(o.y+(o.dy||0))-tcy,gy=(o.z+(o.dz||0))-tcz;  // pos + pluck displacement, relative to the (pannable) look-at target
     const cf=Math.cos(yaw),sf=Math.sin(yaw);
     const x1=gx*cf+gz*sf, z1=-gx*sf+gz*cf;
     const ca=Math.cos(elCur),sa=Math.sin(elCur);
@@ -456,6 +459,21 @@ function renderConstellation(){
     fovNow+=(_fovT-fovNow)*0.12;
     const _zoomNow=FOC/Math.max(0.08*FOC, FOC+camDist); // closeness proxy
     for(let q=0;q<node.length;q++){ const o=node[q]; o.x+=(o.tx-o.x)*0.14; o.y+=(o.ty-o.y)*0.14; o.z+=(o.tz-o.z)*0.14; }
+    // PLUCK spring: each displaced atom (the grabbed fruit + the web it tugged) eases back toward
+    // its rest via an underdamped spring → recoils with a BOING. Held atom keeps tdx==dx so it sits
+    // under the finger; on release all targets are zeroed and the whole web snaps home. project_fibroid.
+    if(_springLive){ let live=false; const SK=0.28, SD=0.80;
+      for(let q=0;q<node.length;q++){ const o=node[q];
+        if(o.dx||o.dy||o.dz||o.vx||o.vy||o.vz||o.tdx||o.tdy||o.tdz){
+          o.vx=((o.vx||0)+(((o.tdx||0)-(o.dx||0))*SK))*SD; o.dx=(o.dx||0)+o.vx;
+          o.vy=((o.vy||0)+(((o.tdy||0)-(o.dy||0))*SK))*SD; o.dy=(o.dy||0)+o.vy;
+          o.vz=((o.vz||0)+(((o.tdz||0)-(o.dz||0))*SK))*SD; o.dz=(o.dz||0)+o.vz;
+          if(Math.abs(o.dx)<0.02&&Math.abs(o.dy)<0.02&&Math.abs(o.dz)<0.02&&Math.abs(o.vx)<0.02&&Math.abs(o.vy)<0.02&&Math.abs(o.vz)<0.02&&!(o.tdx||o.tdy||o.tdz)){ o.dx=o.dy=o.dz=o.vx=o.vy=o.vz=0; }
+          else live=true;
+        }
+      }
+      if(!pluck && !live) _springLive=false;
+    }
     if(_lensId==='anatomy' && _zoomNow<3){
       ctx.strokeStyle='rgba(77,255,160,0.22)'; ctx.setLineDash([2,7]); ctx.lineWidth=1; ctx.beginPath();
       for(let t=0;t<=64;t++){const aa=t/64*2*Math.PI,p=proj({x:frR*Math.cos(aa),y:frR*Math.sin(aa),z:0}); if(t===0)ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);} ctx.stroke(); ctx.setLineDash([]);
@@ -501,11 +519,16 @@ function renderConstellation(){
       if(dt>520) tapFx=null;
       else{ const o=node[tapFx.i]; if(o&&o._sx!=null){ const k=dt/520; ctx.strokeStyle='rgba(255,255,255,'+(0.6*(1-k))+')'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(o._sx,o._sy,5+k*28,0,7); ctx.stroke(); } }
     }
-    // press-and-hold charge ring — fills as you hold a star; opens its card at completion
-    if(holdStar && holdStar._sx!=null && !holdFired){
-      const prog=Math.min(1,(performance.now()-holdT0)/HOLD_MS);
-      ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=2.5;
-      ctx.beginPath(); ctx.arc(holdStar._sx,holdStar._sy,15,-Math.PI/2,-Math.PI/2+prog*6.2832); ctx.stroke();
+    // PLUCK tension overlay — the strained threads to the tugged neighbors brighten/thicken with
+    // tension × bond-weight (you SEE the strong bonds resist), and a ring on the fruit fills with
+    // pull, reddening toward the break point. Replaces the old time-based charge ring.
+    if(pluck && holdStar && holdStar._sx!=null){
+      const t=Math.min(1,(pluck.pull||0)/POP);
+      for(let k=0;k<pluck.neighbors.length;k++){ const nb=pluck.neighbors[k][0],w=pluck.neighbors[k][1]; if(nb._sx==null)continue; const wf=w/pluck.maxW;
+        ctx.strokeStyle='rgba(255,255,255,'+(0.16+0.6*t*wf)+')'; ctx.lineWidth=0.8+1.8*t*wf;
+        ctx.beginPath(); ctx.moveTo(holdStar._sx,holdStar._sy); ctx.lineTo(nb._sx,nb._sy); ctx.stroke(); }
+      ctx.strokeStyle='rgba(255,'+(255-Math.floor(150*t))+','+(255-Math.floor(180*t))+','+(0.5+0.45*t)+')'; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.arc(holdStar._sx,holdStar._sy,16,-Math.PI/2,-Math.PI/2+t*6.2832); ctx.stroke();
     }
   }
   function visible(){ return !document.hidden && $('home') && $('home').style.display!=='none'; }
@@ -523,10 +546,16 @@ function renderConstellation(){
     const best=starAtPx(px(e),py(e));
     if(best){ if(S.sound!=='mute') speak(D[best.i][0],activeCourse().langCode); tapFx={i:best.i,t0:performance.now()}; }
   }
-  function cancelHold(){ if(holdTimer){clearTimeout(holdTimer);holdTimer=null;} holdStar=null; }
+  // spring every displaced atom back to rest (target=0) with a bounce — the recoil on release/cancel
+  function releaseSprings(){ for(let q=0;q<node.length;q++){ const o=node[q]; o.tdx=0;o.tdy=0;o.tdz=0; } _springLive=true; }
+  function cancelHold(){ if(pluck) releaseSprings(); pluck=null; holdStar=null; }
+  // atoms tethered to o in the active lens's edge set, with bond weights (strong bonds follow more)
+  function neighborsOf(o){ const out=[]; let mw=0.0001; for(let e=0;e<_edges.length;e++){ const a=_edges[e][0],b=_edges[e][1],w=_edges[e][2]||1; if(a===o&&b.seen){ out.push([b,w]); if(w>mw)mw=w; } else if(b===o&&a.seen){ out.push([a,w]); if(w>mw)mw=w; } } return {list:out,maxW:mw}; }
   // star's last projected canvas point → viewport coords, for the color-flood transition origin
   function floodFrom(o){ if(!o||o._sx==null) return null; const r=cv.getBoundingClientRect(); return {x:r.left+(o._sx/Wc)*r.width, y:r.top+(o._sy/Hc)*r.height}; }
-  function openHeldAtom(){ if(!holdStar) return; holdFired=true; const o=holdStar, idx=o.i; try{ _atomFloodXY=floodFrom(o); }catch(e){ _atomFloodXY=null; } cancelHold(); if(typeof openAtomDetail==='function') openAtomDetail(idx,'sky'); }
+  // the POP: pulled past threshold → the fruit breaks free → color-flood into its dex card. The flood
+  // bursts from the DISPLACED star (where your finger pulled it), then the web recoils home behind it.
+  function doPop(){ if(!holdStar||pluckFired) return; pluckFired=true; const idx=holdStar.i; try{ _atomFloodXY=floodFrom(holdStar); }catch(e){ _atomFloodXY=null; } releaseSprings(); holdStar=null; pluck=null; dragging=false; if(typeof openAtomDetail==='function') openAtomDetail(idx,'sky'); }
   cv.addEventListener('pointerdown',e=>{
     try{cv.setPointerCapture(e.pointerId);}catch(_){}
     pts.set(e.pointerId,{x:px(e),y:py(e)}); hideHint();
@@ -538,14 +567,25 @@ function renderConstellation(){
         else { camTarget=CAM; elTarget=(currentLens&&currentLens.el!=null?currentLens.el:EL); ttx=0; tty=0; ttz=0; } // double-tap empty → back out + recenter
       }
       _lastDownT=_nt;
-      if(hs){ holdStar=hs; holdT0=performance.now(); holdTimer=setTimeout(openHeldAtom,HOLD_MS); } }
+      if(hs){ holdStar=hs; pluckFired=false; const _pp=proj(hs); pluckSC=_pp.sc||0.5; pluckGX=px(e); pluckGY=py(e); const nb=neighborsOf(hs); pluck={o:hs,neighbors:nb.list,maxW:nb.maxW,pull:0}; _springLive=true; } }
     else if(pts.size===2){ dragging=false; cancelHold(); const a=[...pts.values()]; pinchD0=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1; camDist0=camTarget; }
   });
   cv.addEventListener('pointermove',e=>{
     if(!pts.has(e.pointerId)) return;
     pts.set(e.pointerId,{x:px(e),y:py(e)});
     if(pts.size>=2){ cancelHold(); const a=[...pts.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),ratio=d/(pinchD0||1); camTarget=Math.max(-FOC*0.9, Math.min(CAM*2.4, camDist0-(ratio-1)*Rmax*2.2)); }
-    else if(dragging){ const x=px(e),y=py(e),dx=x-lastX,dy=y-lastY; lastX=x; lastY=y; moved+=Math.abs(dx)+Math.abs(dy); yaw+=dx*0.006; yawVel=dx*0.006; elTarget=Math.max(0.12,Math.min(1.52,elTarget+dy*0.004)); pitchVel=dy*0.004; if(moved>6&&holdStar) cancelHold(); }
+    else if(dragging){ const x=px(e),y=py(e),dx=x-lastX,dy=y-lastY; lastX=x; lastY=y; moved+=Math.abs(dx)+Math.abs(dy);
+      if(holdStar && pluck){ // PLUCK the grabbed fruit (down landed on a star) — don't orbit
+        const sdx=(x-pluckGX)/(pluckSC||0.5), sdy=(pluckGY-y)/(pluckSC||0.5); // screen offset → object units (y up)
+        const cf=Math.cos(yaw),sf=Math.sin(yaw),sa=Math.sin(elCur),ca=Math.cos(elCur); // camera right/up basis (matches zoom-to-cursor pan)
+        holdStar.dx=cf*sdx+(-sf*sa)*sdy; holdStar.dy=sf*sdx+(cf*sa)*sdy; holdStar.dz=ca*sdy;
+        holdStar.tdx=holdStar.dx; holdStar.tdy=holdStar.dy; holdStar.tdz=holdStar.dz; // held sits under the finger
+        for(let k=0;k<pluck.neighbors.length;k++){ const nb=pluck.neighbors[k][0],w=pluck.neighbors[k][1],fr=0.55*(w/pluck.maxW); nb.tdx=holdStar.dx*fr; nb.tdy=holdStar.dy*fr; nb.tdz=holdStar.dz*fr; } // neighbors trail by bond weight
+        pluck.pull=Math.hypot(x-pluckGX,y-pluckGY); _springLive=true;
+        if(pluck.pull>=POP) doPop(); // pulled too hard → SNAP
+      } else { // ORBIT (down landed on empty space)
+        yaw+=dx*0.006; yawVel=dx*0.006; elTarget=Math.max(0.12,Math.min(1.52,elTarget+dy*0.004)); pitchVel=dy*0.004; }
+    }
   });
   function endPtr(e){
     const wasTap=(pts.size===1 && dragging && moved<6);
@@ -581,7 +621,7 @@ function renderConstellation(){
   // faint control hint (fades on first interaction); word detail now lives on the stars
   const hint=document.createElement('div'); hint.id='mapHint';
   hint.style.cssText='position:absolute;left:8px;bottom:6px;z-index:2;font-size:9px;letter-spacing:1px;color:#9fd;opacity:.4;transition:opacity .5s;pointer-events:none;';
-  hint.textContent='drag · scroll to zoom · tap to hear · hold for card';
+  hint.textContent='drag to orbit · scroll to zoom · tap to hear · pull a word loose for its card';
   host.appendChild(hint);
   // lens switcher (top-right) — cycle the lenses; shows the active lens + its flex line
   const lensCtl=document.createElement('div');
