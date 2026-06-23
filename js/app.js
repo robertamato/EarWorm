@@ -2862,12 +2862,14 @@ function renderConstellation(){
       ctx.strokeStyle='rgba(77,255,160,0.22)'; ctx.setLineDash([2,7]); ctx.lineWidth=1; ctx.beginPath();
       for(let t=0;t<=64;t++){const aa=t/64*2*Math.PI,p=proj({x:frR*Math.cos(aa),y:frR*Math.sin(aa),z:0}); if(t===0)ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);} ctx.stroke(); ctx.setLineDash([]);
     }
-    const _webE=(_lensId==='web'), _engE=(_lensId==='engine');
-    for(let e=0;e<_edges.length;e++){const a=proj(_edges[e][0]),b=proj(_edges[e][1]); ctx.strokeStyle=_webE?'rgba(255,255,255,0.30)':(_engE?'rgba(125,255,192,0.45)':'rgba(125,255,192,0.15)'); ctx.lineWidth=(_webE||_engE)?1:0.7; ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();}
     const ps=node.map(o=>{const p=proj(o); p.o=o; o._sx=null; return p;}).sort((a,b)=>b.depth-a.depth);
+    let _minD=1e9,_maxD=-1e9; for(let q=0;q<ps.length;q++){ const d=ps[q].depth; if(d<_minD)_minD=d; if(d>_maxD)_maxD=d; } const _dR=(_maxD-_minD)||1;
+    const _fog=function(dep){ return 1-0.55*((dep-_minD)/_dR); }; // depth cueing: near=bright, far recedes → 3-D reads (auto no-op when the layout is flat)
+    const _webE=(_lensId==='web'), _engE=(_lensId==='engine');
+    for(let e=0;e<_edges.length;e++){const a=proj(_edges[e][0]),b=proj(_edges[e][1]); ctx.globalAlpha=_fog((a.depth+b.depth)*0.5); ctx.strokeStyle=_webE?'rgba(255,255,255,0.30)':(_engE?'rgba(125,255,192,0.45)':'rgba(125,255,192,0.15)'); ctx.lineWidth=(_webE||_engE)?1:0.7; ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();} ctx.globalAlpha=1;
     const labels=[];
     for(let q=0;q<ps.length;q++){
-      const p=ps[q],o=p.o,c=(_lensColor?_lensColor(o):posColor(o.pos)),dm=_dim?_dim(o):1;
+      const p=ps[q],o=p.o,c=(_lensColor?_lensColor(o):posColor(o.pos)),dm=(_dim?_dim(o):1)*_fog(p.depth);
       if(!o.seen){ ctx.fillStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.12)'; ctx.beginPath(); ctx.arc(p.sx,p.sy,1.5*p.sc,0,7); ctx.fill(); continue; }
       const halo=(o.st>=3?13:o.st>=2?10:8)*p.sc, ha=(o.st>=3?0.34:o.st>=2?0.22:0.15)*dm;
       const g=ctx.createRadialGradient(p.sx,p.sy,0,p.sx,p.sy,halo);
