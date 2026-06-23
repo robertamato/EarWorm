@@ -340,7 +340,9 @@ function renderConstellation(){
         if(gb){ T=gb.tiers.length; basisSize=gb.basisSize; gb.tiers.forEach((t,ti)=>{ t.atoms.forEach(a=>{ tierOf[a.rank]=ti; if(a.rank>deepest)deepest=a.rank; }); }); }
         const GAr=2.39996, tc={};
         node.forEach((o,i)=>{ if(tierOf[i]!=null){ const t=tierOf[i],k=(tc[t]=(tc[t]||0)); tc[t]++; const rr=Rmin+(Rmax-Rmin)*((t+1)/(T+1)),ang=k*GAr+t*0.7; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=o.fz; } else { const ang=i*GAr,rr=Rmax*1.12; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=o.fz; } });
-        _edges=[]; _dim=function(o){ return tierOf[o.i]!=null?1:0.18; };
+        // Hasse covering edges: each basis atom → the atom it generatively rests on (THEORY §14)
+        const covEdges=[]; if(gb&&gb.basis){ gb.basis.forEach(a=>{ if(a.covers>=0 && a.rank<N && a.covers<N) covEdges.push([node[a.rank], node[a.covers]]); }); }
+        _edges=covEdges; _dim=function(o){ return tierOf[o.i]!=null?1:0.18; };
         const reach=basisSize?Math.round(deepest/basisSize*10)/10:0;
         this.flex=basisSize?(basisSize+'-atom basis → '+reach+'× reach · a generator, not a memorizer'):'basis forming…'; } },
     { id:'reading', name:'THE READING', flex:'',
@@ -403,8 +405,8 @@ function renderConstellation(){
       ctx.strokeStyle='rgba(77,255,160,0.22)'; ctx.setLineDash([2,7]); ctx.lineWidth=1; ctx.beginPath();
       for(let t=0;t<=64;t++){const aa=t/64*2*Math.PI,p=proj({x:frR*Math.cos(aa),y:frR*Math.sin(aa),z:0}); if(t===0)ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);} ctx.stroke(); ctx.setLineDash([]);
     }
-    const _webE=(_lensId==='web');
-    for(let e=0;e<_edges.length;e++){const a=proj(_edges[e][0]),b=proj(_edges[e][1]); ctx.strokeStyle=_webE?'rgba(255,255,255,0.30)':'rgba(125,255,192,0.15)'; ctx.lineWidth=_webE?1:0.7; ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();}
+    const _webE=(_lensId==='web'), _engE=(_lensId==='engine');
+    for(let e=0;e<_edges.length;e++){const a=proj(_edges[e][0]),b=proj(_edges[e][1]); ctx.strokeStyle=_webE?'rgba(255,255,255,0.30)':(_engE?'rgba(125,255,192,0.45)':'rgba(125,255,192,0.15)'); ctx.lineWidth=(_webE||_engE)?1:0.7; ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();}
     const ps=node.map(o=>{const p=proj(o); p.o=o; o._sx=null; return p;}).sort((a,b)=>b.depth-a.depth);
     const labels=[];
     for(let q=0;q<ps.length;q++){

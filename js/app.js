@@ -582,16 +582,19 @@ function modalityEv(mod){ const p=MODALITY_PROFILE[mod]; return p?p.ev:1; }
 // is per-course (built from the tier's atoms / the course's example bank).
 const GRAMMAR_SPEC = {
   tiers: [
+    // `covers` = the immediate generative PREREQUISITE this role attaches to (THEORY §14):
+    // the covering relation of the basis poset → the Hasse edges THE ENGINE draws. Roots
+    // (referent) have none. Linguistically the PRIMARY dependency, not every dependency.
     { name:'T1 predication',      cap:'PREDICATE',     desc:'say what something is, is like, or does',
-      roles:[ {role:'referent',pos:'pronoun'}, {role:'lexical-verb',pos:'verb'}, {role:'copula'}, {role:'nominal',pos:'noun'}, {role:'adjective',pos:'adjective'}, {role:'degree'} ] },
+      roles:[ {role:'referent',pos:'pronoun'}, {role:'lexical-verb',pos:'verb',covers:'referent'}, {role:'copula',covers:'referent'}, {role:'nominal',pos:'noun',covers:'copula'}, {role:'adjective',pos:'adjective',covers:'referent'}, {role:'degree',covers:'adjective'} ] },
     { name:'T2 transitive/neg/Q', cap:'NEGATE & ASK',  desc:'deny and ask yes/no questions',
-      roles:[ {role:'negator'}, {role:'negator-perf'}, {role:'q-particle'} ] },
+      roles:[ {role:'negator',covers:'lexical-verb'}, {role:'negator-perf',covers:'lexical-verb'}, {role:'q-particle',covers:'copula'} ] },
     { name:'T3 modify/quantify',  cap:'MODIFY & COUNT', desc:'possess, modify, and quantify',
-      roles:[ {role:'modifier'}, {role:'numeral',pos:'numeral'}, {role:'classifier'} ] },
+      roles:[ {role:'modifier',covers:'nominal'}, {role:'numeral',pos:'numeral',covers:'classifier'}, {role:'classifier',covers:'nominal'} ] },
     { name:'T4 adjunct/aspect',   cap:'PLACE & ASPECT', desc:'locate and mark completion',
-      roles:[ {role:'coverb'}, {role:'aspect'} ] },
+      roles:[ {role:'coverb',covers:'lexical-verb'}, {role:'aspect',covers:'lexical-verb'} ] },
     { name:'T5 complex',          cap:'CONNECT',        desc:'join clauses',
-      roles:[ {role:'conjunction',pos:'conjunction'}, {role:'additive-adv'} ] }
+      roles:[ {role:'conjunction',pos:'conjunction',covers:'lexical-verb'}, {role:'additive-adv',covers:'lexical-verb'} ] }
   ]
 };
 function computeGenerativeBasis(deck, spec){
@@ -609,9 +612,11 @@ function computeGenerativeBasis(deck, spec){
     return -1;
   };
   const cum=new Map(); const tiers=[];
+  const roleIdx={}, roleCovers={};
+  spec.tiers.forEach(t=>t.roles.forEach(r=>{ if(r.covers) roleCovers[r.role]=r.covers; }));
   spec.tiers.forEach(t=>{
     const before=new Set(cum.keys());
-    t.roles.forEach(r=>{ const idx=fill(r); if(idx>=0){ const ch=deck[idx][0]; if(!cum.has(ch)) cum.set(ch,{role:r.role,idx:idx}); } });
+    t.roles.forEach(r=>{ const idx=fill(r); if(idx>=0){ const ch=deck[idx][0]; if(!cum.has(ch)) cum.set(ch,{role:r.role,idx:idx}); if(roleIdx[r.role]==null) roleIdx[r.role]=idx; } });
     const atoms=[...cum.values()].sort((a,b)=>a.idx-b.idx);
     const m=atoms.length, deep=atoms.length?Math.max.apply(null,atoms.map(a=>a.idx)):0;
     const deferred=atoms.filter(a=>a.idx>=m);   // generatively required but beyond a same-size pure-Zipf deck
@@ -619,7 +624,7 @@ function computeGenerativeBasis(deck, spec){
     tiers.push({ name:t.name, cap:t.cap, desc:t.desc, basisSize:m, deepestRank:deep, reachRatio:m?Math.round(deep/m*100)/100:0,
       deferredCount:deferred.length, deferred:deferred.map(a=>deck[a.idx][0]+'#'+a.idx), atoms:newAtoms });
   });
-  const basis=[...cum.values()].sort((a,b)=>a.idx-b.idx).map(a=>({ch:deck[a.idx][0], rank:a.idx, role:a.role}));
+  const basis=[...cum.values()].sort((a,b)=>a.idx-b.idx).map(a=>{ const cv=roleCovers[a.role], ci=(cv!=null&&roleIdx[cv]!=null)?roleIdx[cv]:-1; return {ch:deck[a.idx][0], rank:a.idx, role:a.role, covers:ci}; });
   return { tiers:tiers, basis:basis, basisSize:basis.length };
 }
 try{ window.computeGenerativeBasis=computeGenerativeBasis; window.GRAMMAR_SPEC=GRAMMAR_SPEC; window.GRAMMAR_SPEC_ZH=GRAMMAR_SPEC; }catch(e){}
@@ -2749,7 +2754,9 @@ function renderConstellation(){
         if(gb){ T=gb.tiers.length; basisSize=gb.basisSize; gb.tiers.forEach((t,ti)=>{ t.atoms.forEach(a=>{ tierOf[a.rank]=ti; if(a.rank>deepest)deepest=a.rank; }); }); }
         const GAr=2.39996, tc={};
         node.forEach((o,i)=>{ if(tierOf[i]!=null){ const t=tierOf[i],k=(tc[t]=(tc[t]||0)); tc[t]++; const rr=Rmin+(Rmax-Rmin)*((t+1)/(T+1)),ang=k*GAr+t*0.7; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=o.fz; } else { const ang=i*GAr,rr=Rmax*1.12; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=o.fz; } });
-        _edges=[]; _dim=function(o){ return tierOf[o.i]!=null?1:0.18; };
+        // Hasse covering edges: each basis atom → the atom it generatively rests on (THEORY §14)
+        const covEdges=[]; if(gb&&gb.basis){ gb.basis.forEach(a=>{ if(a.covers>=0 && a.rank<N && a.covers<N) covEdges.push([node[a.rank], node[a.covers]]); }); }
+        _edges=covEdges; _dim=function(o){ return tierOf[o.i]!=null?1:0.18; };
         const reach=basisSize?Math.round(deepest/basisSize*10)/10:0;
         this.flex=basisSize?(basisSize+'-atom basis → '+reach+'× reach · a generator, not a memorizer'):'basis forming…'; } },
     { id:'reading', name:'THE READING', flex:'',
@@ -2812,8 +2819,8 @@ function renderConstellation(){
       ctx.strokeStyle='rgba(77,255,160,0.22)'; ctx.setLineDash([2,7]); ctx.lineWidth=1; ctx.beginPath();
       for(let t=0;t<=64;t++){const aa=t/64*2*Math.PI,p=proj({x:frR*Math.cos(aa),y:frR*Math.sin(aa),z:0}); if(t===0)ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);} ctx.stroke(); ctx.setLineDash([]);
     }
-    const _webE=(_lensId==='web');
-    for(let e=0;e<_edges.length;e++){const a=proj(_edges[e][0]),b=proj(_edges[e][1]); ctx.strokeStyle=_webE?'rgba(255,255,255,0.30)':'rgba(125,255,192,0.15)'; ctx.lineWidth=_webE?1:0.7; ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();}
+    const _webE=(_lensId==='web'), _engE=(_lensId==='engine');
+    for(let e=0;e<_edges.length;e++){const a=proj(_edges[e][0]),b=proj(_edges[e][1]); ctx.strokeStyle=_webE?'rgba(255,255,255,0.30)':(_engE?'rgba(125,255,192,0.45)':'rgba(125,255,192,0.15)'); ctx.lineWidth=(_webE||_engE)?1:0.7; ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();}
     const ps=node.map(o=>{const p=proj(o); p.o=o; o._sx=null; return p;}).sort((a,b)=>b.depth-a.depth);
     const labels=[];
     for(let q=0;q<ps.length;q++){
