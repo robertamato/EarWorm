@@ -614,8 +614,11 @@ authored per pair. The learner structures are the posterior — the personalizat
 per learner. The lens engine is that claim made visual: *here is your language as a fixed
 shape, and here is you moving through it.*
 
-> **Open — the covering relation.** γ is currently rendered as tier *rings* (its grading); its
-> **covering edges** — the Hasse diagram, which single acquisition immediately enlarges reach —
-> are not drawn, because the runtime carries tier *membership*, not a per-atom covering DAG.
-> Drawing the Hasse diagram first requires pinning the covering relation in the basis data;
-> until then THE ENGINE shows the order's *grading*, not its *edges*.
+> **The covering relation (pinned).** γ is a graded poset; its **covering relation** is
+> authored on the roles: each `GRAMMAR_SPEC` role declares `covers` = the immediate generative
+> prerequisite it attaches to (copula ▸ referent, aspect ▸ lexical-verb, numeral ▸ classifier,
+> q-particle ▸ copula, degree ▸ adjective, …) — the *primary* dependency, not every one.
+> `computeGenerativeBasis` resolves it to a per-atom DAG rooted at the referent; THE ENGINE
+> draws it (the **Hasse diagram**). On the 16-atom Mandarin basis: 15 covering edges, all
+> linguistically sound. So the lens now shows the order's *edges* (generativity as dependency),
+> not just its *grading* (tiers). The relation travels with the role map, so it is per-(L₁,L₂).
