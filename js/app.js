@@ -2865,7 +2865,7 @@ function renderConstellation(){
     elCur+=(elTarget-elCur)*0.14; // tilt the camera toward the active lens's elevation
     camDist+=(camTarget-camDist)*0.16; // dolly toward/through the cloud — zoom flies you in
     tcx+=(ttx-tcx)*0.16; tcy+=(tty-tcy)*0.16; tcz+=(ttz-tcz)*0.16; // ease the look-at target
-    if(camDist>CAM*0.7){ ttx*=0.94; tty*=0.94; ttz*=0.94; } // recenter as you back out to orbit
+    if(camTarget>CAM*0.7){ ttx*=0.94; tty*=0.94; ttz*=0.94; } // recenter as you back out to orbit (key off the TARGET, not the transient camDist — else a fly-to-star's dolly-in decays its own look-at while camDist is still high)
     const _fovT=1+0.8*(1-Math.max(0,Math.min(1, camDist/(CAM*0.55)))); // inside → 1.8 (wide), outside → 1.0 (clean)
     fovNow+=(_fovT-fovNow)*0.12;
     const _zoomNow=FOC/Math.max(0.08*FOC, FOC+camDist); // closeness proxy
@@ -2950,7 +2950,12 @@ function renderConstellation(){
     pts.set(e.pointerId,{x:px(e),y:py(e)}); hideHint();
     if(pts.size===1){ dragging=true; moved=0; lastX=px(e); lastY=py(e); yawVel=0; pitchVel=0; cv.style.cursor='grabbing';
       holdFired=false; cancelHold(); const hs=starAtPx(px(e),py(e));
-      const _nt=performance.now(); if(_nt-_lastDownT<320 && !hs){ camTarget=CAM; elTarget=(currentLens&&currentLens.el!=null?currentLens.el:EL); ttx=0; tty=0; ttz=0; } _lastDownT=_nt; // double-tap empty space → ease back out + recenter
+      const _nt=performance.now();
+      if(_nt-_lastDownT<320){
+        if(hs){ ttx=hs.tx; tty=hs.ty; ttz=hs.tz; camTarget=Rmax*0.45; } // double-tap a star → FLY TO it
+        else { camTarget=CAM; elTarget=(currentLens&&currentLens.el!=null?currentLens.el:EL); ttx=0; tty=0; ttz=0; } // double-tap empty → back out + recenter
+      }
+      _lastDownT=_nt;
       if(hs){ holdStar=hs; holdT0=performance.now(); holdTimer=setTimeout(openHeldAtom,HOLD_MS); } }
     else if(pts.size===2){ dragging=false; cancelHold(); const a=[...pts.values()]; pinchD0=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1; camDist0=camTarget; }
   });
