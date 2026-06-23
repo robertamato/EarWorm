@@ -367,14 +367,14 @@ function renderConstellation(){
   const LENSES=[
     { id:'anatomy', name:'ANATOMY', flex:'your words, mapped by grammar',
       apply:function(){ node.forEach(o=>{ o.tx=o.ax; o.ty=o.ay; o.tz=o.fz; }); _edges=edges; _dim=null; } },
-    { id:'web', name:'THE WEB', flex:'',
+    { id:'web', name:'THE WEB', flex:'', pluckShare:0.66, pluckDamp:0.83,
       apply:function(){ const pairs=_confusionPairs(); const px=node.map(o=>o.ax), py=node.map(o=>o.ay), inv={};
         for(let q=0;q<pairs.length;q++){ inv[pairs[q][0]]=1; inv[pairs[q][1]]=1; }
         for(let it=0;it<45;it++){ for(let q=0;q<pairs.length;q++){ const a=pairs[q][0],b=pairs[q][1],mx=(px[a]+px[b])/2,my=(py[a]+py[b])/2,f=0.05; px[a]+=(mx-px[a])*f; py[a]+=(my-py[a])*f; px[b]+=(mx-px[b])*f; py[b]+=(my-py[b])*f; } }
         node.forEach((o,i)=>{ o.tx=px[i]; o.ty=py[i]; o.tz=o.fz; });
         _edges=pairs.map(p=>[node[p[0]],node[p[1]],p[2]]); _dim=function(o){ return inv[o.i]?1:0.25; };
         this.flex=pairs.length?(pairs.length+' blur'+(pairs.length>1?'s':'')+' — drawn together, decaying as you tell them apart'):'no blurs caught yet — keep playing'; } },
-    { id:'engine', name:'THE ENGINE', flex:'', el:1.30,
+    { id:'engine', name:'THE ENGINE', flex:'', el:1.30, pluckShare:0.30, pluckDamp:0.72,
       apply:function(){ let gb; try{ gb=computeGenerativeBasis(); }catch(e){ gb=null; }
         const tierOf={}; let T=0,basisSize=0,deepest=0;
         if(gb){ T=gb.tiers.length; basisSize=gb.basisSize; gb.tiers.forEach((t,ti)=>{ t.atoms.forEach(a=>{ tierOf[a.rank]=ti; if(a.rank>deepest)deepest=a.rank; }); }); }
@@ -396,7 +396,7 @@ function renderConstellation(){
         node.forEach((o,i)=>{ o.tx=o.ax; o.ty=o.ay; o.tz=o.fz; });
         _edges=[]; _dim=function(o){ return fset[o.i]?1:0.16; };
         const n=Object.keys(fset).length; this.flex=n?('your working edge — '+n+' word'+(n>1?'s':'')+' still landing'):'all caught up — explore for more'; } },
-    { id:'territory', name:'THE TERRITORY', flex:'',
+    { id:'territory', name:'THE TERRITORY', flex:'', pluckShare:0.72, pluckDamp:0.84,
       // The crown jewel as an honest DENSE FIELD: a true 3-D force-directed embedding of the
       // PMI semantic graph. Depth here carries STRUCTURE, not mastery (mastery rides on
       // size/brightness) — all three spatial axes embed the meaning, and you ORBIT it. Tilted
@@ -462,7 +462,7 @@ function renderConstellation(){
     // PLUCK spring: each displaced atom (the grabbed fruit + the web it tugged) eases back toward
     // its rest via an underdamped spring → recoils with a BOING. Held atom keeps tdx==dx so it sits
     // under the finger; on release all targets are zeroed and the whole web snaps home. project_fibroid.
-    if(_springLive){ let live=false; const SK=0.28, SD=0.80;
+    if(_springLive){ let live=false; const SK=0.28, SD=(currentLens&&currentLens.pluckDamp!=null)?currentLens.pluckDamp:0.80; // per-lens recoil: fields bounce (higher), the DAG figure snaps back crisp (lower)
       for(let q=0;q<node.length;q++){ const o=node[q];
         if(o.dx||o.dy||o.dz||o.vx||o.vy||o.vz||o.tdx||o.tdy||o.tdz){
           o.vx=((o.vx||0)+(((o.tdx||0)-(o.dx||0))*SK))*SD; o.dx=(o.dx||0)+o.vx;
@@ -567,7 +567,7 @@ function renderConstellation(){
         else { camTarget=CAM; elTarget=(currentLens&&currentLens.el!=null?currentLens.el:EL); ttx=0; tty=0; ttz=0; } // double-tap empty → back out + recenter
       }
       _lastDownT=_nt;
-      if(hs){ holdStar=hs; pluckFired=false; const _pp=proj(hs); pluckSC=_pp.sc||0.5; pluckGX=px(e); pluckGY=py(e); const nb=neighborsOf(hs); pluck={o:hs,neighbors:nb.list,maxW:nb.maxW,pull:0}; _springLive=true; } }
+      if(hs){ holdStar=hs; pluckFired=false; const _pp=proj(hs); pluckSC=_pp.sc||0.5; pluckGX=px(e); pluckGY=py(e); const nb=neighborsOf(hs); const _sh=(currentLens&&currentLens.pluckShare!=null)?currentLens.pluckShare:0.55; pluck={o:hs,neighbors:nb.list,maxW:nb.maxW,pull:0,share:_sh}; _springLive=true; } }
     else if(pts.size===2){ dragging=false; cancelHold(); const a=[...pts.values()]; pinchD0=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1; camDist0=camTarget; }
   });
   cv.addEventListener('pointermove',e=>{
@@ -580,7 +580,7 @@ function renderConstellation(){
         const cf=Math.cos(yaw),sf=Math.sin(yaw),sa=Math.sin(elCur),ca=Math.cos(elCur); // camera right/up basis (matches zoom-to-cursor pan)
         holdStar.dx=cf*sdx+(-sf*sa)*sdy; holdStar.dy=sf*sdx+(cf*sa)*sdy; holdStar.dz=ca*sdy;
         holdStar.tdx=holdStar.dx; holdStar.tdy=holdStar.dy; holdStar.tdz=holdStar.dz; // held sits under the finger
-        for(let k=0;k<pluck.neighbors.length;k++){ const nb=pluck.neighbors[k][0],w=pluck.neighbors[k][1],fr=0.55*(w/pluck.maxW); nb.tdx=holdStar.dx*fr; nb.tdy=holdStar.dy*fr; nb.tdz=holdStar.dz*fr; } // neighbors trail by bond weight
+        for(let k=0;k<pluck.neighbors.length;k++){ const nb=pluck.neighbors[k][0],w=pluck.neighbors[k][1],fr=pluck.share*(w/pluck.maxW); nb.tdx=holdStar.dx*fr; nb.tdy=holdStar.dy*fr; nb.tdz=holdStar.dz*fr; } // neighbors trail by bond weight (share = per-lens: dramatic on fields, subtle on the DAG figure)
         pluck.pull=Math.hypot(x-pluckGX,y-pluckGY); _springLive=true;
         if(pluck.pull>=POP) doPop(); // pulled too hard → SNAP
       } else { // ORBIT (down landed on empty space)
