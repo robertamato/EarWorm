@@ -2705,6 +2705,10 @@ function renderConstellation(){
   const Hc=Math.max(280,cv.clientHeight||360);
   cv.width=Wc*dpr; cv.height=Hc*dpr; ctx.scale(dpr,dpr);
   const CX=Wc/2,CY=Hc/2,Rmax=Math.min(Wc,Hc)*0.58,Rmin=Rmax*0.18,FOC=Rmax*2.6,CAM=Rmax*2.6,EL=0.60;
+  // Camera elevation is PER-LENS (eased in draw, like positions). Flat-structure lenses
+  // (sunflower/islands/DAG) tilt toward top-down → their (x,y) renders face-on AND the fiber
+  // lift becomes pure screen depth (in/out). Cloud lenses keep the turntable tilt EL.
+  let elCur=EL, elTarget=EL;
   // sectors
   const counts={}; POS_SECTORS.forEach(s=>counts[s]=0);
   const posOf=new Array(N);
@@ -2753,7 +2757,7 @@ function renderConstellation(){
         node.forEach((o,i)=>{ o.tx=px[i]; o.ty=py[i]; o.tz=o.fz; });
         _edges=pairs.map(p=>[node[p[0]],node[p[1]]]); _dim=function(o){ return inv[o.i]?1:0.25; };
         this.flex=pairs.length?(pairs.length+' blur'+(pairs.length>1?'s':'')+' — drawn together, decaying as you tell them apart'):'no blurs caught yet — keep playing'; } },
-    { id:'engine', name:'THE ENGINE', flex:'',
+    { id:'engine', name:'THE ENGINE', flex:'', el:1.30,
       apply:function(){ let gb; try{ gb=computeGenerativeBasis(); }catch(e){ gb=null; }
         const tierOf={}; let T=0,basisSize=0,deepest=0;
         if(gb){ T=gb.tiers.length; basisSize=gb.basisSize; gb.tiers.forEach((t,ti)=>{ t.atoms.forEach(a=>{ tierOf[a.rank]=ti; if(a.rank>deepest)deepest=a.rank; }); }); }
@@ -2764,7 +2768,7 @@ function renderConstellation(){
         _edges=covEdges; _dim=function(o){ return tierOf[o.i]!=null?1:0.18; };
         const reach=basisSize?Math.round(deepest/basisSize*10)/10:0;
         this.flex=basisSize?(basisSize+'-atom basis → '+reach+'× reach · a generator, not a memorizer'):'basis forming…'; } },
-    { id:'reading', name:'THE READING', flex:'',
+    { id:'reading', name:'THE READING', flex:'', el:1.42,
       apply:function(){ const GAr=2.39996;
         node.forEach((o,i)=>{ const rr=Rmax*Math.sqrt((i+0.5)/N),ang=i*GAr; o.tx=rr*Math.cos(ang); o.ty=rr*Math.sin(ang); o.tz=o.fz; });
         _edges=[]; let ws=0,wa=0; for(let i=0;i<N;i++){ const w=1/(i+1); wa+=w; if(node[i].seen) ws+=w; }
@@ -2775,7 +2779,7 @@ function renderConstellation(){
         node.forEach((o,i)=>{ o.tx=o.ax; o.ty=o.ay; o.tz=o.fz; });
         _edges=[]; _dim=function(o){ return fset[o.i]?1:0.16; };
         const n=Object.keys(fset).length; this.flex=n?('your working edge — '+n+' word'+(n>1?'s':'')+' still landing'):'all caught up — explore for more'; } },
-    { id:'territory', name:'THE TERRITORY', flex:'',
+    { id:'territory', name:'THE TERRITORY', flex:'', el:1.42,
       // Distributional semantics done right: a force layout over the PMI-weighted co-occurrence
       // graph. PMI divides out hub-word expectation, so attraction follows SURPRISING pairings
       // (meaning) — content words cluster into neighborhoods, function words drift to the rim.
@@ -2810,7 +2814,7 @@ function renderConstellation(){
     const gx=o.x,gz=o.y,gy=o.z;
     const cf=Math.cos(yaw),sf=Math.sin(yaw);
     const x1=gx*cf+gz*sf, z1=-gx*sf+gz*cf;
-    const ca=Math.cos(EL),sa=Math.sin(EL);
+    const ca=Math.cos(elCur),sa=Math.sin(elCur);
     const y2=gy*ca+z1*sa, z2=-gy*sa+z1*ca;
     const sc=FOC/(FOC+CAM+z2)*zoom;
     return {sx:CX+x1*sc,sy:CY-y2*sc,sc:sc,depth:z2};
@@ -2819,6 +2823,7 @@ function renderConstellation(){
     const now=performance.now();
     ctx.clearRect(0,0,Wc,Hc);
     // morph: ease every node toward its current lens target — a lens switch animates here
+    elCur+=(elTarget-elCur)*0.14; // tilt the camera toward the active lens's elevation
     for(let q=0;q<node.length;q++){ const o=node[q]; o.x+=(o.tx-o.x)*0.14; o.y+=(o.ty-o.y)*0.14; o.z+=(o.tz-o.z)*0.14; }
     if(_lensId==='anatomy'){
       ctx.strokeStyle='rgba(77,255,160,0.22)'; ctx.setLineDash([2,7]); ctx.lineWidth=1; ctx.beginPath();
@@ -2936,7 +2941,7 @@ function renderConstellation(){
   lensCtl.style.cssText='position:absolute;top:6px;right:8px;z-index:3;text-align:right;cursor:pointer;font-size:9px;letter-spacing:1px;max-width:54%;';
   host.appendChild(lensCtl);
   function updateLensUI(){ lensCtl.innerHTML='<div style="opacity:.85;">◳ '+currentLens.name+' ▸</div><div style="font-size:8px;opacity:.5;margin-top:2px;line-height:1.3;">'+(currentLens.flex||'')+'</div>'; }
-  function applyLens(idx){ lensIdx=((idx%LENSES.length)+LENSES.length)%LENSES.length; currentLens=LENSES[lensIdx]; _lensId=currentLens.id; currentLens.apply(); updateLensUI(); }
+  function applyLens(idx){ lensIdx=((idx%LENSES.length)+LENSES.length)%LENSES.length; currentLens=LENSES[lensIdx]; _lensId=currentLens.id; currentLens.apply(); elTarget=(currentLens.el!=null?currentLens.el:EL); updateLensUI(); }
   lensCtl.onclick=function(e){ e.stopPropagation(); applyLens(lensIdx+1); };
   applyLens(0);
   loop();
