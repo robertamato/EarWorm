@@ -14,10 +14,11 @@ items from those reviews were **already fixed** and are recorded under MONITORIN
 review time (build hygiene / `app.js` drift — tree is clean and byte-exact). Treat
 external-review severities as candidates, not verdicts.
 
-### Scheduler: v2 path ignores wall-clock ripe; lastReviewAt not written under v2
-**Symptom:** Cards that decay between sessions (retrievability `R < ~0.85`) are never resurfaced under the active (v2) scheduler; many cards never become "ripe."
-**Root cause:** `Scheduler._dueVocab`/`_pickFromPools`/`next`/`modality` are count-only (`axisDue`/`totalSeen`). `isWallClockRipe` is read only by legacy `buildStudyQueue`, not the v2 path. `lastReviewAt` is written by `recordAxisResultNew` (still runs) but not by `Scheduler.recordAnswer`, and selection never reads it.
-**Status:** OPEN — this is the **Slice 2b** cutover. `coldRecompute` built in shadow mode (`data.js`), not yet driving selection. Deeper resolution (hot-log / cold-infer, dissolves the dual-engine double-write) in `ENGINE.md` §7-bis/§8.
+### Scheduler: v2 path ignored wall-clock ripe — FIXED (wall-clock); cold cutover still OPEN
+**Symptom:** Cards that decay between sessions (retrievability `R < ~0.85`) were never resurfaced under the active (v2) scheduler; many never became "ripe."
+**Root cause:** `Scheduler._dueVocab`/`_pickFromPools` were count-only (`axisDue`/`totalSeen`); `isWallClockRipe`/`retrievability` existed but were read only by legacy `buildStudyQueue`, never by the v2 path.
+**Fix (`9f310eb`):** new `Scheduler._dueNow(i,ci)` = count-due OR `isWallClockRipe(i)`, used by `_dueVocab`/`_seenVocab`/`_pickFromPools.isDue`. Between-session forgetting now resurfaces decayed maintenance fibers (ENGINE.md §8 "gate by calendar, sequence by count"). Verified: a graduated, not-count-due, freshly-reviewed card is dormant; after a simulated 40-day decay (R=0.40) it becomes ripe→due purely by wall-clock.
+**Status (cold cutover): OPEN — deliberately NOT flipped.** `coldRecompute` (shadow) replays the obs-log (408 records) into graduation verdicts. **Validated 2026-06-24: live graduates 86/86 (on 1 recall each); cold graduates 6/86 (requires contextual discrimination+incidental evidence).** The ~14× gap is the over-graduation / Duolingo trap *quantified* — not an engine bug. A blind cutover would collapse graduation 86→6, dumping 80 cards back into acquisition, halting introductions (load ceiling), and collapsing capability counts. The cutover must be a deliberate redesign (graduation = "demonstrated in context"), tied to the reading-first/production pivot ([[project_reading_first]]) + re-tuned pacing/renders — NOT a flag-flip. Until then cold's value is as the honest MEASUREMENT signal. ENGINE.md §7-bis/§8.
 
 ### State export/import: misses generated sentences + user words; import destructive
 **Symptom:** Export → import roundtrip loses LLM-generated sentences and user-added words; importing can corrupt across courses.
