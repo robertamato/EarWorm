@@ -1893,7 +1893,13 @@ function _sfOverlay(){
   var o=document.getElementById('sfOverlay');
   if(!o){ o=document.createElement('div'); o.id='sfOverlay';
     o.style.cssText='position:fixed;inset:0;z-index:9000;background:#070b08;color:#e8efe9;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:ui-monospace,monospace;';
-    document.body.appendChild(o); }
+    document.body.appendChild(o);
+    if(!document.getElementById('sfStyle')){ var st=document.createElement('style'); st.id='sfStyle';
+      st.textContent='@keyframes sfFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}'
+        +'@keyframes sfLand{0%{opacity:0;transform:scale(1.6);filter:brightness(2.2)}55%{opacity:1;transform:scale(1)}100%{filter:brightness(1)}}'
+        +'.sfMid{animation:sfFade .34s ease both}.sfGap{display:inline-block;animation:sfLand .7s ease-out both}.sfTap{cursor:pointer}';
+      document.head.appendChild(st); }
+  }
   return o;
 }
 function _sfClose(){ var o=document.getElementById('sfOverlay'); if(o) o.remove(); try{ if(typeof speechSynthesis!=='undefined') speechSynthesis.cancel(); }catch(e){} }
@@ -1908,15 +1914,16 @@ function _sfSentenceHTML(zh,gaps,occlude){
   var gw=gaps.map(function(j){return {w:D[j][0],col:_sfCol(j)};}).sort(function(a,b){return b.w.length-a.w.length;});
   var CJK=/[一-鿿㐀-䶿]/, fg='#dfeee4', out='', i=0;
   function ruby(ch){ var sy=(typeof charSyl==='function')?charSyl(ch):null; return sy?'<span style="color:'+toneColor(sy[1],fg)+'">'+_sfEsc(sy[0])+'</span>':''; }
+  function glyph(ch,cls,style){ return '<span class="sfTap'+(cls?' '+cls:'')+'" data-ch="'+_sfEsc(ch)+'" style="'+(style||'')+'">'+_sfEsc(ch)+'</span>'; } // tappable to hear
   while(i<zh.length){
     var m=null; for(var g=0;g<gw.length;g++){ if(gw[g].w && zh.substr(i,gw[g].w.length)===gw[g].w){ m=gw[g]; break; } }
     if(m){
       for(var c=0;c<m.w.length;c++){ var gch=m.w[c];
         if(occlude) out+=_sfStack('', '<span style="color:'+m.col+';border-bottom:2px solid '+m.col+';">▢</span>');
-        else out+=_sfStack(CJK.test(gch)?ruby(gch):'', '<span style="color:'+m.col+';font-weight:600;">'+_sfEsc(gch)+'</span>');
+        else out+=_sfStack(CJK.test(gch)?ruby(gch):'', glyph(gch,'sfGap','color:'+m.col+';font-weight:600;')); // revealed gap lands with a glow
       }
       i+=m.w.length;
-    } else { var ch=zh[i]; out+=_sfStack(CJK.test(ch)?ruby(ch):'', _sfEsc(ch)); i+=1; }
+    } else { var ch=zh[i]; if(CJK.test(ch)) out+=_sfStack(ruby(ch), glyph(ch,'','')); else out+=_sfStack('', _sfEsc(ch)); i+=1; }
   }
   return '<div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;max-width:94%;">'+out+'</div>';
 }
@@ -1925,32 +1932,35 @@ function _sfRender(){
   var tag='<div style="position:absolute;top:14px;left:18px;font-size:9px;letter-spacing:2px;opacity:.4;">SENTENCE-FIRST · β</div>';
   var close='<div id="sfClose" style="position:absolute;top:14px;right:18px;font-size:11px;letter-spacing:1px;opacity:.5;cursor:pointer;">✕ exit</div>';
   var foot='<div style="position:absolute;bottom:16px;left:0;right:0;font-size:10px;letter-spacing:1px;opacity:.35;">vocabulary so far · '+_sfKnown()+' word'+(_sfKnown()===1?'':'s')+'</div>';
-  if(!t){ o.innerHTML=tag+close+'<div style="font-size:15px;opacity:.7;max-width:400px;line-height:1.6;">No next sentence one step away — every sentence we have is now fully readable from what you\'ve built. That\'s the <b>content ceiling</b>, not a bug: the loop is starved for sentences. (Exactly the sourcing problem we flagged.)</div>'+foot; _sfWire(); return; }
+  var mid;
+  if(!t){ mid='<div style="font-size:15px;opacity:.7;max-width:400px;line-height:1.6;">No next sentence one step away — every sentence we have is now fully readable from what you\'ve built. That\'s the <b>content ceiling</b>, not a bug: the loop is starved for sentences. (Exactly the sourcing problem we flagged.)</div>'; }
+  else {
   var zh=t.s[0], en=t.s[2]||'', gaps=t.gaps, gcol=_sfCol(gaps[0]);
   if(_sfPhase==='goal'){
-    o.innerHTML=tag+close
-      +'<div style="font-size:11px;letter-spacing:2px;opacity:.5;margin-bottom:22px;">YOU CAN ALMOST READ THIS</div>'
+    mid='<div style="font-size:11px;letter-spacing:2px;opacity:.5;margin-bottom:22px;">YOU CAN ALMOST READ THIS</div>'
       +_sfSentenceHTML(zh,gaps,true)
       +(en?'<div style="font-size:14px;opacity:.4;margin-top:18px;">« '+_sfEsc(en)+' »</div>':'') // the meaning you\'re reaching for (input, not a test)
-      +'<div style="margin-top:38px;"><button id="sfGo" style="'+_sfBtn(gcol)+'">'+(gaps.length>1?'reveal the missing pieces →':'reveal the missing piece →')+'</button></div>'+foot;
+      +'<div style="margin-top:38px;"><button id="sfGo" style="'+_sfBtn(gcol)+'">'+(gaps.length>1?'reveal the missing pieces →':'reveal the missing piece →')+'</button></div>';
   } else if(_sfPhase==='teach'){
     var cards=gaps.map(function(j){ return '<div style="display:flex;flex-direction:column;align-items:center;gap:7px;">'
-      +'<div style="font-size:70px;line-height:1;font-family:'+_sfCJK+';color:'+_sfCol(j)+';">'+_sfEsc(D[j][0])+'</div>'
+      +'<div class="sfTap" data-ch="'+_sfEsc(D[j][0])+'" style="font-size:70px;line-height:1;font-family:'+_sfCJK+';color:'+_sfCol(j)+';">'+_sfEsc(D[j][0])+'</div>'
       +'<div style="font-size:15px;opacity:.8;">'+_sfEsc(_sfRoman(j))+'</div>'
       +'<div style="font-size:13px;opacity:.6;max-width:120px;">'+_sfEsc(D[j][2]||'')+'</div></div>'; }).join('<div style="width:24px;"></div>');
-    o.innerHTML=tag+close
-      +'<div style="font-size:11px;letter-spacing:2px;opacity:.5;margin-bottom:26px;">'+(gaps.length>1?'THE MISSING PIECES':'THE MISSING PIECE')+'</div>'
+    mid='<div style="font-size:11px;letter-spacing:2px;opacity:.5;margin-bottom:24px;">'+(gaps.length>1?'THE MISSING PIECES':'THE MISSING PIECE')+'</div>'
       +'<div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;align-items:flex-start;">'+cards+'</div>'
-      +'<div style="margin-top:42px;"><button id="sfGo" style="'+_sfBtn(gcol)+'">now read it →</button></div>'+foot;
+      // contextual echo: the word slotted into its sentence (dimmed) — never learned in a vacuum
+      +'<div style="margin-top:26px;opacity:.5;transform:scale(.72);transform-origin:center;">'+_sfSentenceHTML(zh,gaps,false)+'</div>'
+      +'<div style="margin-top:18px;"><button id="sfGo" style="'+_sfBtn(gcol)+'">now read it →</button></div>';
     _sfSpeak(D[gaps[0]][0]);
   } else { // click — the comprehension payoff
-    o.innerHTML=tag+close
-      +'<div style="font-size:11px;letter-spacing:2px;color:'+gcol+';margin-bottom:22px;">✓ NOW YOU CAN READ IT</div>'
+    mid='<div style="font-size:11px;letter-spacing:2px;color:'+gcol+';margin-bottom:22px;">✓ NOW YOU CAN READ IT</div>'
       +_sfSentenceHTML(zh,gaps,false)
       +(en?'<div style="font-size:15px;opacity:.55;margin-top:16px;">'+_sfEsc(en)+'</div>':'')
-      +'<div style="margin-top:42px;display:flex;gap:14px;justify-content:center;"><button id="sfNext" style="'+_sfBtn(gcol)+'">next sentence →</button><button id="sfDone" style="'+_sfBtnGhost()+'">done</button></div>'+foot;
+      +'<div style="margin-top:42px;display:flex;gap:14px;justify-content:center;"><button id="sfNext" style="'+_sfBtn(gcol)+'">next sentence →</button><button id="sfDone" style="'+_sfBtnGhost()+'">done</button></div>';
     _sfSpeak(zh);
   }
+  }
+  o.innerHTML=tag+close+'<div class="sfMid" style="display:flex;flex-direction:column;align-items:center;">'+mid+'</div>'+foot;
   _sfWire();
 }
 function _sfWire(){
@@ -1962,6 +1972,7 @@ function _sfWire(){
     _sfRender();
   };
   var nx=document.getElementById('sfNext'); if(nx) nx.onclick=function(){ _sfTarget=_sfPick(); _sfPhase='goal'; _sfRender(); };
+  var ov=document.getElementById('sfOverlay'); if(ov){ var taps=ov.querySelectorAll('[data-ch]'); for(var k=0;k<taps.length;k++){ (function(el){ el.onclick=function(e){ e.stopPropagation(); _sfSpeak(el.getAttribute('data-ch')); }; })(taps[k]); } } // tap any glyph to hear it (consistent with the Sky)
 }
 function openSentenceFirst(){ _sfTarget=_sfPick(); _sfPhase='goal'; _sfRender(); }
 function _sfMountButton(){
