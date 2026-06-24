@@ -1445,11 +1445,20 @@ const Scheduler = {
     return -1;
   },
 
+  // Due = count-due (within-session) OR wall-clock RIPE (between-session decay, R<R*).
+  // ENGINE.md §8 "gate by calendar, sequence by count": graduated fibers re-enter the working
+  // set when retrievability decays past the edge-of-forgetting, even if their count-interval
+  // hasn't elapsed — the previously-missing between-session forgetting model in the v2 path.
+  _dueNow(i, ci) {
+    if (this._isCardDue(ci)) return true;
+    return (typeof isWallClockRipe === 'function') && isWallClockRipe(i);
+  },
+
   _dueVocab(S, D) {
     return D.map((_, i) => i).filter(i => {
       if (!this._isUnlocked(S, i)) return false;
       const ci = S.cards[i];
-      return ci && ci.exp && this._isCardDue(ci);
+      return ci && ci.exp && this._dueNow(i, ci);
     }).sort((a, b) => a - b);
   },
 
@@ -1457,7 +1466,7 @@ const Scheduler = {
     return D.map((_, i) => i).filter(i => {
       if (!this._isUnlocked(S, i)) return false;
       const ci = S.cards[i];
-      return ci && ci.exp && !this._isCardDue(ci);
+      return ci && ci.exp && !this._dueNow(i, ci);
     }).sort((a, b) => a - b);
   },
 
@@ -1539,7 +1548,7 @@ const Scheduler = {
     // least-recently-seen rotation. (Without this, a stage-based load measure just
     // throttles harder — the new words wait behind perpetually-due mastered ones.)
     const acqRank = idx => { const ci = S.cards[idx]; return (ci && ci.exp > 0 && this._getAxisStage(ci,'meaning') < ACQUIRED_STAGE) ? 0 : 1; };
-    const isDue = idx => { const ci = S.cards[idx]; return !!(ci && this._isCardDue(ci)); };
+    const isDue = idx => { const ci = S.cards[idx]; return !!(ci && this._dueNow(idx, ci)); }; // count-due OR wall-clock ripe (§8)
     // Anti-repeat: never serve the immediately-previous card twice in a row when any
     // alternative exists. A card stays "due" right after it's answered (its other axis,
     // or it's alone in the top entropy tier), which otherwise re-serves it next card —
