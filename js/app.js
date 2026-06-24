@@ -12309,8 +12309,26 @@ function _sfClose(){ var o=document.getElementById('sfOverlay'); if(o) o.remove(
 function _sfSpeak(txt){ try{ if(S.sound!=='mute' && typeof speak==='function') speak(txt, activeCourse().langCode); }catch(e){} }
 function _sfBtn(col){ return 'background:transparent;border:1px solid '+col+';color:'+col+';padding:10px 20px;border-radius:8px;font-family:ui-monospace,monospace;font-size:13px;letter-spacing:1px;cursor:pointer;'; }
 function _sfBtnGhost(){ return 'background:transparent;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.55);padding:10px 18px;border-radius:8px;font-family:ui-monospace,monospace;font-size:13px;letter-spacing:1px;cursor:pointer;'; }
-function _sfBlank(zh,gaps){ var html=_sfEsc(zh); gaps.forEach(function(j){ var w=_sfEsc(D[j][0]); var box=Array(Math.max(1,D[j][0].length)+1).join('▢'); html=html.split(w).join('<span style="color:'+_sfCol(j)+';border-bottom:2px solid '+_sfCol(j)+';">'+box+'</span>'); }); return html; }
-function _sfFull(zh,gaps){ var html=_sfEsc(zh); gaps.forEach(function(j){ var w=_sfEsc(D[j][0]); html=html.split(w).join('<span style="color:'+_sfCol(j)+';font-weight:600;">'+w+'</span>'); }); return html; }
+// one reading unit: pinyin (ruby, above) over the glyph/box/punctuation (below), baselines aligned
+function _sfStack(top,bottom){ return '<span style="display:inline-flex;flex-direction:column;align-items:center;justify-content:flex-end;margin:0 2px;"><span style="font-size:12px;line-height:1.5;min-height:16px;">'+(top||'&nbsp;')+'</span><span style="font-size:30px;line-height:1.15;font-family:'+_sfCJK+';">'+bottom+'</span></span>'; }
+// render the sentence with EVERY Mandarin char as a phi-unit (glyph + tone-colored pinyin). Gap words
+// are occluded (boxes, no pinyin) when occlude=true, else revealed in their color. project: phi-unit rule.
+function _sfSentenceHTML(zh,gaps,occlude){
+  var gw=gaps.map(function(j){return {w:D[j][0],col:_sfCol(j)};}).sort(function(a,b){return b.w.length-a.w.length;});
+  var CJK=/[一-鿿㐀-䶿]/, fg='#dfeee4', out='', i=0;
+  function ruby(ch){ var sy=(typeof charSyl==='function')?charSyl(ch):null; return sy?'<span style="color:'+toneColor(sy[1],fg)+'">'+_sfEsc(sy[0])+'</span>':''; }
+  while(i<zh.length){
+    var m=null; for(var g=0;g<gw.length;g++){ if(gw[g].w && zh.substr(i,gw[g].w.length)===gw[g].w){ m=gw[g]; break; } }
+    if(m){
+      for(var c=0;c<m.w.length;c++){ var gch=m.w[c];
+        if(occlude) out+=_sfStack('', '<span style="color:'+m.col+';border-bottom:2px solid '+m.col+';">▢</span>');
+        else out+=_sfStack(CJK.test(gch)?ruby(gch):'', '<span style="color:'+m.col+';font-weight:600;">'+_sfEsc(gch)+'</span>');
+      }
+      i+=m.w.length;
+    } else { var ch=zh[i]; out+=_sfStack(CJK.test(ch)?ruby(ch):'', _sfEsc(ch)); i+=1; }
+  }
+  return '<div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;max-width:94%;">'+out+'</div>';
+}
 function _sfRender(){
   var o=_sfOverlay(), t=_sfTarget;
   var tag='<div style="position:absolute;top:14px;left:18px;font-size:9px;letter-spacing:2px;opacity:.4;">SENTENCE-FIRST · β</div>';
@@ -12321,8 +12339,9 @@ function _sfRender(){
   if(_sfPhase==='goal'){
     o.innerHTML=tag+close
       +'<div style="font-size:11px;letter-spacing:2px;opacity:.5;margin-bottom:22px;">YOU CAN ALMOST READ THIS</div>'
-      +'<div style="font-size:34px;line-height:1.5;font-family:'+_sfCJK+';max-width:92%;">'+_sfBlank(zh,gaps)+'</div>'
-      +'<div style="margin-top:42px;"><button id="sfGo" style="'+_sfBtn(gcol)+'">'+(gaps.length>1?'reveal the missing pieces →':'reveal the missing piece →')+'</button></div>'+foot;
+      +_sfSentenceHTML(zh,gaps,true)
+      +(en?'<div style="font-size:14px;opacity:.4;margin-top:18px;">« '+_sfEsc(en)+' »</div>':'') // the meaning you\'re reaching for (input, not a test)
+      +'<div style="margin-top:38px;"><button id="sfGo" style="'+_sfBtn(gcol)+'">'+(gaps.length>1?'reveal the missing pieces →':'reveal the missing piece →')+'</button></div>'+foot;
   } else if(_sfPhase==='teach'){
     var cards=gaps.map(function(j){ return '<div style="display:flex;flex-direction:column;align-items:center;gap:7px;">'
       +'<div style="font-size:70px;line-height:1;font-family:'+_sfCJK+';color:'+_sfCol(j)+';">'+_sfEsc(D[j][0])+'</div>'
@@ -12336,7 +12355,7 @@ function _sfRender(){
   } else { // click — the comprehension payoff
     o.innerHTML=tag+close
       +'<div style="font-size:11px;letter-spacing:2px;color:'+gcol+';margin-bottom:22px;">✓ NOW YOU CAN READ IT</div>'
-      +'<div style="font-size:34px;line-height:1.5;font-family:'+_sfCJK+';max-width:92%;">'+_sfFull(zh,gaps)+'</div>'
+      +_sfSentenceHTML(zh,gaps,false)
       +(en?'<div style="font-size:15px;opacity:.55;margin-top:16px;">'+_sfEsc(en)+'</div>':'')
       +'<div style="margin-top:42px;display:flex;gap:14px;justify-content:center;"><button id="sfNext" style="'+_sfBtn(gcol)+'">next sentence →</button><button id="sfDone" style="'+_sfBtnGhost()+'">done</button></div>'+foot;
     _sfSpeak(zh);
