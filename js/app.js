@@ -11432,6 +11432,7 @@ if($('deckMgr-create')) $('deckMgr-create').onclick=()=>{
   if(typeof speechSynthesis!=='undefined') speechSynthesis.getVoices();
   resetSessionFatigue(); rollBg(); renderHome(); show('home');
   renderTTSStatus();
+  try{ if(typeof _sfMountButton==='function') _sfMountButton(); }catch(e){} // sentence-first prototype (β) launcher
 })();
 
 
@@ -12254,3 +12255,109 @@ const Scheduler = {
 
   window.WaveViz={setWord:setWord,startHeartbeat:startHeartbeat,clear:clear};
 })();
+
+// ════════════════════════════════════════════════════════════════════════════
+// SENTENCE-FIRST PROTOTYPE (β)  —  lead with an i+1 sentence, teach the one missing
+// atom, deliver the comprehension click. The unit of progress is the SENTENCE; a word
+// is just what you spend to reach the next comprehensible one. HERMETIC sandbox: its own
+// fullscreen overlay, NO scheduler/SRS mutation. It SIMULATES a fresh learner (knows
+// nothing) and builds up within the run via a local _sfLocal set, so you feel the
+// build-from-zero arc. project: the phrase/sentence-first reframe — a place to iterate.
+// ════════════════════════════════════════════════════════════════════════════
+var _sfLocal={}, _sfTarget=null, _sfPhase='goal';
+var _sfCJK="'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+function _sfSeen(j){ return !!_sfLocal[j]; } // prototype: a clean-slate learner (ignores real progress)
+function _sfEsc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;';}); }
+function _sfCol(j){ var c=(typeof posColor==='function'&&typeof macroPOS==='function')?posColor(macroPOS(D[j][4])):[160,180,170]; return 'rgb('+c[0]+','+c[1]+','+c[2]+')'; }
+function _sfRoman(j){ var sy=D[j][1]||[]; return sy.map(function(p){return p[0];}).join(''); }
+function _sfAllSentences(){
+  var seen={},out=[]; var banks=[(typeof EXAMPLE_SENTENCES!=='undefined')?EXAMPLE_SENTENCES:null];
+  if(typeof _sentenceCache!=='undefined') banks.push(_sentenceCache);
+  banks.forEach(function(b){ if(!b)return; Object.keys(b).forEach(function(k){ (b[k]||[]).forEach(function(s){ if(s&&s[0]&&!seen[s[0]]){ seen[s[0]]=1; out.push(s); } }); }); });
+  return out;
+}
+// unseen deck-atom indices in a sentence IF it is fully covered (no untaught token/char); else null
+function _sfGaps(zh){
+  if(typeof _segMode==='function' && _segMode()==='space'){
+    var toks=(typeof _tokenizeSpace==='function')?(_tokenizeSpace(_spaceWords(zh))||[]):[]; var gaps=[];
+    for(var t=0;t<toks.length;t++){ var ti=toks[t].idx; if(ti<0) return null; if(!_sfSeen(ti) && gaps.indexOf(ti)<0) gaps.push(ti); }
+    return gaps;
+  }
+  var CJK=/[一-鿿㐀-䶿]/, present=[], covered={};
+  for(var j=0;j<D.length;j++){ if(zh.indexOf(D[j][0])>=0){ present.push(j); for(var c=0;c<D[j][0].length;c++) covered[D[j][0][c]]=1; } }
+  for(var k=0;k<zh.length;k++){ if(CJK.test(zh[k]) && !covered[zh[k]]) return null; }
+  return present.filter(function(p){ return !_sfSeen(p); });
+}
+// next target: fewest gaps (≥1), then most-foundational gap (lowest freq-rank), then shortest
+function _sfPick(){
+  var all=_sfAllSentences(), best=null;
+  for(var i=0;i<all.length;i++){ var s=all[i], gaps=_sfGaps(s[0]); if(!gaps||!gaps.length) continue;
+    var ng=gaps.length, g0=Math.min.apply(null,gaps), len=s[0].length;
+    if(!best || ng<best.ng || (ng===best.ng && (g0<best.g0 || (g0===best.g0 && len<best.len)))) best={s:s,gaps:gaps,ng:ng,g0:g0,len:len};
+  }
+  return best;
+}
+function _sfKnown(){ var n=0; for(var k in _sfLocal) if(_sfLocal[k]) n++; return n; }
+function _sfOverlay(){
+  var o=document.getElementById('sfOverlay');
+  if(!o){ o=document.createElement('div'); o.id='sfOverlay';
+    o.style.cssText='position:fixed;inset:0;z-index:9000;background:#070b08;color:#e8efe9;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:ui-monospace,monospace;';
+    document.body.appendChild(o); }
+  return o;
+}
+function _sfClose(){ var o=document.getElementById('sfOverlay'); if(o) o.remove(); try{ if(typeof speechSynthesis!=='undefined') speechSynthesis.cancel(); }catch(e){} }
+function _sfSpeak(txt){ try{ if(S.sound!=='mute' && typeof speak==='function') speak(txt, activeCourse().langCode); }catch(e){} }
+function _sfBtn(col){ return 'background:transparent;border:1px solid '+col+';color:'+col+';padding:10px 20px;border-radius:8px;font-family:ui-monospace,monospace;font-size:13px;letter-spacing:1px;cursor:pointer;'; }
+function _sfBtnGhost(){ return 'background:transparent;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.55);padding:10px 18px;border-radius:8px;font-family:ui-monospace,monospace;font-size:13px;letter-spacing:1px;cursor:pointer;'; }
+function _sfBlank(zh,gaps){ var html=_sfEsc(zh); gaps.forEach(function(j){ var w=_sfEsc(D[j][0]); var box=Array(Math.max(1,D[j][0].length)+1).join('▢'); html=html.split(w).join('<span style="color:'+_sfCol(j)+';border-bottom:2px solid '+_sfCol(j)+';">'+box+'</span>'); }); return html; }
+function _sfFull(zh,gaps){ var html=_sfEsc(zh); gaps.forEach(function(j){ var w=_sfEsc(D[j][0]); html=html.split(w).join('<span style="color:'+_sfCol(j)+';font-weight:600;">'+w+'</span>'); }); return html; }
+function _sfRender(){
+  var o=_sfOverlay(), t=_sfTarget;
+  var tag='<div style="position:absolute;top:14px;left:18px;font-size:9px;letter-spacing:2px;opacity:.4;">SENTENCE-FIRST · β</div>';
+  var close='<div id="sfClose" style="position:absolute;top:14px;right:18px;font-size:11px;letter-spacing:1px;opacity:.5;cursor:pointer;">✕ exit</div>';
+  var foot='<div style="position:absolute;bottom:16px;left:0;right:0;font-size:10px;letter-spacing:1px;opacity:.35;">vocabulary so far · '+_sfKnown()+' word'+(_sfKnown()===1?'':'s')+'</div>';
+  if(!t){ o.innerHTML=tag+close+'<div style="font-size:15px;opacity:.7;max-width:400px;line-height:1.6;">No next sentence one step away — every sentence we have is now fully readable from what you\'ve built. That\'s the <b>content ceiling</b>, not a bug: the loop is starved for sentences. (Exactly the sourcing problem we flagged.)</div>'+foot; _sfWire(); return; }
+  var zh=t.s[0], en=t.s[2]||'', gaps=t.gaps, gcol=_sfCol(gaps[0]);
+  if(_sfPhase==='goal'){
+    o.innerHTML=tag+close
+      +'<div style="font-size:11px;letter-spacing:2px;opacity:.5;margin-bottom:22px;">YOU CAN ALMOST READ THIS</div>'
+      +'<div style="font-size:34px;line-height:1.5;font-family:'+_sfCJK+';max-width:92%;">'+_sfBlank(zh,gaps)+'</div>'
+      +'<div style="margin-top:42px;"><button id="sfGo" style="'+_sfBtn(gcol)+'">'+(gaps.length>1?'reveal the missing pieces →':'reveal the missing piece →')+'</button></div>'+foot;
+  } else if(_sfPhase==='teach'){
+    var cards=gaps.map(function(j){ return '<div style="display:flex;flex-direction:column;align-items:center;gap:7px;">'
+      +'<div style="font-size:70px;line-height:1;font-family:'+_sfCJK+';color:'+_sfCol(j)+';">'+_sfEsc(D[j][0])+'</div>'
+      +'<div style="font-size:15px;opacity:.8;">'+_sfEsc(_sfRoman(j))+'</div>'
+      +'<div style="font-size:13px;opacity:.6;max-width:120px;">'+_sfEsc(D[j][2]||'')+'</div></div>'; }).join('<div style="width:24px;"></div>');
+    o.innerHTML=tag+close
+      +'<div style="font-size:11px;letter-spacing:2px;opacity:.5;margin-bottom:26px;">'+(gaps.length>1?'THE MISSING PIECES':'THE MISSING PIECE')+'</div>'
+      +'<div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;align-items:flex-start;">'+cards+'</div>'
+      +'<div style="margin-top:42px;"><button id="sfGo" style="'+_sfBtn(gcol)+'">now read it →</button></div>'+foot;
+    _sfSpeak(D[gaps[0]][0]);
+  } else { // click — the comprehension payoff
+    o.innerHTML=tag+close
+      +'<div style="font-size:11px;letter-spacing:2px;color:'+gcol+';margin-bottom:22px;">✓ NOW YOU CAN READ IT</div>'
+      +'<div style="font-size:34px;line-height:1.5;font-family:'+_sfCJK+';max-width:92%;">'+_sfFull(zh,gaps)+'</div>'
+      +(en?'<div style="font-size:15px;opacity:.55;margin-top:16px;">'+_sfEsc(en)+'</div>':'')
+      +'<div style="margin-top:42px;display:flex;gap:14px;justify-content:center;"><button id="sfNext" style="'+_sfBtn(gcol)+'">next sentence →</button><button id="sfDone" style="'+_sfBtnGhost()+'">done</button></div>'+foot;
+    _sfSpeak(zh);
+  }
+  _sfWire();
+}
+function _sfWire(){
+  var c=document.getElementById('sfClose'); if(c) c.onclick=_sfClose;
+  var d=document.getElementById('sfDone'); if(d) d.onclick=_sfClose;
+  var go=document.getElementById('sfGo'); if(go) go.onclick=function(){
+    if(_sfPhase==='goal'){ _sfPhase='teach'; }
+    else if(_sfPhase==='teach'){ _sfTarget.gaps.forEach(function(j){ _sfLocal[j]=1; }); _sfPhase='click'; } // "learned" in context
+    _sfRender();
+  };
+  var nx=document.getElementById('sfNext'); if(nx) nx.onclick=function(){ _sfTarget=_sfPick(); _sfPhase='goal'; _sfRender(); };
+}
+function openSentenceFirst(){ _sfTarget=_sfPick(); _sfPhase='goal'; _sfRender(); }
+function _sfMountButton(){
+  if(document.getElementById('sfLaunch')) return;
+  var b=document.createElement('div'); b.id='sfLaunch'; b.textContent='✦ sentence β';
+  b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:8000;font-family:ui-monospace,monospace;font-size:10px;letter-spacing:1px;padding:7px 12px;border:1px solid rgba(255,255,255,0.25);border-radius:20px;color:rgba(232,239,233,0.7);background:rgba(7,11,8,0.7);cursor:pointer;';
+  b.onclick=openSentenceFirst;
+  document.body.appendChild(b);
+}
