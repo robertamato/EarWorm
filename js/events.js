@@ -1115,7 +1115,7 @@ const Scheduler = {
     const vocabSeen = this._seenVocab(S, D);
 
     // 6. Build interleaved queue
-    return this._pickFromPools(grammarDrills, vocabDue, vocabSeen, S, D, (sessionState && sessionState.sessionRecentCards) || []);
+    return this._pickFromPools(grammarDrills, vocabDue, vocabSeen, S, D, (sessionState && sessionState.sessionRecentCards) || [], studyCardCount || 0);
   },
 
   // ─── Modality selection ──────────────────────────────────────────────────
@@ -1506,7 +1506,7 @@ const Scheduler = {
     return gStg >= 1 && mStg >= 1;
   },
 
-  _pickFromPools(grammarDrills, vocabDue, vocabSeen, S, D, recent) {
+  _pickFromPools(grammarDrills, vocabDue, vocabSeen, S, D, recent, studyCardCount) {
     const fr = D.filter((_, i) => this._isUnlocked(S, i)).length;
     const grammarInterval = fr < 10 ? 10 : fr < 30 ? 7 : 5;
 
@@ -1557,24 +1557,23 @@ const Scheduler = {
       const dueItems = noRepeat(vocabItems.filter(it => isDue(it.idx)));
       let pick;
       if (dueItems.length) {
-        if (FRONTIER_SEEK) {
-          // In-acquisition cards come first (graduation velocity + anti-starvation),
-          // but the two sets want DIFFERENT objectives:
-          //   • acquisition set (acqRank 0): the goal is to GRADUATE all of them, so
-          //     use FAIR ROTATION (least-recently-seen). Entropy-seeking here is a
-          //     deadlock: an overdue hard card decays to P≈0.3 → LOWER entropy than the
-          //     fresh P≈0.5 cards → it's never reached → never graduates → jams the cap.
-          //     (Observed live as a 2-card livelock on the highest-entropy stage-0 pair.)
-          //   • review set (acqRank 1): entropy-seek the P≈0.5 learning edge.
+        // INTERLEAVE acquisition + review. acqRank-0 (in-acquisition) cards still get priority
+        // so new words consolidate fast, BUT review must not be STARVED: alternate so review
+        // (cloze/pos/word-order) surfaces every other card whenever both pools have due cards.
+        // (Was: acqRank absolute-first → any due stage-0 card blocked ALL review → user saw only
+        // MC forever, even with 80 review cards due. Diagnosed live, 2026-06-23.)
+        const acqPool = dueItems.filter(it => acqRank(it.idx) === 0);
+        const revPool = dueItems.filter(it => acqRank(it.idx) === 1);
+        const reviewTurn = revPool.length && (acqPool.length === 0 || ((studyCardCount || 0) % 2 === 1));
+        const pool = reviewTurn ? revPool : (acqPool.length ? acqPool : revPool);
+        if (FRONTIER_SEEK && pool === revPool) {
+          // review set: entropy-seek the P≈0.5 learning edge, then least-recently-seen.
           const tier = idx => { const ci = S.cards[idx]; return Math.round(this._entropy(this._pCorrect(ci, 'meaning')) / ENTROPY_BUCKET); };
-          pick = dueItems.slice().sort((a, b) => {
-            const ar = acqRank(a.idx) - acqRank(b.idx);
-            if (ar) return ar;
-            if (acqRank(a.idx) === 0) return lastSeen(a.idx) - lastSeen(b.idx);       // acquisition: fair rotation
-            return (tier(b.idx) - tier(a.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)); // review: entropy edge
-          })[0];
+          pick = pool.slice().sort((a, b) => (tier(b.idx) - tier(a.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)))[0];
         } else {
-          pick = dueItems.slice().sort((a, b) => (acqRank(a.idx) - acqRank(b.idx)) || (lastSeen(a.idx) - lastSeen(b.idx)))[0];
+          // acquisition set: FAIR ROTATION (least-recently-seen) so all in-acquisition cards
+          // graduate — entropy-seeking here deadlocks on the highest-entropy stage-0 pair.
+          pick = pool.slice().sort((a, b) => lastSeen(a.idx) - lastSeen(b.idx))[0];
         }
       } else {
         // Nothing due — filler. Least-recently-seen so a freshly-flashed word is the
