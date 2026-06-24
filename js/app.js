@@ -1608,7 +1608,7 @@ function _coldStructuralLink(comp, fgChar, bgChar){
   return Math.abs(fi-bi)<=(fgChar.length+COLD_ADJ_DIST);
 }
 
-function coldRecompute(now){
+function coldRecompute(now, quiet){
   now=now||Date.now();
   var log=(typeof S!=='undefined'&&S.obsLog)||[];
   var ev={}; // ev[idx][axis] = {recall,discrim,incid,correct,total,last}
@@ -1661,7 +1661,7 @@ function coldRecompute(now){
     });
   });
   if(typeof S!=='undefined') S.coldState=cold;
-  if(window.EW&&EW.obs) EW.obs.logEvent('cold:recompute',{nRecords:log.length,nAtoms:Object.keys(cold.atoms).length});
+  if(!quiet && window.EW&&EW.obs) EW.obs.logEvent('cold:recompute',{nRecords:log.length,nAtoms:Object.keys(cold.atoms).length});
   return cold;
 }
 try{ window.coldRecompute=coldRecompute; window.dumpColdState=function(){return (typeof S!=='undefined'&&S.coldState)||null;}; }catch(e){}
@@ -3144,6 +3144,20 @@ function renderHome(){
   if($('engDue')) $('engDue').textContent=dueN;
   if($('engNew')) $('engNew').textContent=newN;
   if($('engActive')) $('engActive').textContent=inAcq+'/'+acap;
+  // HONEST CONTRAST (cold engine as a truth signal, NOT driving selection — ENGINE.md §7-bis,
+  // [[project_reading_first]]): RECOGNIZED = live graduation (marks "known" on one recall);
+  // IN CONTEXT = cold graduation (demonstrated via contextual discrimination + incidental use).
+  // The gap surfaces over-graduation — recognition not yet turned into usable comprehension.
+  try{
+    if(typeof coldRecompute==='function') coldRecompute(null,true); // quiet refresh
+    const _cold=(typeof S!=='undefined'&&S.coldState&&S.coldState.atoms)||{};
+    let _recog=0,_ctx=0;
+    for(let k=0;k<D.length;k++){ const c=S.cards[k]; if(!c||!c.seen) continue;
+      if(typeof isGraduated==='function'?isGraduated(k):true) _recog++;
+      const ca=_cold[k]&&_cold[k].meaning; if(ca&&ca.graduated) _ctx++; }
+    if($('engKnown')) $('engKnown').textContent=_recog;
+    if($('engInContext')) $('engInContext').textContent=_ctx;
+  }catch(e){}
   const course=activeCourse&&activeCourse();
   if($('engDeck')) $('engDeck').textContent=activeDeckName().toUpperCase()+' ▸';
   if($('studyDue')) $('studyDue').textContent=(dueN>0)?(dueN+' due'):'';
@@ -12394,8 +12408,10 @@ function _sfWire(){
 function openSentenceFirst(){ _sfTarget=_sfPick(); _sfPhase='goal'; _sfRender(); }
 function _sfMountButton(){
   if(document.getElementById('sfLaunch')) return;
-  var b=document.createElement('div'); b.id='sfLaunch'; b.textContent='✦ sentence β';
-  b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:8000;font-family:ui-monospace,monospace;font-size:10px;letter-spacing:1px;padding:7px 12px;border:1px solid rgba(255,255,255,0.25);border-radius:20px;color:rgba(232,239,233,0.7);background:rgba(7,11,8,0.7);cursor:pointer;';
+  var b=document.createElement('div'); b.id='sfLaunch'; b.textContent='✦ sentence mode (β)';
+  b.style.cssText='font-size:8px;text-align:center;opacity:.5;cursor:pointer;letter-spacing:2px;padding:4px 4px 10px;';
   b.onclick=openSentenceFirst;
-  document.body.appendChild(b);
+  var host=document.getElementById('profileBtn'); // sit in the page flow under PROFILE — never overlaps the stats
+  if(host&&host.parentNode){ host.parentNode.insertBefore(b, host.nextSibling); }
+  else document.body.appendChild(b);
 }

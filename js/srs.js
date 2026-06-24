@@ -10,6 +10,20 @@
   if($('engDue')) $('engDue').textContent=dueN;
   if($('engNew')) $('engNew').textContent=newN;
   if($('engActive')) $('engActive').textContent=inAcq+'/'+acap;
+  // HONEST CONTRAST (cold engine as a truth signal, NOT driving selection — ENGINE.md §7-bis,
+  // [[project_reading_first]]): RECOGNIZED = live graduation (marks "known" on one recall);
+  // IN CONTEXT = cold graduation (demonstrated via contextual discrimination + incidental use).
+  // The gap surfaces over-graduation — recognition not yet turned into usable comprehension.
+  try{
+    if(typeof coldRecompute==='function') coldRecompute(null,true); // quiet refresh
+    const _cold=(typeof S!=='undefined'&&S.coldState&&S.coldState.atoms)||{};
+    let _recog=0,_ctx=0;
+    for(let k=0;k<D.length;k++){ const c=S.cards[k]; if(!c||!c.seen) continue;
+      if(typeof isGraduated==='function'?isGraduated(k):true) _recog++;
+      const ca=_cold[k]&&_cold[k].meaning; if(ca&&ca.graduated) _ctx++; }
+    if($('engKnown')) $('engKnown').textContent=_recog;
+    if($('engInContext')) $('engInContext').textContent=_ctx;
+  }catch(e){}
   const course=activeCourse&&activeCourse();
   if($('engDeck')) $('engDeck').textContent=activeDeckName().toUpperCase()+' ▸';
   if($('studyDue')) $('studyDue').textContent=(dueN>0)?(dueN+' due'):'';

@@ -1608,7 +1608,7 @@ function _coldStructuralLink(comp, fgChar, bgChar){
   return Math.abs(fi-bi)<=(fgChar.length+COLD_ADJ_DIST);
 }
 
-function coldRecompute(now){
+function coldRecompute(now, quiet){
   now=now||Date.now();
   var log=(typeof S!=='undefined'&&S.obsLog)||[];
   var ev={}; // ev[idx][axis] = {recall,discrim,incid,correct,total,last}
@@ -1661,7 +1661,7 @@ function coldRecompute(now){
     });
   });
   if(typeof S!=='undefined') S.coldState=cold;
-  if(window.EW&&EW.obs) EW.obs.logEvent('cold:recompute',{nRecords:log.length,nAtoms:Object.keys(cold.atoms).length});
+  if(!quiet && window.EW&&EW.obs) EW.obs.logEvent('cold:recompute',{nRecords:log.length,nAtoms:Object.keys(cold.atoms).length});
   return cold;
 }
 try{ window.coldRecompute=coldRecompute; window.dumpColdState=function(){return (typeof S!=='undefined'&&S.coldState)||null;}; }catch(e){}

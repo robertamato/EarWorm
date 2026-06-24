@@ -1985,8 +1985,10 @@ function _sfWire(){
 function openSentenceFirst(){ _sfTarget=_sfPick(); _sfPhase='goal'; _sfRender(); }
 function _sfMountButton(){
   if(document.getElementById('sfLaunch')) return;
-  var b=document.createElement('div'); b.id='sfLaunch'; b.textContent='✦ sentence β';
-  b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:8000;font-family:ui-monospace,monospace;font-size:10px;letter-spacing:1px;padding:7px 12px;border:1px solid rgba(255,255,255,0.25);border-radius:20px;color:rgba(232,239,233,0.7);background:rgba(7,11,8,0.7);cursor:pointer;';
+  var b=document.createElement('div'); b.id='sfLaunch'; b.textContent='✦ sentence mode (β)';
+  b.style.cssText='font-size:8px;text-align:center;opacity:.5;cursor:pointer;letter-spacing:2px;padding:4px 4px 10px;';
   b.onclick=openSentenceFirst;
-  document.body.appendChild(b);
+  var host=document.getElementById('profileBtn'); // sit in the page flow under PROFILE — never overlaps the stats
+  if(host&&host.parentNode){ host.parentNode.insertBefore(b, host.nextSibling); }
+  else document.body.appendChild(b);
 }
