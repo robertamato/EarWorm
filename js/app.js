@@ -11111,18 +11111,29 @@ if($('debugCardBrowser')) $('debugCardBrowser').onclick=renderCardBrowser;
 // Scheduler.next + recordAxisResultNew, so changes to the heuristics show up
 // immediately — iterate without playing the deck. Read-only: swaps in a throwaway
 // state and stubs save(), restores everything (real progress/localStorage untouched).
-function simulateSchedule(N, accuracy){
-  N=N||80; accuracy=(accuracy==null)?1.0:accuracy;
+function simulateSchedule(N, accuracy, opts){
+  N=N||80; accuracy=(accuracy==null)?1.0:accuracy; opts=opts||{};
   var trace=[], intros=0, finalFrontier=0;
   var _S=S, _save=save;
   var _mi=(typeof currentMultIdx!=='undefined')?currentMultIdx:0;
   var _md=(typeof defaultMultIdx!=='undefined')?defaultMultIdx:0;
+  var _pEn,_pPb; try{ _pEn=PRODUCTION_ENABLED; _pPb=PRODUCTION_PROB; }catch(e){}
   try{
     var fresh=(typeof defaultState==='function')?JSON.parse(JSON.stringify(defaultState())):{};
     fresh.cards={}; fresh.totalSeen=0; fresh.userWordQueue=[]; fresh.coldCutover=false;
     S=fresh; save=function(){};
     try{ currentMultIdx=defaultMultIdx; }catch(e){}   // neutralize wager stage-compression for a clean baseline
+    // Production in SIM (PRODUCTION.md §8): OFF by default so the baseline is deterministic and
+    // KEY-INDEPENDENT (the real key never touches the sim). opts.mockProduction forces it on with
+    // a deterministic mock grader so the production invariants get exercised without the network.
+    try{ PRODUCTION_ENABLED=!!opts.mockProduction; if(opts.mockProduction) PRODUCTION_PROB=0.6; }catch(e){}
+    // Warm-start: seed the first G cards graduated at meaning stage 3 so production becomes
+    // reachable (organic runs cap at stage 2 — reps spread too thin across the whole deck).
+    if(opts.seedGraduated){ for(var _sg=0; _sg<opts.seedGraduated && _sg<D.length; _sg++){
+      S.cards[_sg]={exp:3,seen:true,m:3,reps:3,axisReps:{meaning:5,pos:2,tone:0},
+        axisStage:{meaning:3,pos:2},axisDue:{meaning:0,pos:0},axisHistory:{meaning:[1,1,1,1,1],pos:[]}}; } }
     var grad=function(i){ try{ return Scheduler._isGraduated(S.cards[i]||{}); }catch(e){ return false; } };
+    var gradW=function(w){ var di=D.findIndex(function(d){return d[0]===w;}); return di>=0 && grad(di); };
     var frontierNow=function(){ var f=0; for(var k=0;k<D.length;k++){ if(S.cards[k]&&S.cards[k].exp>0) f=k+1; } return f; };
     var brandNewNow=function(){ var n=0; for(var k=0;k<D.length;k++){ var c=S.cards[k]; if(c&&c.exp>0&&!grad(k)) n++; } return n; };
     var simCount=0, simRing=[], simRecent=[];
@@ -11153,6 +11164,16 @@ function simulateSchedule(N, accuracy){
         if(!(ci.exp>0)){ ci.exp=1; ci.seen=true; ci.axisDue=ci.axisDue||{};
           ci.axisDue.meaning=S.totalSeen+((typeof AXIS_STABILITY!=='undefined'&&AXIS_STABILITY.meaning&&AXIS_STABILITY.meaning[0])||3);
           ci.axisDue.pos=S.totalSeen+((typeof AXIS_STABILITY!=='undefined'&&AXIS_STABILITY.pos&&AXIS_STABILITY.pos[0])||5); }
+      } else if(mod==='production'){
+        // Measurement-only mock (weight-0): grade deterministically + log evidence, but DON'T
+        // advance the meaning axis — production stays dark, so the card sequence is identical to
+        // the no-production baseline. Records prodGrad for the "only graduated atoms" invariant.
+        try{ var ptask=buildProductionTask({forIdx:idx});
+          if(ptask){ var pok=Math.random()<accuracy;
+            trace[trace.length-1].prodGrad=(ptask.atoms||[]).every(gradW);
+            recordProduction(idx, ptask, {ok:pok,capabilityMet:pok,usedL1:false,accuracy:pok?100:0,rung:ptask.rung}, ptask.expected);
+          } else { trace[trace.length-1].prodNull=true; }
+        }catch(e){}
       } else {
         var axis=(mod.indexOf('pos')===0)?'pos':'meaning';
         var ok=Math.random()<accuracy;
@@ -11161,7 +11182,7 @@ function simulateSchedule(N, accuracy){
       }
     }
     finalFrontier=frontierNow();
-  } finally { S=_S; save=_save; try{ currentMultIdx=_mi; defaultMultIdx=_md; }catch(e){} }
+  } finally { S=_S; save=_save; try{ currentMultIdx=_mi; defaultMultIdx=_md; }catch(e){} try{ PRODUCTION_ENABLED=_pEn; PRODUCTION_PROB=_pPb; }catch(e){} }
   return { steps:trace, finalFrontier:finalFrontier, intros:intros };
 }
 try{ window.simulateSchedule=simulateSchedule; }catch(e){}
@@ -11218,6 +11239,28 @@ function simInvariants(r){
 }
 // One-shot runner for console/CI: window.simCheck(160,0.85) → {pass, checks}
 try{ window.simInvariants=simInvariants; window.simCheck=function(N,acc){ return simInvariants(simulateSchedule(N||160, acc==null?0.85:acc)); }; }catch(e){}
+
+// Production-specific invariant battery (PRODUCTION.md §8). Runs a warm-started sim with the
+// deterministic MOCK grader so production actually FIRES (organic runs cap at meaning stage 2),
+// then asserts the production safety properties: it fired, never before recognition, and only
+// over graduated atoms. window.simProdCheck(140,0.85) → {pass, checks}.
+function simProductionInvariants(r){
+  var steps=(r&&r.steps)||[];
+  var prodSteps=0, early=0, ungrad=0, nullTask=0, pMin=3; try{ pMin=PRODUCTION_MIN_STAGE; }catch(e){}
+  steps.forEach(function(s){ if(s.mod==='production'){ prodSteps++;
+    if(s.stg==null||s.stg<pMin) early++;
+    if(s.prodGrad===false) ungrad++;
+    if(s.prodNull) nullTask++; } });
+  var checks=[
+    {name:'production fired (mock grader)',          pass:prodSteps>0,   detail:prodSteps+' production step(s)'},
+    {name:'never produce before recognize',          pass:early===0,     detail:early+' early of '+prodSteps+' (stage <'+pMin+')'},
+    {name:'production uses only graduated atoms',     pass:ungrad===0,    detail:ungrad+' with un-graduated atoms'},
+    {name:'production task always buildable when chosen', pass:nullTask===0, detail:nullTask+' null task(s)'}
+  ];
+  return {pass:checks.every(function(c){return c.pass;}), checks:checks, prodSteps:prodSteps};
+}
+try{ window.simProductionInvariants=simProductionInvariants;
+  window.simProdCheck=function(N,acc){ return simProductionInvariants(simulateSchedule(N||140, acc==null?0.85:acc, {seedGraduated:24, mockProduction:true})); }; }catch(e){}
 
 var _simN=80, _simAcc=1.0;
 function renderSimTrace(){
