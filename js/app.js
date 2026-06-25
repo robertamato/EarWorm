@@ -7812,7 +7812,11 @@ const COURSES={
     // role→atom map for the universal GRAMMAR_SPEC (function-word fillers; POS-class
     // roles resolve from the deck). Drives the generative basis + capability tiers.
     grammarRoles:{ copula:'是', degree:'很', negator:'不', 'negator-perf':'没', 'q-particle':'吗',
-                   modifier:'的', classifier:'个', coverb:'在', aspect:'了', 'additive-adv':'也' },
+                   modifier:'的', classifier:'个', coverb:'在', aspect:'了', 'additive-adv':'也',
+                   // Production R2 negation correctness (per-course): pre-verbal modals TAKE the
+                   // negator themselves (我会说 → 我不会说, never 我会不说); suppletive-negation verbs
+                   // use negator-perf instead of negator (有 → 没有, never 不有).
+                   preverbal:['会','能','要','想','可以','应该'], 'neg-suppletive':['有'] },
   },
   'arabic-levantine':{
     langCode:'ar-LB',
@@ -9958,21 +9962,41 @@ function _buildR2Task(ctx){
   const negIdx=D.findIndex(function(d){return d[0]===negator;});
   if(negIdx<0||!_atomGraduated(negIdx)) return null;          // can only produce graduated atoms
   const space=(typeof _segMode==='function'&&_segMode()==='space');
+  const negPerf=roles['negator-perf'];                 // suppletive negator (Mandarin 没)
+  const preverbal=roles.preverbal||[];                 // modals that TAKE the negator (会/能/要…)
+  const suppl=roles['neg-suppletive']||[];             // verbs negated by negPerf, not negator (有→没有)
   const isVerb=function(w){ return w!==copula && _hasRole(w,'verb'); };
-  // Cleaner negation targets: skip sentences already carrying aspect or another negator,
-  // where a bare không-insertion would be unidiomatic (e.g. VN "đi rồi" negates to "chưa đi").
-  const skip=[roles.aspect, roles['negator-perf']].filter(Boolean);
+  // A negation TARGET is the leftmost free verb OR pre-verbal modal: negating the modal, not the
+  // main verb, is the correct Mandarin form (我会说 → 我不会说, never 我会不说).
+  const isTarget=function(w){ return w!==copula && (preverbal.indexOf(w)>=0 || _hasRole(w,'verb')); };
+  // SEGMENTATION GUARD (CJK): sentenceAtomsInOrder reports OVERLAPPING atoms — for "我是学生"
+  // it returns [我,是,学,学生], so 学 (verb) rides along inside 学生 (student). Negating that
+  // bound morpheme yields garbage ("我是不学生"). A target is only legal when it stands FREE —
+  // no other atom of the sentence contains it as a substring. (Space-segmented courses already
+  // tokenise on word boundaries, so every atom is free there.)
+  const freeIn = space
+    ? function(){ return true; }
+    : function(c,w){ return !c.atoms.some(function(a){ return a!==w && String(a).indexOf(w)>=0; }); };
+  const freeTarget=function(c,w){ return isTarget(w) && freeIn(c,w); };
+  // Skip sentences already carrying aspect or another negator, where a bare negator-insertion
+  // would be unidiomatic (e.g. VN "đi rồi" negates to "chưa đi"; Mandarin 没/了 already present).
+  const skip=[roles.aspect, negPerf].filter(Boolean);
   const pool=ctx.cands.filter(function(c){
     if(c.atoms.indexOf(negator)>=0) return false;
     if(skip.some(function(a){ return c.atoms.indexOf(a)>=0; })) return false;
-    return c.atoms.some(isVerb);
+    // Require a real multi-word sentence (≥3 standalone atoms) — excludes degenerate
+    // single-word "sentences" like the noun 大学 mis-tokenised to [大,学].
+    if(c.atoms.filter(function(w){ return freeIn(c,w); }).length<3) return false;
+    return c.atoms.some(function(w){ return freeTarget(c,w); });
   });
   if(!pool.length) return null;
   const c=pool[Math.floor(Math.random()*pool.length)];
-  const verb=c.atoms.filter(isVerb)[0];
-  const expected=_insertBefore(c.zh, negator, verb, space);
+  const target=c.atoms.filter(function(w){ return freeTarget(c,w); })[0];   // leftmost (atoms are position-sorted)
+  // Suppletive verbs take negPerf (有 → 没有); everything else takes the plain negator (不).
+  const neg=(suppl.indexOf(target)>=0 && negPerf) ? negPerf : negator;
+  const expected=_insertBefore(c.zh, neg, target, space);
   if(!expected) return null;
-  return { rung:'R2', capability:'NEGATE & ASK', atoms:c.atoms.concat([negator]), en:c.en,
+  return { rung:'R2', capability:'NEGATE & ASK', atoms:c.atoms.concat([neg]), en:c.en,
            expected:expected, prompt:'Make this '+_langNameUP()+' sentence NEGATIVE:  "'+c.zh+'"' };
 }
 
@@ -11506,6 +11530,17 @@ let PRODUCTION_MIN_STAGE = 3;
 let PRODUCTION_PROB = 0.20;
 let PRODUCTION_FEEDBACK_WEIGHT = 0;
 try{ window.setProductionKnobs=function(en,prob,minStg,w){ if(en!=null)PRODUCTION_ENABLED=!!en; if(prob!=null)PRODUCTION_PROB=prob; if(minStg!=null)PRODUCTION_MIN_STAGE=minStg; if(w!=null)PRODUCTION_FEEDBACK_WEIGHT=w; return {PRODUCTION_ENABLED,PRODUCTION_PROB,PRODUCTION_MIN_STAGE,PRODUCTION_FEEDBACK_WEIGHT}; }; }catch(e){}
+// ── Activation (PRODUCTION.md §6) ── Key-gated by default: production fires only when a
+// grader exists (an API key), else stays off and behaviour is unchanged. An explicit debug
+// toggle (persisted in S.productionOn) overrides the default either way. This is ADDITIVE,
+// not gating: the §12 capability GATE (Estimator.PRODUCTION_GATE) and PRODUCTION_FEEDBACK_WEIGHT
+// both stay off, so capability claims and scheduling stability are untouched — production
+// appears, grades, logs, and displays, but moves nothing until those knobs are turned up.
+try{ PRODUCTION_ENABLED = (typeof S!=='undefined' && S && S.productionOn!=null) ? !!S.productionOn : !!(typeof getAnthropicKey==='function' && getAnthropicKey()); }catch(e){}
+function updateProductionBtn(){ var b=document.getElementById('debugProduction'); if(b) b.textContent='⌨ PRODUCTION IN FLOW: '+(PRODUCTION_ENABLED?'ON':'OFF'); }
+try{ var _prodBtn=document.getElementById('debugProduction');
+  if(_prodBtn){ updateProductionBtn(); _prodBtn.onclick=function(){ PRODUCTION_ENABLED=!PRODUCTION_ENABLED; try{ S.productionOn=PRODUCTION_ENABLED; save(); }catch(e){} updateProductionBtn(); }; }
+}catch(e){}
 
 const Scheduler = {
 

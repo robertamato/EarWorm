@@ -1074,6 +1074,17 @@ let PRODUCTION_MIN_STAGE = 3;
 let PRODUCTION_PROB = 0.20;
 let PRODUCTION_FEEDBACK_WEIGHT = 0;
 try{ window.setProductionKnobs=function(en,prob,minStg,w){ if(en!=null)PRODUCTION_ENABLED=!!en; if(prob!=null)PRODUCTION_PROB=prob; if(minStg!=null)PRODUCTION_MIN_STAGE=minStg; if(w!=null)PRODUCTION_FEEDBACK_WEIGHT=w; return {PRODUCTION_ENABLED,PRODUCTION_PROB,PRODUCTION_MIN_STAGE,PRODUCTION_FEEDBACK_WEIGHT}; }; }catch(e){}
+// ── Activation (PRODUCTION.md §6) ── Key-gated by default: production fires only when a
+// grader exists (an API key), else stays off and behaviour is unchanged. An explicit debug
+// toggle (persisted in S.productionOn) overrides the default either way. This is ADDITIVE,
+// not gating: the §12 capability GATE (Estimator.PRODUCTION_GATE) and PRODUCTION_FEEDBACK_WEIGHT
+// both stay off, so capability claims and scheduling stability are untouched — production
+// appears, grades, logs, and displays, but moves nothing until those knobs are turned up.
+try{ PRODUCTION_ENABLED = (typeof S!=='undefined' && S && S.productionOn!=null) ? !!S.productionOn : !!(typeof getAnthropicKey==='function' && getAnthropicKey()); }catch(e){}
+function updateProductionBtn(){ var b=document.getElementById('debugProduction'); if(b) b.textContent='⌨ PRODUCTION IN FLOW: '+(PRODUCTION_ENABLED?'ON':'OFF'); }
+try{ var _prodBtn=document.getElementById('debugProduction');
+  if(_prodBtn){ updateProductionBtn(); _prodBtn.onclick=function(){ PRODUCTION_ENABLED=!PRODUCTION_ENABLED; try{ S.productionOn=PRODUCTION_ENABLED; save(); }catch(e){} updateProductionBtn(); }; }
+}catch(e){}
 
 const Scheduler = {
 

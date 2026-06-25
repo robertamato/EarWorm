@@ -881,7 +881,11 @@ const COURSES={
     // role→atom map for the universal GRAMMAR_SPEC (function-word fillers; POS-class
     // roles resolve from the deck). Drives the generative basis + capability tiers.
     grammarRoles:{ copula:'是', degree:'很', negator:'不', 'negator-perf':'没', 'q-particle':'吗',
-                   modifier:'的', classifier:'个', coverb:'在', aspect:'了', 'additive-adv':'也' },
+                   modifier:'的', classifier:'个', coverb:'在', aspect:'了', 'additive-adv':'也',
+                   // Production R2 negation correctness (per-course): pre-verbal modals TAKE the
+                   // negator themselves (我会说 → 我不会说, never 我会不说); suppletive-negation verbs
+                   // use negator-perf instead of negator (有 → 没有, never 不有).
+                   preverbal:['会','能','要','想','可以','应该'], 'neg-suppletive':['有'] },
   },
   'arabic-levantine':{
     langCode:'ar-LB',
