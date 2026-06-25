@@ -34,10 +34,10 @@
 const GA=137.508;
 function hsl(h,s,l){return `hsl(${((h%360)+360)%360},${s}%,${l}%)`}
 /* Tone colors: offset from bg hue, always dark for contrast */
-function toneColor(t,dark){
-  if(t===0) return dark;
+function toneColor(t,fgc){
+  if(t===0) return fgc;
   const offsets=[null,0,60,150,220]; // distinct hue offsets per tone
-  return hsl(bgHue+offsets[t],90,12);
+  return hsl(bgHue+offsets[t],72,66); // LIGHT tone colours for the dark instruction room
 }
 let bgHue=Math.random()*360;
 function rollBg(){
@@ -95,7 +95,7 @@ function atomHue(i){ if(!_atomHueMap) _buildHueMap(); return (_atomHueMap[i]!=nu
 function setAtomBg(i){
   const h=atomHue(i);
   bgHue=h;  // keep bgHue in sync so toneColor()/constellation offsets stay consistent
-  const bg=hsl(h,85,58), fg=hsl(h,70,8);
+  const bg=hsl(h,30,9), fg='#e8efe9'; // INSTRUCTION ROOM: per-atom hue as a DARK tinted room (white-on-dark cosmos); glyph/text neutral
   document.documentElement.style.setProperty('--bg',bg);
   document.documentElement.style.setProperty('--fg',fg);
   document.body.style.backgroundColor=bg;
