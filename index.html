@@ -51,10 +51,20 @@
   #launchBar #studyWrap { position:relative; flex:1; display:flex; }
   #launchBar #startStudy { flex:1; margin:0; }
   #studyDue { position:absolute; top:5px; right:9px; font-size:8px; letter-spacing:1px; opacity:.55; pointer-events:none; }
-  #home .prog-wrap { border-width:1px; padding:6px 10px; }
-  #home .prog-track { border-width:1px; }
-  #home #startStudy { background:rgba(255,255,255,0.07); }
-  #home #startStudy:active { background:rgba(255,255,255,0.03); }
+  /* HOME CHROME — luminous instrument framing. The arcade type stays (brand soul); the
+     dated pixel-jam 4px borders + flat translate-press are replaced by hairline glows,
+     soft translucent fills, rounded corners, and a lit press. Still inherits the per-open
+     home tint via currentColor, so the framing re-colors on open. */
+  #home #startStudy {
+    border:1px solid currentColor; border-radius:13px; padding:18px;
+    background:linear-gradient(rgba(255,255,255,0.11),rgba(255,255,255,0.02));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.10), 0 6px 22px rgba(0,0,0,0.5);
+    transition:transform .09s ease, filter .12s ease, box-shadow .15s ease;
+  }
+  #home #startStudy:active { transform:scale(.984); filter:brightness(1.18); box-shadow:0 0 26px -3px currentColor, inset 0 1px 0 rgba(255,255,255,0.12); }
+  #home #courseId { border-radius:999px !important; border-width:1px !important; padding:5px 12px !important; background:rgba(255,255,255,0.05); opacity:.9; }
+  #home .prog-wrap, #home #engineWidget { border:1px solid rgba(255,255,255,0.11) !important; border-radius:12px; background:rgba(255,255,255,0.028); padding:11px 13px !important; }
+  #home .prog-track { border-width:1px; border-radius:5px; }
   .title { font-size:22px; letter-spacing:2px; text-align:center; margin-top:8px; }
   .statrow { display:flex; justify-content:space-between; font-size:9px; }
   .panel { padding:12px; border:4px solid; }

@@ -2578,20 +2578,29 @@ function hslToRgb(h,s,l){
   else if(h<240){g=x;b=c;} else if(h<300){r=x;b=c;} else {r=c;b=x;}
   return [Math.round((r+m)*255),Math.round((g+m)*255),Math.round((b+m)*255)];
 }
-// Per-app-open POS palette: each category gets a golden-angle-spaced hue, randomly
-// permuted + offset, frozen for the sitting. A page load re-executes this module and
-// clears _posPalette, so it reshuffles only on close/reopen — STABLE within a sitting,
-// unlike the per-atom session hue (which churns per study session). Color here = POS
-// CATEGORY (~8 distinct clusters = legible structure); it is NOT the atom-identity
-// channel, and the Sky is a dashboard, not a measurement surface, so the two don't
-// collide. Reshuffle per open is what keeps a durable "amber=noun" crutch from forming.
+// Curated VIVID POS palette — eight hand-tuned colors that GLOW on the near-black Sky.
+// Golden-angle HSL gave even hue-degrees but uneven PERCEIVED chroma (dull blues, washed
+// yellows, muddy random offsets) — the Sky read muted. These eight are picked for pop and
+// balanced perceived brightness, spaced around the wheel so the ~8 POS clusters stay
+// distinct. We keep the anti-crutch reshuffle (no durable "amber=noun"): the SET is fixed
+// and memorable, but WHICH POS gets WHICH color is permuted per app-open, so the binding
+// still churns on close/reopen while the Sky always reads vivid + legible.
+const POS_VIVID=[
+  [255,179,64],   // amber
+  [255,107,74],   // coral
+  [255,92,158],   // magenta
+  [178,128,255],  // violet
+  [108,140,255],  // periwinkle
+  [78,206,255],   // sky cyan
+  [60,231,156],   // emerald
+  [190,247,84],   // lime
+];
 let _posPalette=null;
 function _buildPosPalette(){
-  const GAp=137.508, off=Math.random()*360;
-  const order=POS_SECTORS.slice();
+  const order=POS_VIVID.slice();
   for(let i=order.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=order[i]; order[i]=order[j]; order[j]=t; }
   _posPalette={};
-  order.forEach(function(s,k){ _posPalette[s]=hslToRgb(off+k*GAp,78,64); });
+  POS_SECTORS.forEach(function(s,k){ _posPalette[s]=order[k%order.length]; });
 }
 function posColor(s){ if(!_posPalette) _buildPosPalette(); return _posPalette[s]||[160,180,170]; }
 function posRGB(s){ const c=posColor(s); return 'rgb('+c[0]+','+c[1]+','+c[2]+')'; }
@@ -2795,7 +2804,7 @@ function renderConstellation(){
         // confused) → cool (resolving). Makes "your blur is resolving" a color you watch cool down.
         const heat={}; let maxH=0.0001; for(let q=0;q<pairs.length;q++){ const w=pairs[q][2]; heat[pairs[q][0]]=(heat[pairs[q][0]]||0)+w; heat[pairs[q][1]]=(heat[pairs[q][1]]||0)+w; }
         for(const k in heat){ if(heat[k]>maxH) maxH=heat[k]; }
-        _lensColor=function(o){ if(!inv[o.i]) return [120,130,128]; const t=Math.min(1,(heat[o.i]||0)/maxH); return hslToRgb(172-150*t,72,60); };
+        _lensColor=function(o){ if(!inv[o.i]) return [120,130,128]; const t=Math.min(1,(heat[o.i]||0)/maxH); return hslToRgb(172-150*t,88,62); };
         this.flex=pairs.length?(pairs.length+' blur'+(pairs.length>1?'s':'')+' — drawn together, decaying as you tell them apart'):'no blurs caught yet — keep playing'; } },
     { id:'engine', name:'THE ENGINE', flex:'', el:1.30, pluckShare:0.30, pluckDamp:0.72, legend:{type:'pos'},
       apply:function(){ let gb; try{ gb=computeGenerativeBasis(); }catch(e){ gb=null; }
@@ -2823,7 +2832,7 @@ function renderConstellation(){
         node.forEach((o,i)=>{ o.tx=o.ax; o.ty=o.ay; o.tz=o.fz; });
         _edges=[]; _dim=function(o){ return fset[o.i]?1:0.16; };
         // HUE = how close each in-flight word is to LANDING: fresh (hot) → almost-mastered (cool).
-        _lensColor=function(o){ if(!fset[o.i]) return [110,120,118]; const m=(typeof card==='function'?(card(o.i).m||0):0); return hslToRgb(22+Math.min(1,m/4)*128,72,60); };
+        _lensColor=function(o){ if(!fset[o.i]) return [110,120,118]; const m=(typeof card==='function'?(card(o.i).m||0):0); return hslToRgb(22+Math.min(1,m/4)*128,88,62); };
         const n=Object.keys(fset).length; this.flex=n?('your working edge — '+n+' word'+(n>1?'s':'')+' still landing'):'all caught up — explore for more'; } },
     { id:'territory', name:'THE TERRITORY', flex:'', pluckShare:0.72, pluckDamp:0.84, legend:{type:'none'},
       // The crown jewel as an honest DENSE FIELD: a true 3-D force-directed embedding of the
@@ -2850,7 +2859,7 @@ function renderConstellation(){
         const groups={}; for(let i=0;i<N;i++){ (groups[lab[i]]=groups[lab[i]]||[]).push(i); }
         const realL=Object.keys(groups).filter(l=>groups[l].length>=3).sort((a,b)=>groups[b].length-groups[a].length);
         const cHue={}; realL.forEach((l,ci)=>{ cHue[l]=(ci*137.508)%360; });
-        _lensColor=function(o){ const l=lab[o.i]; return (cHue[l]!=null)?hslToRgb(cHue[l],68,60):[120,130,128]; };
+        _lensColor=function(o){ const l=lab[o.i]; return (cHue[l]!=null)?hslToRgb(cHue[l],84,62):[120,130,128]; };
         this.flex=realL.length+' neighborhoods — orbit your semantic space'; } }
   ];
   let lensIdx=0, currentLens=LENSES[0];
@@ -3064,7 +3073,7 @@ function renderConstellation(){
     if(lg.type==='none'){ leg.style.display='none'; return; }
     leg.style.display='block';
     if(lg.type==='grad'){
-      const a=hslToRgb(lg.hueA,72,60), b=hslToRgb(lg.hueB,72,60);
+      const a=hslToRgb(lg.hueA,88,62), b=hslToRgb(lg.hueB,88,62);
       const c0='rgb('+a[0]+','+a[1]+','+a[2]+')', c1='rgb('+b[0]+','+b[1]+','+b[2]+')';
       leg.innerHTML='<div style="display:flex;align-items:center;gap:5px;opacity:.78;"><span>'+lg.from+'</span>'
         +'<span style="display:inline-block;width:44px;height:5px;border-radius:3px;background:linear-gradient(to right,'+c0+','+c1+');"></span>'
