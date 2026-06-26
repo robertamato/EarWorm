@@ -3324,7 +3324,7 @@ const Estimator = {
     let g; try{ g=computeGenerativeBasis(); }catch(e){ return null; }
     if(!g||!g.tiers||!g.tiers.length) return null;
     if(!g.tiers.some(t=>t.atoms&&t.atoms.length)) return null;  // no role-atoms resolved
-    const grad=ch=>{ const i=D.findIndex(d=>d[0]===ch); if(i<0) return false; try{ return Scheduler._isGraduated((S.cards&&S.cards[i])||{}); }catch(e){ return false; } };
+    const grad=ch=>{ const i=D.findIndex(d=>d[0]===ch); if(i<0) return false; try{ return Scheduler._isGraduatedEff(S, i); }catch(e){ return false; } };  // EFF: cutover seam — capability reads the cold verdict when coldCutover is on, else live
     let current=null, next=null, ok=true;
     g.tiers.forEach(t=>{
       const atoms=(t.atoms||[]).map(a=>a.ch);
@@ -3348,7 +3348,7 @@ const Estimator = {
     let bank; try{ bank=(typeof EXAMPLE_SENTENCES!=='undefined')?EXAMPLE_SENTENCES:null; }catch(e){ bank=null; }
     if(!bank) return null;
     const gradSet=new Set();
-    for(let i=0;i<D.length;i++){ try{ if(Scheduler._isGraduated((S.cards&&S.cards[i])||{})) gradSet.add(D[i][0]); }catch(e){} }
+    for(let i=0;i<D.length;i++){ try{ if(Scheduler._isGraduatedEff(S, i)) gradSet.add(D[i][0]); }catch(e){} }  // EFF: honest example uses the cutover verdict
     if(!gradSet.size) return null;
     let best=null;
     Object.keys(bank).forEach(k=>{
@@ -9968,6 +9968,8 @@ function enterWordOrderCorrection(i, correctOrder, fg, CJKf, onResolve){
 // scheduled and behavior is byte-identical to today. v1 = R1 cued-translation; the grade
 // is a deterministic string-match (the haiku grader replaces _productionGrader in step 2).
 
+// Production ELIGIBILITY stays on the LIVE verdict ON PURPOSE — it must NOT read the cutover/cold
+// verdict, or it deadlocks: cold graduation now requires production, which requires eligibility.
 function _atomGraduated(i){ try{ return Scheduler._isGraduated((S.cards&&S.cards[i])||{}); }catch(e){ return false; } }
 
 // Candidate sentences whose EVERY atom has graduated (never produce before recognize).

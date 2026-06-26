@@ -165,7 +165,7 @@ const Estimator = {
     let g; try{ g=computeGenerativeBasis(); }catch(e){ return null; }
     if(!g||!g.tiers||!g.tiers.length) return null;
     if(!g.tiers.some(t=>t.atoms&&t.atoms.length)) return null;  // no role-atoms resolved
-    const grad=ch=>{ const i=D.findIndex(d=>d[0]===ch); if(i<0) return false; try{ return Scheduler._isGraduated((S.cards&&S.cards[i])||{}); }catch(e){ return false; } };
+    const grad=ch=>{ const i=D.findIndex(d=>d[0]===ch); if(i<0) return false; try{ return Scheduler._isGraduatedEff(S, i); }catch(e){ return false; } };  // EFF: cutover seam — capability reads the cold verdict when coldCutover is on, else live
     let current=null, next=null, ok=true;
     g.tiers.forEach(t=>{
       const atoms=(t.atoms||[]).map(a=>a.ch);
@@ -189,7 +189,7 @@ const Estimator = {
     let bank; try{ bank=(typeof EXAMPLE_SENTENCES!=='undefined')?EXAMPLE_SENTENCES:null; }catch(e){ bank=null; }
     if(!bank) return null;
     const gradSet=new Set();
-    for(let i=0;i<D.length;i++){ try{ if(Scheduler._isGraduated((S.cards&&S.cards[i])||{})) gradSet.add(D[i][0]); }catch(e){} }
+    for(let i=0;i<D.length;i++){ try{ if(Scheduler._isGraduatedEff(S, i)) gradSet.add(D[i][0]); }catch(e){} }  // EFF: honest example uses the cutover verdict
     if(!gradSet.size) return null;
     let best=null;
     Object.keys(bank).forEach(k=>{

@@ -1149,6 +1149,8 @@ function enterWordOrderCorrection(i, correctOrder, fg, CJKf, onResolve){
 // scheduled and behavior is byte-identical to today. v1 = R1 cued-translation; the grade
 // is a deterministic string-match (the haiku grader replaces _productionGrader in step 2).
 
+// Production ELIGIBILITY stays on the LIVE verdict ON PURPOSE — it must NOT read the cutover/cold
+// verdict, or it deadlocks: cold graduation now requires production, which requires eligibility.
 function _atomGraduated(i){ try{ return Scheduler._isGraduated((S.cards&&S.cards[i])||{}); }catch(e){ return false; } }
 
 // Candidate sentences whose EVERY atom has graduated (never produce before recognize).
