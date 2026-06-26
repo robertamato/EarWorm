@@ -266,7 +266,7 @@ function renderStats(){
   if($('xp')) $('xp').textContent=S.xp;
   if($('lvl')) $('lvl').textContent=Math.floor(S.xp/100)+1;
   if($('streak')) $('streak').textContent=S.streak;
-  if($('multDisplay')) $('multDisplay').textContent=getMult()+'x ⚡'+(getMultStreak()||'');
+  if($('multDisplay')) $('multDisplay').style.display='none';   // streak multiplier killed (XP reevaluation)
   if($('muteBtn')) $('muteBtn').textContent='SOUND: '+S.sound.toUpperCase();
   try{ if(typeof renderTTSStatus==='function') renderTTSStatus(); }catch(e){}
   const st=(S.stats&&typeof S.stats==='object')?S.stats:{days:{},totalAnswers:0,totalCorrect:0,byModality:{}};

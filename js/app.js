@@ -3148,7 +3148,7 @@ function renderHome(){
   $('lvl').textContent=lvl; $('xp').textContent=S.xp;
   $('streak').textContent=S.streak;
   const mDisp=document.getElementById('multDisplay');
-  if(mDisp) mDisp.textContent=getMult()+'x ⚡'+(getMultStreak()||'');
+  if(mDisp) mDisp.style.display='none';   // streak multiplier killed (XP reevaluation) — hide the ⚡ chip
   // Unique cards counter
   const uniq=(S.uniqueSeen||[]).length;
   const uniqEl=document.getElementById('uniqueCount');
@@ -3437,7 +3437,7 @@ function renderStats(){
   if($('xp')) $('xp').textContent=S.xp;
   if($('lvl')) $('lvl').textContent=Math.floor(S.xp/100)+1;
   if($('streak')) $('streak').textContent=S.streak;
-  if($('multDisplay')) $('multDisplay').textContent=getMult()+'x ⚡'+(getMultStreak()||'');
+  if($('multDisplay')) $('multDisplay').style.display='none';   // streak multiplier killed (XP reevaluation)
   if($('muteBtn')) $('muteBtn').textContent='SOUND: '+S.sound.toUpperCase();
   try{ if(typeof renderTTSStatus==='function') renderTTSStatus(); }catch(e){}
   const st=(S.stats&&typeof S.stats==='object')?S.stats:{days:{},totalAnswers:0,totalCorrect:0,byModality:{}};
@@ -7144,21 +7144,13 @@ function houseLineLabel(i, axis, modality){
   return {odds:odds, read:read, p:p};
 }
 
-function resetMult(){
-  S.multStreak=0;
-  S.mult=MULT_STEPS[0];
-  save();
-}
-
-function advanceMult(){
-  S.multStreak=(S.multStreak||0)+1;
-  const natIdx=naturalMultIdx();
-  // Only advance if wagered at or above natural level
-  if(currentMultIdx>=natIdx){
-    S.mult=MULT_STEPS[Math.min(MULT_STEPS.length-1,natIdx)];
-  }
-  save();
-}
+// STREAK MULTIPLIER KILLED (2026-06-26, XP reevaluation): it was anti-coupled — paid most for
+// consecutive EASY answers (lowest-information events), fighting the edge/surprise reward — and was
+// already vestigial for XP (computeXP reads the wager, not S.mult; the streak only drove the "Nx ⚡"
+// chip, now removed). These keep the per-answer save() (state persists as before) but no longer track
+// S.mult / multStreak. The ~8 call sites + getMult/getMultStreak/naturalMultIdx are dead now → later sweep.
+function resetMult(){ save(); }
+function advanceMult(){ save(); }
 
 function computeXP(isCorrect, wagerIdx, responseMs, defIdx){
   const base=MULT_BASE_XP;

@@ -160,21 +160,13 @@ function houseLineLabel(i, axis, modality){
   return {odds:odds, read:read, p:p};
 }
 
-function resetMult(){
-  S.multStreak=0;
-  S.mult=MULT_STEPS[0];
-  save();
-}
-
-function advanceMult(){
-  S.multStreak=(S.multStreak||0)+1;
-  const natIdx=naturalMultIdx();
-  // Only advance if wagered at or above natural level
-  if(currentMultIdx>=natIdx){
-    S.mult=MULT_STEPS[Math.min(MULT_STEPS.length-1,natIdx)];
-  }
-  save();
-}
+// STREAK MULTIPLIER KILLED (2026-06-26, XP reevaluation): it was anti-coupled — paid most for
+// consecutive EASY answers (lowest-information events), fighting the edge/surprise reward — and was
+// already vestigial for XP (computeXP reads the wager, not S.mult; the streak only drove the "Nx ⚡"
+// chip, now removed). These keep the per-answer save() (state persists as before) but no longer track
+// S.mult / multStreak. The ~8 call sites + getMult/getMultStreak/naturalMultIdx are dead now → later sweep.
+function resetMult(){ save(); }
+function advanceMult(){ save(); }
 
 function computeXP(isCorrect, wagerIdx, responseMs, defIdx){
   const base=MULT_BASE_XP;

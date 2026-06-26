@@ -706,7 +706,7 @@ function renderHome(){
   $('lvl').textContent=lvl; $('xp').textContent=S.xp;
   $('streak').textContent=S.streak;
   const mDisp=document.getElementById('multDisplay');
-  if(mDisp) mDisp.textContent=getMult()+'x ⚡'+(getMultStreak()||'');
+  if(mDisp) mDisp.style.display='none';   // streak multiplier killed (XP reevaluation) — hide the ⚡ chip
   // Unique cards counter
   const uniq=(S.uniqueSeen||[]).length;
   const uniqEl=document.getElementById('uniqueCount');
