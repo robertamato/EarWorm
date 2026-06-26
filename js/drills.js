@@ -1282,12 +1282,75 @@ function gradeProductionMatch(task, response, onDone){
     explanation: exact?'Matches the reference.':_missingAtomsInstruction(response, task.expected) };
   if(onDone) onDone(v); return v;
 }
+
+// ===== OFFLINE grader (no API) — deterministic alignment against the KNOWN reference =====
+// Tasks are template-generated, so the expected answer is exact. Segment both sides into clean
+// atoms and align them, teaching the gap (missing / extra / order). It can't bless a different-
+// but-VALID phrasing (the LLM's job), so it scores by RECALL of the reference's words (lenient
+// to extras) + an order factor, and stays encouraging — production stays usable with no key.
+function _segmentAtoms(str){
+  str=String(str||'');
+  if(typeof _segMode==='function' && _segMode()==='space'){
+    return _spaceWords(str).map(function(w){ const i=D.findIndex(function(d){return _foldAscii(d[0])===_foldAscii(w);}); return (i>=0?D[i][0]:w); });
+  }
+  let maxLen=1; for(let j=0;j<D.length;j++){ const l=String(D[j][0]).length; if(l>maxLen)maxLen=l; }
+  const out=[]; let i=0; const n=str.length;
+  while(i<n){
+    let m=null;
+    for(let L=Math.min(maxLen,n-i); L>=1; L--){ const sub=str.substr(i,L); if(D.some(function(d){return d[0]===sub;})){ m=sub; break; } }
+    if(m){ out.push(m); i+=m.length; } else { i++; }   // skip a non-atom char (punctuation)
+  }
+  return out;
+}
+function _lcsLen(a,b){               // longest common SUBSEQUENCE length (order-preserving overlap)
+  const m=a.length,n=b.length; if(!m||!n) return 0;
+  let prev=new Array(n+1).fill(0), cur;
+  for(let i=1;i<=m;i++){ cur=new Array(n+1).fill(0);
+    for(let j=1;j<=n;j++){ cur[j]= a[i-1]===b[j-1] ? prev[j-1]+1 : Math.max(prev[j],cur[j-1]); }
+    prev=cur; }
+  return prev[n];
+}
+function _tagWord(w){ const di=D.findIndex(function(d){return d[0]===w;}); const g=di>=0?(((D[di][2]||'').split(/[,;(]/)[0].trim())):''; return w+(g?' ('+g+')':''); }
+function gradeProductionOffline(task, response, onDone){
+  const resp=String(response||'');
+  const space=(typeof _segMode==='function'&&_segMode()==='space');
+  // Untranscribed pinyin (CJK): typed the sounds but never picked characters → guide, don't scold.
+  if(!space){
+    const han=(resp.match(/\p{Script=Han}/gu)||[]).length, latin=(resp.match(/[a-z]/gi)||[]).length;
+    if(latin>0 && han===0){
+      const v0={ accuracy:0, ok:false, capabilityMet:false, usedL1:false, rung:task.rung,
+        diff:'expected "'+task.expected+'", got "'+resp+'"',
+        explanation:'You typed the sounds but didn’t pick the characters — tap a suggestion to enter each word.' };
+      if(onDone) onDone(v0); return v0;
+    }
+  }
+  const exp=_segmentAtoms(task.expected), got=_segmentAtoms(resp);
+  const expSet={}, gotSet={}; exp.forEach(function(w){ expSet[w]=1; }); got.forEach(function(w){ gotSet[w]=1; });
+  const uniq=function(a){ return a.filter(function(w,i){ return a.indexOf(w)===i; }); };
+  const missing=uniq(exp.filter(function(w){ return !gotSet[w]; }));
+  const extra  =uniq(got.filter(function(w){ return !expSet[w]; }));
+  const present=exp.filter(function(w){ return gotSet[w]; }).length;
+  const recall = exp.length ? present/exp.length : (got.length?0:1);
+  const order  = exp.length ? _lcsLen(exp,got)/exp.length : 1;
+  let acc = Math.round(100*(0.6*recall + 0.4*order));
+  if(_normProd(resp)===_normProd(task.expected)) acc=100;
+  const ok = acc>=PRODUCTION_PASS;
+  let parts=[];
+  if(missing.length) parts.push('Missing: '+missing.map(_tagWord).join(' · '));
+  if(extra.length)   parts.push('Not needed: '+extra.map(_tagWord).join(' · '));
+  if(!missing.length && !extra.length && order<1) parts.push('Right words — the order needs to match the reference.');
+  const explanation = acc===100 ? 'Matches the reference.' : (parts.join('  ') || 'Compare your answer with the reference.');
+  const v={ accuracy:acc, ok:ok, capabilityMet:ok, usedL1:false, rung:task.rung,
+    diff:'expected "'+task.expected+'", got "'+(resp||'∅')+'"', explanation:explanation };
+  if(onDone) onDone(v); return v;
+}
+
 // Haiku grader — accepts valid variation (the reference is ONE answer); returns the diff,
 // the perceived-dissonance explanation, and a single accuracy %. usedL1 = the learner's
 // answer fell back to L1 (the crutch signal that gates capabilityMet).
 function gradeProductionLLM(task, response, onDone){
   const key=getAnthropicKey();
-  if(!key) return gradeProductionMatch(task, response, onDone);
+  if(!key) return gradeProductionOffline(task, response, onDone);   // no key → full deterministic teaching
   const lang=(typeof activeCourse==='function'&&activeCourse())?activeCourse().langName:'the target language';
   const prompt='You are grading a language learner\'s PRODUCTION in '+lang+'.\n\n'
     +'Task the learner was given:\n'+task.prompt+'\n\n'
@@ -1317,14 +1380,13 @@ function gradeProductionLLM(task, response, onDone){
       rung:task.rung, diff:String(j.diff||''), explanation:String(j.explanation||'') });
   })
   .catch(function(e){
-    const v=gradeProductionMatch(task, response);   // never block a session on the network
-    v.explanation='(grader offline: '+String(e).slice(0,40)+')';
+    const v=gradeProductionOffline(task, response);   // never block a session on the network
     if(onDone) onDone(v);
   });
 }
 let _productionGrader=gradeProductionLLM;
 try{ window.setProductionGrader=function(fn){ _productionGrader=fn||gradeProductionLLM; };
-     window.gradeProductionMatch=gradeProductionMatch; window.gradeProductionLLM=gradeProductionLLM; }catch(e){}
+     window.gradeProductionMatch=gradeProductionMatch; window.gradeProductionLLM=gradeProductionLLM; window.gradeProductionOffline=gradeProductionOffline; }catch(e){}
 
 // Hot log + cold-infer tierProduced (read by Estimator._tierProduced). Feedback into
 // scheduling is behind PRODUCTION_FEEDBACK_WEIGHT (0 ⇒ logs but moves nothing).
