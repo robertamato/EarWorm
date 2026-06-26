@@ -360,12 +360,20 @@ function load(){
   }catch(e){ console.warn('Load failed, fresh start',e); }
 }
 function save(){
+  S._v=SCHEMA_VERSION;
+  let json; try{ json=JSON.stringify(S); }
+  catch(e){ try{ if(window.EW&&EW.obs) EW.obs.logEvent('save:failed',{phase:'serialize',err:String(e).slice(0,80)}); }catch(_){ } return; }
   try{
     const prev=localStorage.getItem(KEY);
-    if(prev) try{ localStorage.setItem(KEY+'.bak',prev); }catch(e){}
-    S._v=SCHEMA_VERSION;
-    localStorage.setItem(KEY,JSON.stringify(S));
-  }catch(e){}
+    if(prev && prev!==json) try{ localStorage.setItem(KEY+'.bak',prev); }catch(e){}   // keep one good snapshot behind
+    localStorage.setItem(KEY,json);
+  }catch(e){
+    // Write FAILED (quota?). Don't lose silently: reclaim space by dropping the redundant .bak and
+    // retry the main write; if it still fails, surface it (KEY keeps the last good value either way).
+    try{ localStorage.removeItem(KEY+'.bak'); localStorage.setItem(KEY,json); return; }catch(e2){}
+    try{ if(window.EW&&EW.obs) EW.obs.logEvent('save:failed',{phase:'write',err:String(e).slice(0,80)}); }catch(_){ }
+    try{ console.error('Earworm: SAVE FAILED — storage may be full; recent progress not persisted',e); }catch(_){ }
+  }
 }
 function exportState(){
   try{
