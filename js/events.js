@@ -1682,6 +1682,26 @@ const Scheduler = {
   },
 
   _nextVocab(S, D, sessionState, forcedModality) {
+    // ISOLATED FLASHCARDS = an introduction WALK. The old code returned all[0] every call, so
+    // with nothing else competing it re-pinned the FIRST card forever ("won't progress past the
+    // first card"). Instead, march through the deck: show the next not-yet-introduced word in the
+    // canonical order — _nextWordToIntroduce = the generativity-biased order, falling back to pure
+    // Zipf rank (the same order the unified flow introduces in, with no acquisition cap here so the
+    // walk is free). Once the deck is fully introduced, rotate the seen set least-recently-shown
+    // first (avoiding an immediate repeat) so it keeps cycling instead of dead-ending.
+    if (forcedModality === 'flash') {
+      const introIdx = this._nextWordToIntroduce(S, D);
+      if (introIdx >= 0) return { type: 'introduce', idx: introIdx, modality: 'flash' };
+      const seen = this._seenVocab(S, D).slice().sort((a, b) => a - b);   // index = Zipf order
+      if (!seen.length) return null;
+      // Deck fully introduced → LOOP it in Zipf order: the next seen card after the last shown,
+      // wrapping at the end. Deterministic, and can't immediate-repeat (with >1 card).
+      const recent = (sessionState && sessionState.sessionRecentCards) || [];
+      const last = recent.length ? recent[recent.length - 1] : -1;
+      let nextIdx = seen.find(i => i > last);
+      if (nextIdx == null) nextIdx = seen[0];
+      return { type: 'vocab', idx: nextIdx, modality: 'flash' };
+    }
     const vocabDue = this._dueVocab(S, D);
     const vocabSeen = this._seenVocab(S, D);
     const all = [...vocabDue, ...vocabSeen];
