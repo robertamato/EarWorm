@@ -225,3 +225,24 @@ image NAME → image DESCRIBE → [translation R1/R2 = fading scaffold] → imag
 "Definitional" because it puts **meaning, not L1, at the center of production** — the production-side
 statement of "the crutch must fade." When built, the production ladder + capability gating should
 reflect this order (image-NAME at the front, before R1/R2), not bolt images on at the R3 end only.
+
+---
+
+## 12. Roadmap — Production by VOICE (speech recording → Cloud inference) — 2026-06-25
+
+Any production/translation task (R1/R2, and later image-describe) should be answerable **two ways**:
+by **TEXT** (the vocab-constrained IME — built) **OR** by a short **AUDIO RECORDING**. The recording
+goes to **Cloud inference** and does double duty:
+- **Translation judgment (ASR):** did you *say* the right thing? — the same production grade, now on
+  the spoken channel (Whisper/ASR → the existing grader logic over the transcript).
+- **Pronunciation coaching:** per-phoneme / per-syllable / per-TONE accuracy + corrective feedback —
+  the auditory PRODUCTION measurement we entirely lack today, and the **production side of the TONE
+  axis** (currently recognition-only — a glaring hole for a tonal language). Azure Pronunciation
+  Assessment / Speechace per [[roadmap]].
+
+This is the auditory counterpart to the text production bar: **production-of-text → production-of-sound
+= full production.** Infra: `getUserMedia`/`MediaRecorder` capture → Cloud ASR + pronunciation API.
+Feeds the same `productionLog`/`tierProduced` evidence pipeline; the tone axis finally gets a
+production signal. **Key-gated** like the rest (no key → text-only, no behavior change). Pairs with the
+conversation/output pillar ([[roadmap]]) which is the same capture+ASR stack one level up. Roadmap
+only — the moving part is the Cloud-inference dependency (ASR + pronunciation API), not the UI.
