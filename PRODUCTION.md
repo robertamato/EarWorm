@@ -210,3 +210,18 @@ evidence pipeline and lights the same atom-card rungs. Risks to resolve when bui
 be **pre-generated** (an ingestion/build step → a course ships its image bank + keys); image
 licensing + beginner-describability (curate simple scenes); the level-gate ties to the capability
 estimator.
+
+### Sequencing — DEFINITIONAL (user, 2026-06-25): image-naming is the FIRST production; translation is a fading scaffold
+The key reframe: image-NAME is **meaning → L2 with zero L1 in the loop** (see a cat → produce 猫), so
+it's the gentlest production AND should come BEFORE translation. Deeper: **translation routes THROUGH
+L1** (read "cat" → produce 猫) — it builds the very crutch that must fade ([[project_substitution_layer]],
+two-axes/Duolingo-trap). So L1-translation is **NOT the goal of production — it's a scaffold that
+fades**, and meaning-production (perception → L2) is the durable target. This reorders the whole
+production ladder — image-production BOOKENDS it, translation is the middle scaffold:
+```
+image NAME → image DESCRIBE → [translation R1/R2 = fading scaffold] → image SCENE / free
+(meaning→L2, gentlest)              (the L1 detour)                  (meaning→L2, hardest)
+```
+"Definitional" because it puts **meaning, not L1, at the center of production** — the production-side
+statement of "the crutch must fade." When built, the production ladder + capability gating should
+reflect this order (image-NAME at the front, before R1/R2), not bolt images on at the R3 end only.
