@@ -161,3 +161,52 @@ modality first** (Build consumer); Title Defense is a distinct later consumer, n
 - **R3 free response**; **speech/ASR + pronunciation** (Phase 3); **LLM-as-line-poster**
   for the wager (the line stays heuristic `_pCorrect` to avoid a call per wager);
   **ingestor faculties** (same backend, parallel track — exception→flashcard is half-built).
+
+---
+
+## 11. Roadmap — DESCRIBE THE IMAGE (free production; the tractable R3) — 2026-06-25
+
+A new production modality: **show an image, ask the learner to describe it in the target
+language.** No L1 text cue → the *least* crutchy production we have. R1 gives the English to
+translate, R2 gives an L2 sentence to transform; both still hand you the content. An image hands
+you nothing in any language — you generate from **perception/meaning**. This is exactly the **R3
+free-response** §2 deferred, made TRACTABLE: the image **bounds** the space of valid answers, so
+grading is feasible without "accept any grammatical sentence."
+
+### Scaling (the unit lattice — [[project_unit_lattice]])
+Difficulty ramps with capability, largest-comprehensible-unit:
+- **L1 NAME** — list relevant words (nouns/adjectives): "what do you see?" Accept any word in the
+  image's answer-key. Acquisition-stage friendly (the user's "simply listing adjectives").
+- **L2 DESCRIBE** — noun phrases / adj+noun ("a red cat"): composing.
+- **L3 SCENE** — a full clause ("the cat is sleeping on the chair"): sentence-level (the user's
+  "full sentences").
+The level is gated by the learner's production/grammar capability (same estimator the rest uses).
+
+### Grading — two paths, mirroring the production bar (§4–5)
+- **ONLINE (vision LLM):** send the image + the description → "accurate to the image AND grammatical
+  in [lang]? which target elements are covered? at what unit level?" The vision model judges
+  accuracy-to-image + grammaticality + complexity.
+- **OFFLINE (no key):** each image carries a precomputed **ANSWER KEY** — target-language objects +
+  attributes + a few model phrases/sentences, generated ONCE by a vision-LLM categorizer and cached
+  per (image, course). Offline grading = **coverage/alignment** of the learner's words against the
+  key — REUSE `gradeProductionOffline`'s recall + missing/extra teaching. So it works no-key like the
+  rest of production. Caveat: coverage is a proxy — it can't catch "you described a *different* cat"
+  (that needs the vision model); acceptable, lenient by design.
+
+### Content / images ([[project_content_sourcing]] · [[project_ingestor_architecture]])
+- A curated **CC0/public-domain image bank** of simple, describable scenes (a cat, a person eating,
+  a red ball). Images = another content SOURCE through the ingestor; the **vision-LLM categorizer is
+  the answer-key generator** (the "exception catcher" for the visual channel).
+- The answer key is **language-general at the OBJECT level** (a scene's objects/attributes are
+  universal), **per-language at the WORD level** (猫 / mèo / قطة) — generated per course from the
+  object list. One categorize pass per image; per-course word maps cheap thereafter.
+- **Never produce before recognize**: surface only images whose key words are introduced (`.seen`),
+  or scale the prompt down to the learner's known vocabulary.
+
+### Why it matters
+This is the **R3 rung** the crutch-fade ladder (§2) deferred — generate from nothing, no L1 token —
+foreseen as the strongest measure of TRUE production. Feeds the same `productionLog`/`tierProduced`
+evidence pipeline and lights the same atom-card rungs. Risks to resolve when built: offline keys must
+be **pre-generated** (an ingestion/build step → a course ships its image bank + keys); image
+licensing + beginner-describability (curate simple scenes); the level-gate ties to the capability
+estimator.
