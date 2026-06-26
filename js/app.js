@@ -9075,28 +9075,35 @@ function generateSentencesForWord(i, onDone){
   if(_pendingSentences[ch]&&_pendingSentences[ch].length){
     if(onDone) onDone({ok:true,pending:true}); return;
   }
-  // Build covered character set (sentenceAllIntroduced validates at char level)
+  // Course-general (de-hardcoded 2026-06-25): the unit is CHARACTERS for CJK (substring courses)
+  // and WORDS for space-delimited courses (VN/AR). Build the covered set in the right unit so the
+  // prompt's "use ONLY these" constraint is meaningful per language, and frame the prompt with the
+  // active course's name + unit instead of "Mandarin"/"characters".
+  var course=(typeof activeCourse==='function'&&activeCourse())||{};
+  var langName=course.langName||'the target language';
+  var space=(typeof _segMode==='function'&&_segMode()==='space');
+  var unit=space?'words':'characters', oneUnit=space?'word':'character';
   var coveredSet={}, coveredArr=[];
   for(var j=0;j<D.length;j++){
     if(S.cards[j]&&S.cards[j].seen){
       var dch=D[j][0];
-      for(var k=0;k<dch.length;k++){
-        var c=dch[k]; if(!coveredSet[c]){ coveredSet[c]=1; coveredArr.push(c); }
-      }
+      if(space){ if(!coveredSet[dch]){ coveredSet[dch]=1; coveredArr.push(dch); } }           // whole word
+      else { for(var k=0;k<dch.length;k++){ var c=dch[k]; if(!coveredSet[c]){ coveredSet[c]=1; coveredArr.push(c); } } }  // chars
     }
   }
-  var pinyinStr=ci[1].map(function(s){return s[0];}).join(' ');
-  var prompt='You are writing beginner Mandarin example sentences for a learner who knows ONLY these characters (most common first):\n'
-    +coveredArr.join('')+'\n\n'
-    +'Feature this target word: '+ch+' ('+pinyinStr+') — "'+ci[2]+'"\n\n'
+  var coveredStr=coveredArr.join(space?' ':'');
+  var romanStr=ci[1].map(function(s){return s[0];}).join(' ');   // slot-1 romanization (pinyin / latin)
+  var prompt='You are writing beginner '+langName+' example sentences for a learner who knows ONLY these '+unit+' (most common first):\n'
+    +coveredStr+'\n\n'
+    +'Feature this target word: '+ch+' ('+romanStr+') — "'+ci[2]+'"\n\n'
     +'Write 3 short, natural sentences:\n'
-    +'- HARD CONSTRAINT: use ONLY characters from the list above; never any other character.\n'
+    +'- HARD CONSTRAINT: use ONLY '+unit+' from the list above; never any other '+oneUnit+'.\n'
     +'- Every sentence MUST contain '+ch+'.\n'
-    +'- 4–10 characters each; prefer the most common words and the simplest phrasing.\n'
+    +'- 4–10 '+unit+' each; prefer the most common words and the simplest phrasing.\n'
     +'- Vary the grammar across the three (e.g. a statement, a yes/no question, a negation) — not three of the same frame.\n'
     +'- Each must be grammatical and something a beginner would really say.\n\n'
     +'Reply with ONLY a JSON array, no markdown, no prose:\n'
-    +'[["汉字","pīnyīn with tone marks","English gloss"],["...","...","..."],["...","...","..."]]';
+    +'[["sentence in '+langName+'","romanization (matching the existing data style)","English gloss"],["...","...","..."],["...","...","..."]]';
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{
