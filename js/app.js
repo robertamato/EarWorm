@@ -10138,10 +10138,20 @@ function gradeProductionOffline(task, response, onDone){
   let acc = Math.round(100*(0.6*recall + 0.4*order));
   if(_normProd(resp)===_normProd(task.expected)) acc=100;
   const ok = acc>=PRODUCTION_PASS;
+  // Sound-alike confusion: a not-needed word that shares a (toneless) sound with a missing word —
+  // the homophone trap (是 shì / 时 shí). Surface it so the learner sees it was a sound slip, not random.
+  const _keyOf=function(w){ const di=D.findIndex(function(d){return d[0]===w;}); return (di>=0 && typeof asciiKey==='function')?asciiKey(di):''; };
+  const homo=[];
+  if(!space) missing.forEach(function(m){ const mk=_keyOf(m); if(mk) extra.forEach(function(e){ if(_keyOf(e)===mk) homo.push(m+' / '+e); }); });
+  // Word-order: name a concrete inversion ("X comes before Y") rather than a generic "fix the order".
+  const _orderHint=function(){ const pos={}; got.forEach(function(w,k){ if(pos[w]==null) pos[w]=k; });
+    for(let a=0;a<exp.length-1;a++){ const x=exp[a], y=exp[a+1]; if(pos[x]!=null && pos[y]!=null && pos[x]>pos[y]) return _tagWord(x)+' comes before '+_tagWord(y); }
+    return ''; };
   let parts=[];
   if(missing.length) parts.push('Missing: '+missing.map(_tagWord).join(' · '));
   if(extra.length)   parts.push('Not needed: '+extra.map(_tagWord).join(' · '));
-  if(!missing.length && !extra.length && order<1) parts.push('Right words — the order needs to match the reference.');
+  if(homo.length)    parts.push(homo.join(', ')+' sound alike — mind which one.');
+  if(!missing.length && !extra.length && order<1){ const oh=_orderHint(); parts.push(oh?('Order: '+oh):'Right words — fix the order to match the reference.'); }
   const explanation = acc===100 ? 'Matches the reference.' : (parts.join('  ') || 'Compare your answer with the reference.');
   const v={ accuracy:acc, ok:ok, capabilityMet:ok, usedL1:false, rung:task.rung,
     diff:'expected "'+task.expected+'", got "'+(resp||'∅')+'"', explanation:explanation };
