@@ -57,6 +57,17 @@ external-review severities as candidates, not verdicts.
 
 ## MONITORING
 
+### TTS contract: `speakWithBlank` bypass + deferred-speak guards — VERIFIED RESOLVED (2026-06-25)
+Three June 2026 code reviews flagged `speakWithBlank` as a `speak()`-wrapper BYPASS (direct
+`speechSynthesis.speak` + private gen/obs) plus "multiple missing `activeCardIdx` guards on deferred
+speak". Audited 2026-06-25 (backlog #5): both are FIXED. `speakWithBlank` (drills.js) is now a
+`speak()` CHAIN — `speak(before) → beepBlank() → speak(after)`, each through the canonical wrapper,
+all card-change-guarded (`activeCardIdx===_card`); `beepBlank` is Web Audio (oscillator), not TTS. No
+direct `speechSynthesis.speak` exists outside the `speak()` wrapper internals, the sanctioned
+`_doPrewarm` (volume-0 SAPI warm, `!localService` bail intact), and the TTS DEBUG panel. All five
+deferred `speak()` calls (session.js 850/939/1278, drills.js 541/790) carry the `activeCardIdx===…`
+guard. The contract holds; the historical review note is stale.
+
 ### Production bar: activated into game-flow + R2 negation fixed (2026-06-25, `6d31671`)
 **What changed:** The production modality (PRODUCTION.md, the Build consumer) was fully built but DARK (`PRODUCTION_ENABLED` hardcoded false) and had never run end-to-end. Now key-gated (defaults on when an Anthropic key exists; debug toggle `⌨ PRODUCTION IN FLOW` persists `S.productionOn`). Still ADDITIVE: `Estimator.PRODUCTION_GATE` + `PRODUCTION_FEEDBACK_WEIGHT` stay 0, so capability claims + scheduling are unchanged.
 **R2 negation correctness (was emitting ungrammatical targets):** (a) `sentenceAtomsInOrder` returns OVERLAPPING atoms (我是学生→[我,是,学,学生]) so R2 negated the bound morpheme 学 → garbage "我是不学生"; guarded by free-atom (no other atom contains it) + ≥3-free-atom checks. (b) modals take the negator via `grammarRoles.preverbal` (我会说→我不会说). (c) 有→没有 via `grammarRoles.neg-suppletive`→negator-perf. Per-course flags; VN default-empty.
