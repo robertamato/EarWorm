@@ -5078,12 +5078,18 @@ function nextStudyCard(){
               const reCat=grammarCatFromKey(reIdx);
               if(reCat){ showGrammarDrill(reCat); return; }
             }
+            // In a single-modality isolation session, re-queue THROUGH showStudyCard so
+            // resolveStudyModality re-forces the filtered modality (don't trust reMod).
+            if(studyModalityFilter){ showStudyCard(reIdx); return; }
             if(reMod&&reMod!=='flash'){
               lastModality.set(reIdx,reMod);
               if(reMod==='convergence'){ showConvergenceQuestion(reIdx); return; }
               if(reMod==='cloze'){ showStudyCloze(reIdx); return; }
               if(reMod==='comprehension'){ showStudyComprehension(reIdx); return; }
               if(reMod==='word-order'){ showWordOrderDrill(reIdx); return; }
+              if(reMod==='production'){ showStudyProduction(reIdx); return; }
+              if(reMod==='tone'){ showStudyTone(reIdx); return; }
+              if(reMod==='meaning-s1'){ showStudyMC(reIdx,false,true); return; }
               if(reMod==='pos-s1'||reMod==='pos-s2'||reMod==='pos-s3'){
                 const ps=reMod==='pos-s1'?1:reMod==='pos-s2'?2:3;
                 showStudyPOSStaged(reIdx,ps); return;
@@ -5092,6 +5098,12 @@ function nextStudyCard(){
             }
             showStudyCard(reIdx); return;
           }
+        }
+        // Grammar drill decision (e.g. the ► GRAMMAR DRILL isolation): _nextGrammarDrill
+        // returns {type:'grammar', cat, axis} with NO idx — handle it directly, else it
+        // falls through every idx>=0 branch to goHome (grammar isolation rendered nothing).
+        if(decision.type==='grammar' && decision.cat){
+          showGrammarDrill(decision.cat, decision.axis); return;
         }
         if(decision.type==='introduce'&&decision.idx>=0){
           showStudyCard(decision.idx); return;
@@ -5180,8 +5192,10 @@ function showStudyCard(i){
   schedulePrewarmFromQueue();
 
   // Colloquialism interjection: only show if unlocked, frequency-ranked
-  // Fire every ~11 cards but only show the highest-priority unlocked coll
-  if(studyCardCount%11===0&&activeCourse&&activeCourse().hasColls){
+  // Fire every ~11 cards but only show the highest-priority unlocked coll.
+  // Suppressed in isolation (debug single-modality / flash-only) so a filtered session
+  // stays single-modality — interjections belong only to the unified EXPLORE flow.
+  if(!studyModalityFilter && !studyFlashOnly && studyCardCount%11===0&&activeCourse&&activeCourse().hasColls){
     const unlockedColls=getUnlockedColls();
     if(unlockedColls.length>0){
       const collI=unlockedColls[Math.floor(studyCardCount/11)%unlockedColls.length];
@@ -5193,9 +5207,10 @@ function showStudyCard(i){
     }
     // No unlocked colls or gate failed — continue with normal card
   }
-  // Tone interjection every 5th card, gated on having seen card back
+  // Tone interjection every 5th card, gated on having seen card back. Suppressed in
+  // isolation (tone has its own ► TONE DRILL path; other filters stay single-modality).
   const hasSeenBack=(card(i).exp||0)>0;
-  if(studyCardCount%5===0 && hasSeenBack && getAxisStage(i,'meaning')>=2 && activeCourse&&activeCourse().hasTone){
+  if(!studyModalityFilter && !studyFlashOnly && studyCardCount%5===0 && hasSeenBack && getAxisStage(i,'meaning')>=2 && activeCourse&&activeCourse().hasTone){
     showStudyTone(i);
     return;
   }
@@ -10996,7 +11011,9 @@ $('startStudy').onclick=()=>{
 };
 $('study-quit').onclick=()=>{ studyActive=false; goHome(); };
 $('startWS').onclick=()=>{ startWordSearch(); };
-if($('startGrammar')) $('startGrammar').onclick=()=>{ startGrammarOnlySession(); };
+// Grammar isolation: studyModalityFilter='grammar' — startStudy builds the grammar queue and
+// Scheduler.next routes to _nextGrammarDrill. (Was calling an undefined startGrammarOnlySession.)
+if($('startGrammar')) $('startGrammar').onclick=()=>_startIsoModality('grammar');
 // Per-modality isolation (DRILL ISOLATION): force ONE unified-study modality via
 // studyModalityFilter, then run the normal study loop. resolveStudyModality honors it;
 // never-test-before-flash still holds (unseen → flash; unbuildable → recognition fallback).

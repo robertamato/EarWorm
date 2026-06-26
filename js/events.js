@@ -390,7 +390,9 @@ $('startStudy').onclick=()=>{
 };
 $('study-quit').onclick=()=>{ studyActive=false; goHome(); };
 $('startWS').onclick=()=>{ startWordSearch(); };
-if($('startGrammar')) $('startGrammar').onclick=()=>{ startGrammarOnlySession(); };
+// Grammar isolation: studyModalityFilter='grammar' — startStudy builds the grammar queue and
+// Scheduler.next routes to _nextGrammarDrill. (Was calling an undefined startGrammarOnlySession.)
+if($('startGrammar')) $('startGrammar').onclick=()=>_startIsoModality('grammar');
 // Per-modality isolation (DRILL ISOLATION): force ONE unified-study modality via
 // studyModalityFilter, then run the normal study loop. resolveStudyModality honors it;
 // never-test-before-flash still holds (unseen → flash; unbuildable → recognition fallback).
