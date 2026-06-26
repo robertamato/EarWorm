@@ -1599,6 +1599,7 @@ var COLD_FLUENT_LATENCY_MS=2500; // decontaminated (t - tae) below this = fluent
 var COLD_ADJ_DIST=1;             // chars between fg/bg to count as structurally linked
 var COLD_DISCRIM_GATE=3;         // direct discrimination evidence needed to graduate
 var COLD_INCID_GATE=2;           // incidental (weighted) evidence needed to graduate
+var COLD_PRODUCED_GATE=1;        // capMet productions of an atom needed to graduate via the PRODUCTION channel
 
 // Necessity proxy (§5): the background atom is syntactically near the probed slot.
 function _coldStructuralLink(comp, fgChar, bgChar){
@@ -1614,7 +1615,7 @@ function coldRecompute(now, quiet){
   var ev={}; // ev[idx][axis] = {recall,discrim,incid,correct,total,last}
   function bucket(idx,axis){
     if(!ev[idx]) ev[idx]={};
-    if(!ev[idx][axis]) ev[idx][axis]={recall:0,discrim:0,incid:0,correct:0,total:0,last:0};
+    if(!ev[idx][axis]) ev[idx][axis]={recall:0,discrim:0,incid:0,prod:0,correct:0,total:0,last:0};
     return ev[idx][axis];
   }
   log.forEach(function(o){
@@ -1644,19 +1645,34 @@ function coldRecompute(now, quiet){
       });
     }
   });
-  // Graduation (§7): direct discrimination + incidental, NOT recall volume. Requiring
-  // discrim>=GATE means graduation always includes recent DIRECT evidence (honors the
-  // §7 cap against incidental-only graduation).
+  // PRODUCTION channel (§7, 2026-06-25): the strongest "demonstrated in context" — generate the
+  // atom correct + UNAIDED in a sentence. Each capMet production (S.productionLog, which the obs-log
+  // loop above never reads) credits the meaning fiber of EVERY word you generated; prod>=GATE
+  // graduates OUTRIGHT — a third, direct route alongside discrimination + incidental. This closes
+  // the cold/live graduation gap from the cold side (raising cold), not by lowering the bar.
+  var plog=(typeof S!=='undefined'&&S.productionLog)||[];
+  plog.forEach(function(p){
+    if(!p||!p.capMet) return;
+    var credited={};
+    var creditWord=function(w){ var di=D.findIndex(function(d){return d[0]===w;}); if(di<0||credited[di]) return; credited[di]=1;
+      var b=bucket(di,'meaning'); b.prod=(b.prod||0)+1; if((p.ts||0)>b.last) b.last=p.ts; };
+    (p.atoms||[]).forEach(creditWord);
+    if(typeof p.idx==='number' && D[p.idx]) creditWord(D[p.idx][0]);   // foreground (the targeted atom)
+  });
+  // Graduation (§7): direct discrimination + incidental, NOT recall volume — OR a genuine production.
+  // Requiring discrim>=GATE means the contextual route always includes recent DIRECT evidence
+  // (honors the §7 cap against incidental-only graduation); production is its own direct route.
   var cold={ computedAt:now, atoms:{} };
   Object.keys(ev).forEach(function(idx){
     cold.atoms[idx]={};
     Object.keys(ev[idx]).forEach(function(axis){
       var e=ev[idx][axis];
-      var graduated=(e.discrim>=COLD_DISCRIM_GATE && e.incid>=COLD_INCID_GATE);
+      var graduated=(e.discrim>=COLD_DISCRIM_GATE && e.incid>=COLD_INCID_GATE) || ((e.prod||0)>=COLD_PRODUCED_GATE);
       cold.atoms[idx][axis]={
         n:e.total, acc:e.total?Math.round(e.correct/e.total*100)/100:0,
-        recall:e.recall, discrim:e.discrim, incid:Math.round(e.incid*100)/100,
-        graduated:graduated, regime:graduated?'maintenance':'acquisition', lastAt:e.last
+        recall:e.recall, discrim:e.discrim, incid:Math.round(e.incid*100)/100, prod:(e.prod||0),
+        graduated:graduated, regime:graduated?'maintenance':'acquisition',
+        via:(graduated?((e.prod||0)>=COLD_PRODUCED_GATE?'production':'context'):null), lastAt:e.last
       };
     });
   });
@@ -1690,8 +1706,8 @@ function coldVsLive(){
     n++;
     rows.push({ i:i, ch:D[i][0], rel:rel,
       live:{ grad:liveGrad, m:Math.round(liveM*10)/10, stage:liveStage },
-      cold: ca?{ n:ca.n, recall:ca.recall, discrim:ca.discrim, incid:ca.incid, grad:coldGrad, regime:ca.regime }
-              :{ n:0, recall:0, discrim:0, incid:0, grad:false, regime:'no-data' } });
+      cold: ca?{ n:ca.n, recall:ca.recall, discrim:ca.discrim, incid:ca.incid, prod:(ca.prod||0), via:ca.via||null, grad:coldGrad, regime:ca.regime }
+              :{ n:0, recall:0, discrim:0, incid:0, prod:0, via:null, grad:false, regime:'no-data' } });
   }
   var ord={ 'cold-stricter':0, 'cold-looser':1, 'agree':2 };
   rows.sort(function(a,b){ return ord[a.rel]!==ord[b.rel] ? ord[a.rel]-ord[b.rel] : a.i-b.i; });
