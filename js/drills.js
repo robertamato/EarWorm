@@ -1535,6 +1535,14 @@ function _missingAtomsInstruction(resp, expected){
 }
 
 let PRODUCTION_HINT_COST=5;   // XP spent to reveal the next needed word (the no-dead-end escape)
+// Grading mode for production: 'llm' (haiku — accepts valid variation, needs a key) or 'offline'
+// (on-device alignment to the reference — no network). Toggled on the card, persisted in S.gradeMode.
+// Unset → auto: AI when a key exists, else local.
+function _currentGradeMode(){
+  if(S.gradeMode==='offline'||S.gradeMode==='llm') return S.gradeMode;
+  return (typeof getAnthropicKey==='function' && getAnthropicKey()) ? 'llm' : 'offline';
+}
+try{ window._currentGradeMode=_currentGradeMode; }catch(e){}
 // Inline production card — reuses the studyMC panel. Prompt + the vocab-constrained IME:
 // type romanization → ranked glyph candidates (from .seen, keyed to the sound) → assemble.
 function showStudyProduction(i){
@@ -1586,14 +1594,22 @@ function showStudyProduction(i){
   const bar=document.createElement('div');
   bar.style.cssText='display:flex;flex-wrap:wrap;gap:6px;justify-content:center;min-height:36px;margin-top:8px;align-items:center;';
 
-  // controls — reveal (costs XP, never a dead end) + submit
+  // controls — grade-mode toggle · reveal (costs XP, never a dead end) · submit
   const ctrl=document.createElement('div'); ctrl.style.cssText='display:flex;gap:8px;margin-top:10px;';
+  // GRADE-MODE TOGGLE (on the card): ⚡ AI = haiku (accepts valid variation, sends your answer to
+  // the LLM; needs a key) · ▣ LOCAL = on-device alignment to the reference (no network). Persisted.
+  const gmode=document.createElement('button'); gmode.className='btn';
+  gmode.style.cssText='flex:0 0 auto;width:auto;font-size:9px;padding:10px 9px;opacity:.7;letter-spacing:1px;';
+  gmode.title='How this answer is graded — ⚡ AI sends it to the haiku grader (accepts valid variation, needs a key); ▣ LOCAL grades on-device against the reference (no network).';
+  function renderGmode(){ gmode.innerHTML=(_currentGradeMode()==='offline')?'▣ LOCAL':'⚡ AI'; }
+  renderGmode();
+  gmode.onclick=function(){ S.gradeMode=(_currentGradeMode()==='offline')?'llm':'offline'; try{ save(); }catch(e){} renderGmode(); };
   const hint=document.createElement('button'); hint.className='btn';
   hint.style.cssText='flex:0 0 auto;width:auto;font-size:10px;padding:10px 12px;opacity:.7;';
   hint.innerHTML='? REVEAL <span style="opacity:.6;">−'+PRODUCTION_HINT_COST+'xp</span>';
   const submit=document.createElement('button'); submit.className='btn'; submit.textContent='SUBMIT';
   submit.style.cssText='flex:1;font-size:12px;';
-  ctrl.appendChild(hint); ctrl.appendChild(submit);
+  ctrl.appendChild(gmode); ctrl.appendChild(hint); ctrl.appendChild(submit);
 
   const verdict=document.createElement('div'); verdict.style.cssText='margin-top:10px;text-align:center;font-size:13px;min-height:20px;'+segFont;
   box.appendChild(comp); box.appendChild(inp); box.appendChild(bar); box.appendChild(ctrl); box.appendChild(verdict);
@@ -1616,9 +1632,11 @@ function showStudyProduction(i){
   const go=function(){
     if(done) return; done=true;
     const resp=composed.length?composed.join(JOIN):inp.value;
-    inp.disabled=true; submit.disabled=true; hint.disabled=true; bar.innerHTML='';
-    verdict.style.color=fg; verdict.textContent='grading…';
-    _productionGrader(task, resp, function(v){
+    inp.disabled=true; submit.disabled=true; hint.disabled=true; gmode.disabled=true; bar.innerHTML='';
+    const offline=(_currentGradeMode()==='offline');
+    verdict.style.color=fg; verdict.textContent=offline?'checking…':'grading…';
+    const grader=offline?gradeProductionOffline:_productionGrader;   // the card's toggle: LOCAL vs AI
+    grader(task, resp, function(v){
       v.hints=hintsUsed; if(hintsUsed>0) v.capabilityMet=false;   // hinted ≠ unaided production
       recordProduction(i, task, v, resp);
       // TEACHING MOMENT (every submit, right or wrong): reveal the target, SHOW the dissonance
