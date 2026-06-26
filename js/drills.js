@@ -1279,7 +1279,7 @@ function gradeProductionMatch(task, response, onDone){
   const ok=acc>=PRODUCTION_PASS;
   const v={ accuracy:acc, ok:ok, capabilityMet:ok, usedL1:false, rung:task.rung,
     diff: exact?'(exact match)':('expected "'+task.expected+'", got "'+(response||'∅')+'"'),
-    explanation: exact?'matches the reference':'(offline string-match — no semantic judgement)' };
+    explanation: exact?'Matches the reference.':_missingAtomsInstruction(response, task.expected) };
   if(onDone) onDone(v); return v;
 }
 // Haiku grader — accepts valid variation (the reference is ONE answer); returns the diff,
@@ -1299,7 +1299,7 @@ function gradeProductionLLM(task, response, onDone){
     +'structure the task required.\n\n'
     +'Reply with ONLY this JSON, no markdown:\n'
     +'{"accuracy": <integer 0-100>, "diff": "<how the response differs from the reference, brief>", '
-    +'"explanation": "<one sentence: the perceived dissonance and why it matters>", '
+    +'"explanation": "<TEACH the gap, plain English, 1-2 short sentences: name what the learner got right, what was missing or wrong, and the key word or grammar point — specific to THEIR answer vs the reference. Encouraging, not a scold.>", '
     +'"usedL1": <true if the learner\'s OWN answer fell back to English/their L1 instead of '+lang+', else false>}';
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
@@ -1439,6 +1439,39 @@ function productionCandidates(typed, limit){
 }
 try{ window.asciiKey=asciiKey; window.productionCandidates=productionCandidates; window._foldAscii=_foldAscii; }catch(e){}
 
+// Render EXPECTED with the parts the learner DIDN'T produce highlighted — the dissonance made
+// visible (negative space). Present tokens dim; missing tokens underlined + full opacity.
+// Monochrome (no red/green — hue is the atom-identity channel). CJK diffs per character, space
+// courses per word (diacritic-folded match).
+function _prodDiffHTML(resp, expected){
+  const r=String(resp||''); const space=(typeof _segMode==='function'&&_segMode()==='space');
+  const sPres='opacity:.35;', sMiss='opacity:1;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;';
+  const wrap=(tok,present)=>'<span style="'+(present?sPres:sMiss)+'">'+_esc(tok)+'</span>';
+  if(space){
+    const rf=_foldAscii(r);
+    return String(expected).split(/(\s+)/).map(tok=>{
+      if(/^\s*$/.test(tok)) return _esc(tok);
+      const clean=_foldAscii(tok); if(!clean) return _esc(tok);
+      return wrap(tok, rf.indexOf(clean)>=0);
+    }).join('');
+  }
+  return Array.from(String(expected)).map(ch=>{
+    if(!/[\p{L}\p{M}]/u.test(ch)) return _esc(ch);      // punctuation: plain
+    return wrap(ch, r.indexOf(ch)>=0);
+  }).join('');
+}
+// Offline (no-key) teaching line: name the words the learner left out, with a short gloss.
+function _missingAtomsInstruction(resp, expected){
+  let atoms=[]; try{ atoms=(typeof sentenceAtomsInOrder==='function')?sentenceAtomsInOrder(expected):[]; }catch(e){ return ''; }
+  if(!atoms.length) return '';
+  const r=String(resp||'');
+  const free=atoms.filter(a=> !atoms.some(b=> b.w!==a.w && String(b.w).indexOf(a.w)>=0)); // drop bound-morpheme dupes
+  const seen={}, missing=[];
+  free.forEach(a=>{ if(seen[a.w]) return; seen[a.w]=1; if(r.indexOf(a.w)<0){ const g=((D[a.idx]||[])[2]||'').split(/[,;(]/)[0].trim(); missing.push(a.w+(g?' ('+g+')':'')); } });
+  if(!missing.length) return 'Right words — check the order or form against the reference.';
+  return 'You left out: '+missing.join(' · ');
+}
+
 let PRODUCTION_HINT_COST=5;   // XP spent to reveal the next needed word (the no-dead-end escape)
 // Inline production card — reuses the studyMC panel. Prompt + the vocab-constrained IME:
 // type romanization → ranked glyph candidates (from .seen, keyed to the sound) → assemble.
@@ -1526,16 +1559,22 @@ function showStudyProduction(i){
     _productionGrader(task, resp, function(v){
       v.hints=hintsUsed; if(hintsUsed>0) v.capabilityMet=false;   // hinted ≠ unaided production
       recordProduction(i, task, v, resp);
-      // Monochrome + graphical (✓/✗ glyph + the % itself) — no red/green; hue is the
-      // atom-identity channel. Auditory feedback carries correct/wrong too.
+      // TEACHING MOMENT (every submit, right or wrong): reveal the target, SHOW the dissonance
+      // (your answer vs the expected with the missing pieces highlighted = negative space), and
+      // give an instruction on the gap. Monochrome (no red/green — hue is the atom-identity channel).
+      comp.style.display='none'; inp.style.display='none'; ctrl.style.display='none';   // collapse the composer; the verdict is the whole teaching panel
+      const rowLabel='font-size:8px;opacity:.45;letter-spacing:1px;width:60px;text-align:right;flex:0 0 60px;';
+      const row=(label,html,size)=>'<div style="display:flex;gap:8px;align-items:baseline;justify-content:center;margin-top:3px;"><span style="'+rowLabel+'">'+label+'</span><span style="font-size:'+size+'px;'+segFont+'text-align:left;">'+html+'</span></div>';
       verdict.innerHTML=
         '<div style="font-size:18px;font-weight:700;color:'+fg+';">'+(v.ok?'✓ ':'✗ ')+(v.accuracy!=null?v.accuracy+'%':'')+'</div>'
-        +(v.explanation?'<div style="font-size:9px;opacity:.8;line-height:1.4;margin-top:2px;">'+_esc(v.explanation)+'</div>':'')
-        +'<div style="font-size:13px;margin-top:3px;'+segFont+'">'+_esc(task.expected)+'</div>'
-        +(v.usedL1?'<div style="font-size:8px;color:#fbbf24;letter-spacing:1px;margin-top:1px;">⚠ L1 CRUTCH</div>':'')
+        +(resp?row('YOU', _esc(resp), 15):'')
+        +row('EXPECTED', _prodDiffHTML(resp, task.expected), 17)
+        +(v.explanation?'<div style="font-size:10px;opacity:.85;line-height:1.5;margin-top:8px;padding:0 6px;">'+_esc(v.explanation)+'</div>':'')
+        +(v.usedL1?'<div style="font-size:8px;color:#fbbf24;letter-spacing:1px;margin-top:4px;">⚠ L1 CRUTCH</div>':'')
         +(hintsUsed>0?'<div style="font-size:8px;opacity:.55;letter-spacing:1px;margin-top:1px;">✦ '+hintsUsed+' reveal'+(hintsUsed>1?'s':'')+' used</div>':'');
       if(S.sound!=='mute') speak(task.expected, activeCourse().langCode);
-      armTapAdvance($('studyMC'), function(){ nextStudyCard(); }, v.ok?700:1600);
+      // Linger longer on a miss — it's the teaching beat, not a buzzer.
+      armTapAdvance($('studyMC'), function(){ nextStudyCard(); }, v.ok?900:2200);
     });
   };
 
