@@ -1126,7 +1126,15 @@ function jumpToCard(i){
 // the production bar (unbuilt) → they render LOCKED: honest that recognition ≠ capability,
 // and a visible "further to climb." Thresholds are defaults, tuned live.
 const ATOM_RUNGS=['SEEN','KNOWN','DISTINGUISHED','PLACED','PRODUCED','FLUENT'];
-const ATOM_RUNG_LOCKED_FROM=4; // PRODUCED and up require production evidence we don't have yet
+const ATOM_RUNG_LOCKED_FROM=5; // PRODUCED now lights from the production log; only FLUENT is unmeasured
+// True if atom i was generated correctly + UNAIDED (capMet) in a production task — as itself or as a
+// component of a capability-met sentence. The signal that lights the PRODUCED rung (S.productionLog).
+function _atomProduced(i){
+  try{ const log=S.productionLog||[], w=D[i]&&D[i][0];
+    for(let k=0;k<log.length;k++){ const e=log[k]; if(!e.capMet) continue; if(e.idx===i) return true; if(w&&e.atoms&&e.atoms.indexOf(w)>=0) return true; }
+  }catch(e){}
+  return false;
+}
 function atomHouseLine(i){
   const ci=card(i);
   if(!ci.seen && !(ci.exp>0)) return {rung:-1, name:'UNDISCOVERED'};
@@ -1135,9 +1143,11 @@ function atomHouseLine(i){
   if(ms>=1) rung=1;           // KNOWN — recalls meaning
   if(ms>=2) rung=2;           // DISTINGUISHED — survived contrastive tests (negative space)
   if(ps>=2 || ms>=4) rung=3;  // PLACED — used in the right grammatical role
-  // PRODUCED(4)/FLUENT(5): no production evidence yet → the house won't post a line that high.
+  if(_atomProduced(i)) rung=Math.max(rung,4);  // PRODUCED — generated it correctly + unaided in play
+  // FLUENT(5): sustained/fluent production — not measured yet → the house won't post a line that high.
   return {rung, name:ATOM_RUNGS[rung]};
 }
+try{ window._atomProduced=_atomProduced; }catch(e){}
 // ── The color-flood ZOOM transition (project_fibroid hero animation) ─────────
 // A radial of the atom's color flies OUT of the star to engulf the viewport, then
 // recedes to reveal the card; reversed on back (recede back down to the star). The
@@ -1234,7 +1244,7 @@ function openAtomDetail(i, origin){
     const locked=s>=ATOM_RUNG_LOCKED_FROM, filled=(hl.rung>=0 && s<=hl.rung);
     const isNew=(!locked && hl.rung>=0 && s>_prevRung && s<=hl.rung);
     const seg=(locked?'background:rgba(255,255,255,0.04);border:1px dashed rgba(255,255,255,0.18);':'background:'+(filled?colRGB:'rgba(255,255,255,0.12)')+';')+(isNew?'animation:rungGlow 1.1s ease-out 0.25s;':'');
-    ladder+='<div title="'+ATOM_RUNGS[s]+(locked?' — needs production':'')+'" style="flex:1;height:8px;border-radius:2px;'+seg+'"></div>';
+    ladder+='<div title="'+ATOM_RUNGS[s]+(locked?' — sustained production, not yet measured':'')+'" style="flex:1;height:8px;border-radius:2px;'+seg+'"></div>';
   }
   if(ci._cardRung!==hl.rung){ ci._cardRung=hl.rung; try{ save(); }catch(e){} }
   const lvLabel=hl.rung<0?'—':('LV '+hl.rung+' · '+hl.name);
