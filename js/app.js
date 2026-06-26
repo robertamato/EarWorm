@@ -7620,28 +7620,34 @@ function armTapAdvance(containerEl, advanceFn, delay){
       // Let clicks on interactive elements through — don't advance
       const tag=(e.target.tagName||'').toUpperCase();
       const hasFunc=tag==='BUTTON'||tag==='A'||
+        tag==='INPUT'||tag==='TEXTAREA'||          // text fields: you're typing, never advance
         e.target.classList.contains('choice')||
         e.target.classList.contains('cjk')||
         e.target.closest('.cjk')||
         e.target.closest('button')||
         e.target.closest('.choice')||
+        e.target.closest('input')||
+        e.target.closest('textarea')||
         e.target.id==='studyHanzi'||
         e.target.id==='studyMCPromptText'||
         e.target.closest('#studyHanzi')||
         e.target.closest('#studyMCPromptText');
       if(hasFunc) return; // let it propagate — open dictionary, etc.
       e.stopPropagation();
-      cardEl.removeEventListener('click',handler);
-      if(slot) slot.textContent='';
+      clearTapAdvance(containerEl);   // removes THIS handler (tracked below) + clears the hint
       advanceFn();
     };
     cardEl.addEventListener('click',handler);
+    // Track so clearTapAdvance can actually REMOVE the listener (the old version only cleared the
+    // hint text → handlers accumulated on #studyMC across cards/sessions and stole IME clicks).
+    containerEl._tapState={ cardEl:cardEl, handler:handler };
   };
 
   if(actualDelay>0){
     // Wrong answer: show countdown hint, arm after delay
     if(slot) slot.textContent=''; // silent until armed
-    setTimeout(armIt, actualDelay);
+    const t=setTimeout(armIt, actualDelay);
+    containerEl._tapState={ timer:t };
   } else {
     // Correct answer: arm immediately
     armIt();
@@ -7649,16 +7655,18 @@ function armTapAdvance(containerEl, advanceFn, delay){
 }
 
 function clearTapAdvance(containerEl){
+  if(!containerEl) return;
+  const st=containerEl._tapState;
+  if(st){
+    if(st.timer) clearTimeout(st.timer);
+    if(st.cardEl && st.handler) st.cardEl.removeEventListener('click', st.handler);
+    containerEl._tapState=null;
+  }
   const slotId=getTapHintSlot(containerEl);
   const slot=slotId?document.getElementById(slotId):null;
   if(slot) slot.textContent='';
   const old=document.getElementById('tapAdvanceHint');
   if(old) old.remove();
-}
-
-function clearTapAdvance(containerEl){
-  const h=document.getElementById('tapAdvanceHint');
-  if(h) h.remove();
 }
 
 
@@ -10240,6 +10248,10 @@ function showStudyProduction(i){
   if($('studyPOS')) $('studyPOS').style.display='none';
   if($('studyColl')) $('studyColl').style.display='none';
   cardShownAtMC=Date.now();
+  // Production is the only studyMC modality that doesn't arm a tap-advance on render, so a
+  // stale armTapAdvance handler from a prior card/session would linger on #studyMC and steal
+  // clicks meant for the IME input (advancing instead of focusing). Clear it up front.
+  try{ if(typeof clearTapAdvance==='function') clearTapAdvance($('studyMC')); }catch(e){}
   $('studyMCRank').textContent=cardRankStr(i);
   $('studyMCModality').textContent='PRODUCTION · '+task.rung;
   $('studyMCPromptText').innerHTML='<div style="font-size:13px;line-height:1.5;text-align:center;padding:6px 8px;">'+_esc(task.prompt)+'</div>';

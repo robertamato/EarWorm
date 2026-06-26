@@ -1455,6 +1455,10 @@ function showStudyProduction(i){
   if($('studyPOS')) $('studyPOS').style.display='none';
   if($('studyColl')) $('studyColl').style.display='none';
   cardShownAtMC=Date.now();
+  // Production is the only studyMC modality that doesn't arm a tap-advance on render, so a
+  // stale armTapAdvance handler from a prior card/session would linger on #studyMC and steal
+  // clicks meant for the IME input (advancing instead of focusing). Clear it up front.
+  try{ if(typeof clearTapAdvance==='function') clearTapAdvance($('studyMC')); }catch(e){}
   $('studyMCRank').textContent=cardRankStr(i);
   $('studyMCModality').textContent='PRODUCTION · '+task.rung;
   $('studyMCPromptText').innerHTML='<div style="font-size:13px;line-height:1.5;text-align:center;padding:6px 8px;">'+_esc(task.prompt)+'</div>';
