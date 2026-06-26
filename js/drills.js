@@ -533,7 +533,7 @@ function showStudyCloze(i){
   activeCardIdx=i;
   setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=(typeof charFont==='function')?charFont():"font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";  // course-general display face (VN/AR get the right font)
 
   // Pick a sentence — only use sentences where every multi-char D[] word is already introduced
   const validSents=sents.filter(function(s){ return sentenceAllIntroduced(s[0]); });
@@ -791,7 +791,7 @@ function showStudyComprehension(i){
   activeCardIdx=i;
   setAtomBg(i);
   const fg=getComputedStyle(document.body).color;
-  const CJKf="font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";
+  const CJKf=(typeof charFont==='function')?charFont():"font-family:'PingFang SC','Heiti SC','Noto Sans CJK SC',sans-serif";  // course-general display face (VN/AR get the right font)
 
   // Audio-first: play the whole sentence
   if(S.sound!=='mute'){ const _card=activeCardIdx; setTimeout(()=>{ if(activeCardIdx===_card) speak(zh,activeCourse().langCode); },30); }
