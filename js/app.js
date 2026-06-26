@@ -1726,7 +1726,11 @@ try{ window.coldVsLive=coldVsLive; }catch(e){}
 // CAUTION: with cold driving, an atom stays "not graduated" until it shows real
 // contextual evidence (discrim≥3 ∧ incid≥2) — so if context isn't flowing, the
 // working set fills and introduction stalls. That stall IS the signal to flip back.
-function coldDrivesSelection(){ return !!(typeof S!=='undefined' && S.coldCutover); }
+// DEFAULT ON (2026-06-25): the honest engine governs the capability render unless explicitly
+// toggled off. Undefined → on; an explicit true/false from the COLD CUTOVER toggle is respected.
+// Safe: this only flips the capability READ (srs.js _isGraduatedEff) — selection/introductions
+// use the live verdict + stage directly, so nothing stalls.
+function coldDrivesSelection(){ if(typeof S==='undefined'||!S) return false; return (S.coldCutover==null) ? true : !!S.coldCutover; }
 function coldGraduated(i){
   var a=(typeof S!=='undefined' && S.coldState && S.coldState.atoms && S.coldState.atoms[i] && S.coldState.atoms[i].meaning);
   return !!(a && a.graduated);
@@ -11801,9 +11805,9 @@ try{ window.explainCardSelection=explainCardSelection; window.renderCardExplain=
 if($('debugExplain')) $('debugExplain').onclick=toggleExplainMode;
 if($('studyWhyToggle')){ $('studyWhyToggle').onclick=toggleExplainMode; $('studyWhyToggle').style.opacity='0.4'; }
 // Cutover toggle: flip whether the cold engine drives graduation/selection.
-function updateColdCutoverBtn(){ var b=document.getElementById('debugColdCutover'); if(b) b.textContent='⇄ COLD CUTOVER: '+((typeof S!=='undefined'&&S.coldCutover)?'ON':'OFF'); }
+function updateColdCutoverBtn(){ var b=document.getElementById('debugColdCutover'); if(b) b.textContent='⇄ COLD CUTOVER: '+((typeof coldDrivesSelection==='function'&&coldDrivesSelection())?'ON':'OFF'); }
 if($('debugColdCutover')) $('debugColdCutover').onclick=function(){
-  S.coldCutover=!S.coldCutover;
+  S.coldCutover=!coldDrivesSelection();   // flip from the EFFECTIVE state (default-on)
   if(S.coldCutover){ try{ if(typeof coldRecompute==='function') coldRecompute(); }catch(e){} } // fresh verdicts before it drives anything
   try{ save(); }catch(e){}
   updateColdCutoverBtn();

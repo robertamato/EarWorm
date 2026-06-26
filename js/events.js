@@ -997,9 +997,9 @@ try{ window.explainCardSelection=explainCardSelection; window.renderCardExplain=
 if($('debugExplain')) $('debugExplain').onclick=toggleExplainMode;
 if($('studyWhyToggle')){ $('studyWhyToggle').onclick=toggleExplainMode; $('studyWhyToggle').style.opacity='0.4'; }
 // Cutover toggle: flip whether the cold engine drives graduation/selection.
-function updateColdCutoverBtn(){ var b=document.getElementById('debugColdCutover'); if(b) b.textContent='⇄ COLD CUTOVER: '+((typeof S!=='undefined'&&S.coldCutover)?'ON':'OFF'); }
+function updateColdCutoverBtn(){ var b=document.getElementById('debugColdCutover'); if(b) b.textContent='⇄ COLD CUTOVER: '+((typeof coldDrivesSelection==='function'&&coldDrivesSelection())?'ON':'OFF'); }
 if($('debugColdCutover')) $('debugColdCutover').onclick=function(){
-  S.coldCutover=!S.coldCutover;
+  S.coldCutover=!coldDrivesSelection();   // flip from the EFFECTIVE state (default-on)
   if(S.coldCutover){ try{ if(typeof coldRecompute==='function') coldRecompute(); }catch(e){} } // fresh verdicts before it drives anything
   try{ save(); }catch(e){}
   updateColdCutoverBtn();
