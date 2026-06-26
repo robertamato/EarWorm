@@ -10102,7 +10102,7 @@ function recordProduction(i, task, verdict, response){
   if(!S.productionLog) S.productionLog=[];
   S.productionLog.push({ idx:i, atoms:task.atoms, rung:task.rung, cap:task.capability,
     ok:verdict.ok?1:0, capMet:verdict.capabilityMet?1:0, l1:verdict.usedL1?1:0,
-    acc:(verdict.accuracy!=null?verdict.accuracy:null), ts:Date.now() });
+    acc:(verdict.accuracy!=null?verdict.accuracy:null), hints:verdict.hints||0, ts:Date.now() });
   if(S.productionLog.length>200) S.productionLog.shift();
   coldInferTierProduced();
   try{ logAnswer(i, verdict.ok, 'production', 0); }catch(e){}
@@ -10123,7 +10123,95 @@ function coldInferTierProduced(){
   });
 }
 
-// Inline production card — reuses the studyMC panel (prompt + text input + submit).
+/* ===== PRODUCTION INPUT — vocab-constrained, forgiving romanization IME =====
+   Users have a QWERTY keyboard; CJK glyphs are untypeable. They type romanization; we surface
+   ranked glyph candidates drawn ONLY from words they've met (.seen), keyed to the SOUND they
+   typed — never to meaning or the expected answer (the anti-crutch line). The typed romanization
+   IS the production gate: no input → no candidates, so recall of the sound stays on the learner.
+   The picker only resolves sound→glyph (transcription), which a native typist also offloads.
+   Course-general: asciiKey() = toneless pinyin (CJK) / diacritic-folded Latin (VN) / romanization.
+   Design settled with the user (2026-06-25): incremental · toneless-first (tone ramp = v2, fed by
+   the tone axis) · tolerant/high-recall (input must never be what fails you — only genuine
+   not-knowing) · gloss withheld · XP-cost reveal as the no-dead-end escape. */
+
+// Fold a romanized syllable to bare QWERTY letters: diacritics + tone marks removed.
+// wǒ→wo · xué→xue · tôi→toi · đi→di · ü→u. The key a learner actually types.
+function _foldAscii(s){
+  return String(s||'')
+    .normalize('NFD').replace(/[̀-ͯ]/g,'')   // strip combining diacritics / tone marks
+    .replace(/[đĐ]/g,'d')                     // đ/Đ (non-decomposable, VN)
+    .replace(/ñ/g,'n')                             // ñ
+    .toLowerCase().replace(/[^a-z]/g,'');               // letters only
+}
+// Toneless ASCII input key for an atom. CJK: concatenated pinyin syllables (slot 1, [[syl,tone]]).
+// Space courses: the diacritic-folded surface (the surface IS the romanization). Cached (D static).
+let _asciiKeyCache=null;
+function asciiKey(idx){
+  if(!_asciiKeyCache) _asciiKeyCache={};
+  if(_asciiKeyCache[idx]!=null) return _asciiKeyCache[idx];
+  let k='';
+  try{
+    const d=D[idx];
+    if(d){
+      if(typeof _segMode==='function' && _segMode()==='space') k=_foldAscii(d[0]);
+      else if(Array.isArray(d[1])) k=d[1].map(function(p){ return _foldAscii(p[0]); }).join('');
+      else k=_foldAscii(d[1]||d[0]);
+    }
+  }catch(e){}
+  _asciiKeyCache[idx]=k; return k;
+}
+// Learner phonetic-confusion fold — collapse the classic Mandarin-learner mishearings so sloppy
+// romanization still finds a known word (recall over precision; the ranking + .seen set restore
+// precision). Lower-tier than exact/prefix matches, so a clean spelling always wins.
+function _phoneticFold(k){
+  k=String(k||'');
+  k=k.replace(/zh/g,'z').replace(/ch/g,'c').replace(/sh/g,'s');  // retroflex → dental
+  k=k.replace(/ng/g,'n');                                         // -ng → -n
+  k=k.replace(/[lr]/g,'l');                                       // l / r
+  return k;
+}
+// Levenshtein, capped (typo tolerance). Small strings only — bounded work.
+function _lev(a,b){
+  a=String(a); b=String(b); const m=a.length,n=b.length;
+  if(!m) return n; if(!n) return m;
+  let prev=[]; for(let j=0;j<=n;j++) prev[j]=j;
+  for(let i=1;i<=m;i++){ let cur=[i];
+    for(let j=1;j<=n;j++){ cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1)); }
+    prev=cur; }
+  return prev[n];
+}
+// Ranked candidates for a typed romanization token. Pool = SEEN atoms only (words you could know).
+// Tiers: exact toneless → prefix → phonetic-class exact → phonetic prefix → bounded edit-distance.
+// Priors (small, never cross a tier): mastery + recency surface best-known first; frequency breaks ties.
+// Never ranks by the expected answer. Returns [{idx, glyph, key, score}] sorted desc.
+function productionCandidates(typed, limit){
+  const t=_foldAscii(typed); if(!t) return [];
+  const tF=_phoneticFold(t); const out=[];
+  for(let i=0;i<D.length;i++){
+    let ci; try{ ci=card(i); }catch(e){ ci=null; }
+    if(!ci||!ci.seen) continue;                       // only words they've met
+    const k=asciiKey(i); if(!k) continue;
+    const kF=_phoneticFold(k); let score=0;
+    if(k===t) score=1000;
+    else if(k.indexOf(t)===0) score=820-Math.min(60,(k.length-t.length)*8);          // prefix
+    else if(kF===tF) score=720;                                                       // phonetic-class exact
+    else if(kF.indexOf(tF)===0) score=640-Math.min(60,(kF.length-tF.length)*8);       // phonetic prefix
+    else if(t.length>=3){ const d=_lev(tF,kF), maxD=(t.length>=6?2:1);                 // typo: tight —
+      if(d<=maxD && kF.charAt(0)===tF.charAt(0) && Math.abs(k.length-t.length)<=2) score=560-160*d; } // same initial, length-scaled
+    if(score<=0) continue;
+    score += Math.min(16,(ci.m||0)*4)                       // mastery: best-known first
+           + Math.min(20, ((ci._lastSeenAt||0)/((S.totalSeen||1)))*20)  // recency
+           + (1 - i/D.length)*8;                            // frequency tiebreak (D is rank-ordered)
+    out.push({idx:i, glyph:D[i][0], key:k, score:score});
+  }
+  out.sort(function(a,b){ return b.score-a.score; });
+  return out.slice(0, limit||7);
+}
+try{ window.asciiKey=asciiKey; window.productionCandidates=productionCandidates; window._foldAscii=_foldAscii; }catch(e){}
+
+let PRODUCTION_HINT_COST=5;   // XP spent to reveal the next needed word (the no-dead-end escape)
+// Inline production card — reuses the studyMC panel. Prompt + the vocab-constrained IME:
+// type romanization → ranked glyph candidates (from .seen, keyed to the sound) → assemble.
 function showStudyProduction(i){
   const task=buildProductionTask({forIdx:i});
   if(!task){ showStudyMC(i,false); return; }   // can't build → fall back to recognition
@@ -10145,35 +10233,97 @@ function showStudyProduction(i){
   if($('studyMCTapHint')) $('studyMCTapHint').textContent='';
   if($('studyMCActions')) $('studyMCActions').innerHTML='';
   const box=$('studyMCChoices'); box.innerHTML=''; box.style.display='block';
+  const segFont=_segFontProd();
+  const JOIN=(typeof _segMode==='function'&&_segMode()==='space')?' ':'';   // space courses join words with a space
+  const composed=[];   // accepted target-script atoms, in order
+  let hintsUsed=0, done=false;
+
+  // composing area — the sentence assembles here as you pick characters
+  const comp=document.createElement('div');
+  comp.style.cssText='min-height:42px;font-size:26px;'+segFont+'text-align:center;padding:8px 6px;border-bottom:1px solid '+fg+';letter-spacing:2px;word-break:break-all;';
+  const placeholder='<span style="opacity:.3;font-size:12px;letter-spacing:1px;">type the sounds below · pick the characters</span>';
+  function renderComposed(){ comp.innerHTML = composed.length ? _esc(composed.join(JOIN)) : placeholder; }
+  renderComposed();
+
+  // romanization input (the active token)
   const inp=document.createElement('input');
   inp.type='text'; inp.autocapitalize='off'; inp.autocomplete='off'; inp.setAttribute('autocorrect','off'); inp.spellcheck=false;
-  inp.style.cssText='width:100%;box-sizing:border-box;font-size:22px;padding:12px;background:rgba(255,255,255,0.06);border:2px solid '+fg+';color:'+fg+';'+_segFontProd()+'text-align:center;border-radius:2px;';
+  inp.placeholder=(JOIN===' ')?'type a word…':'pinyin…';
+  inp.style.cssText='width:100%;box-sizing:border-box;font-size:18px;padding:10px;margin-top:8px;background:rgba(255,255,255,0.06);border:1px solid '+fg+';color:'+fg+';text-align:center;border-radius:8px;font-family:monospace;';
+
+  // candidate bar — ranked glyph chips. Appears ONLY with input: your recall of the sound is the
+  // production gate; no suggestions until you've supplied it. Glyph only (no gloss — that would
+  // make it multiple-choice). Top candidate is highlighted (space/enter accepts it).
+  const bar=document.createElement('div');
+  bar.style.cssText='display:flex;flex-wrap:wrap;gap:6px;justify-content:center;min-height:36px;margin-top:8px;align-items:center;';
+
+  // controls — reveal (costs XP, never a dead end) + submit
+  const ctrl=document.createElement('div'); ctrl.style.cssText='display:flex;gap:8px;margin-top:10px;';
+  const hint=document.createElement('button'); hint.className='btn';
+  hint.style.cssText='flex:0 0 auto;width:auto;font-size:10px;padding:10px 12px;opacity:.7;';
+  hint.innerHTML='? REVEAL <span style="opacity:.6;">−'+PRODUCTION_HINT_COST+'xp</span>';
   const submit=document.createElement('button'); submit.className='btn'; submit.textContent='SUBMIT';
-  submit.style.cssText='margin-top:10px;font-size:12px;';
-  const verdict=document.createElement('div'); verdict.style.cssText='margin-top:10px;text-align:center;font-size:13px;min-height:20px;'+_segFontProd();
-  box.appendChild(inp); box.appendChild(submit); box.appendChild(verdict);
+  submit.style.cssText='flex:1;font-size:12px;';
+  ctrl.appendChild(hint); ctrl.appendChild(submit);
+
+  const verdict=document.createElement('div'); verdict.style.cssText='margin-top:10px;text-align:center;font-size:13px;min-height:20px;'+segFont;
+  box.appendChild(comp); box.appendChild(inp); box.appendChild(bar); box.appendChild(ctrl); box.appendChild(verdict);
   setTimeout(function(){ try{ inp.focus(); }catch(e){} },60);
-  let done=false;
+
+  let cands=[];
+  function accept(glyph){ composed.push(glyph); inp.value=''; cands=[]; bar.innerHTML=''; renderComposed(); try{ inp.focus(); }catch(e){} }
+  function renderCands(){
+    const t=inp.value.trim();
+    cands = t ? productionCandidates(t, 8) : [];
+    bar.innerHTML='';
+    cands.forEach(function(c,k){
+      const chip=document.createElement('button'); chip.className='btn';
+      chip.style.cssText='width:auto;flex:0 0 auto;font-size:22px;padding:5px 10px;'+segFont+(k===0?'border-width:2px;':'opacity:.8;');
+      chip.textContent=c.glyph; chip.onclick=function(){ accept(c.glyph); };
+      bar.appendChild(chip);
+    });
+  }
+
   const go=function(){
     if(done) return; done=true;
-    const resp=inp.value;
-    inp.disabled=true; submit.disabled=true;
+    const resp=composed.length?composed.join(JOIN):inp.value;
+    inp.disabled=true; submit.disabled=true; hint.disabled=true; bar.innerHTML='';
     verdict.style.color=fg; verdict.textContent='grading…';
     _productionGrader(task, resp, function(v){
+      v.hints=hintsUsed; if(hintsUsed>0) v.capabilityMet=false;   // hinted ≠ unaided production
       recordProduction(i, task, v, resp);
       // Monochrome + graphical (✓/✗ glyph + the % itself) — no red/green; hue is the
       // atom-identity channel. Auditory feedback carries correct/wrong too.
       verdict.innerHTML=
         '<div style="font-size:18px;font-weight:700;color:'+fg+';">'+(v.ok?'✓ ':'✗ ')+(v.accuracy!=null?v.accuracy+'%':'')+'</div>'
         +(v.explanation?'<div style="font-size:9px;opacity:.8;line-height:1.4;margin-top:2px;">'+_esc(v.explanation)+'</div>':'')
-        +'<div style="font-size:13px;margin-top:3px;'+_segFontProd()+'">'+_esc(task.expected)+'</div>'
-        +(v.usedL1?'<div style="font-size:8px;color:#fbbf24;letter-spacing:1px;margin-top:1px;">⚠ L1 CRUTCH</div>':'');
+        +'<div style="font-size:13px;margin-top:3px;'+segFont+'">'+_esc(task.expected)+'</div>'
+        +(v.usedL1?'<div style="font-size:8px;color:#fbbf24;letter-spacing:1px;margin-top:1px;">⚠ L1 CRUTCH</div>':'')
+        +(hintsUsed>0?'<div style="font-size:8px;opacity:.55;letter-spacing:1px;margin-top:1px;">✦ '+hintsUsed+' reveal'+(hintsUsed>1?'s':'')+' used</div>':'');
       if(S.sound!=='mute') speak(task.expected, activeCourse().langCode);
       armTapAdvance($('studyMC'), function(){ nextStudyCard(); }, v.ok?700:1600);
     });
   };
+
+  inp.addEventListener('input', renderCands);
+  inp.addEventListener('keydown', function(e){
+    if(e.key===' '){ if(cands.length){ e.preventDefault(); accept(cands[0].glyph); } }            // space = accept top
+    else if(e.key==='Enter'){ e.preventDefault(); if(cands.length) accept(cands[0].glyph); else if(!inp.value.trim()) go(); } // enter = accept top, else submit
+    else if(e.key==='Backspace' && !inp.value && composed.length){ e.preventDefault(); composed.pop(); renderComposed(); }   // backspace into the composed line
+  });
   submit.onclick=go;
-  inp.addEventListener('keydown', function(e){ if(e.key==='Enter') go(); });
+
+  // REVEAL — the no-dead-end escape: surfaces the next expected atom you haven't produced, for XP.
+  // Marks the production hinted (capabilityMet cleared) so it can't certify unaided production.
+  const expAtoms=(function(){ try{ return (typeof sentenceAtomsInOrder==='function')?sentenceAtomsInOrder(task.expected).map(function(a){return a.w;}):[]; }catch(e){ return []; } })();
+  hint.onclick=function(){
+    if(done) return;
+    const have=composed.join('');
+    const next=expAtoms.filter(function(w){ return have.indexOf(w)<0; })[0];
+    if(!next){ hint.style.opacity='.35'; return; }
+    hintsUsed++; S.xp=Math.max(0,(S.xp||0)-PRODUCTION_HINT_COST); try{ save(); }catch(e){}
+    accept(next);
+  };
 }
 function _segFontProd(){ try{ return (typeof charFont==='function')?charFont()+';':''; }catch(e){ return ''; } }
 try{ window.buildProductionTask=buildProductionTask; window.showStudyProduction=showStudyProduction; }catch(e){}
