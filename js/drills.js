@@ -1595,15 +1595,15 @@ function showStudyProduction(i){
   bar.style.cssText='display:flex;flex-wrap:wrap;gap:6px;justify-content:center;min-height:36px;margin-top:8px;align-items:center;';
 
   // controls — grade-mode toggle · reveal (costs XP, never a dead end) · submit
-  const ctrl=document.createElement('div'); ctrl.style.cssText='display:flex;gap:8px;margin-top:10px;';
+  const ctrl=document.createElement('div'); ctrl.style.cssText='display:flex;gap:8px;margin-top:10px;align-items:center;';
   // GRADE-MODE TOGGLE (on the card): a classic-iOS two-position SLIDE switch. AI = haiku (accepts
   // valid variation, sends your answer to the LLM; needs a key) · LOCAL = on-device alignment to the
   // reference (no network). The thumb slides between the two; choice persisted in S.gradeMode.
   const gmode=document.createElement('div');
-  gmode.style.cssText='position:relative;flex:0 0 auto;width:102px;height:30px;border:1px solid '+fg+';border-radius:999px;cursor:pointer;overflow:hidden;background:rgba(255,255,255,0.05);user-select:none;-webkit-user-select:none;';
+  gmode.style.cssText='position:relative;flex:0 0 auto;width:104px;height:36px;border:1px solid '+fg+';border-radius:999px;cursor:pointer;overflow:hidden;background:rgba(255,255,255,0.05);user-select:none;-webkit-user-select:none;';
   gmode.title='How this answer is graded — AI sends it to the haiku grader (accepts valid variation, needs a key); LOCAL grades on-device against the reference (no network).';
   const gThumb=document.createElement('div');
-  gThumb.style.cssText='position:absolute;top:2px;bottom:2px;left:2px;width:calc(50% - 3px);border-radius:999px;background:'+fg+';transition:left .22s cubic-bezier(.34,1.45,.5,1);';
+  gThumb.style.cssText='position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 4px);border-radius:999px;background:'+fg+';transition:left .22s cubic-bezier(.34,1.45,.5,1);';
   const gAI=document.createElement('span'), gLO=document.createElement('span');
   gAI.textContent='AI'; gLO.textContent='LOCAL';
   const gLab='position:absolute;top:0;height:100%;width:50%;display:flex;align-items:center;justify-content:center;font-size:9px;letter-spacing:1px;pointer-events:none;z-index:1;transition:color .2s,opacity .2s;';
@@ -1611,17 +1611,18 @@ function showStudyProduction(i){
   gmode.appendChild(gThumb); gmode.appendChild(gAI); gmode.appendChild(gLO);
   function renderGmode(){
     const ai=(_currentGradeMode()!=='offline'); const bg=getComputedStyle(document.body).backgroundColor;
-    gThumb.style.left = ai ? '2px' : 'calc(50% + 1px)';   // slide
+    gThumb.style.left = ai ? '3px' : 'calc(50% + 1px)';   // slide
     gAI.style.color = ai?bg:fg; gAI.style.opacity = ai?'1':'.5';   // active label sits on the thumb → bg-color
     gLO.style.color = ai?fg:bg; gLO.style.opacity = ai?'.5':'1';
   }
   renderGmode();
   gmode.onclick=function(){ S.gradeMode=(_currentGradeMode()==='offline')?'llm':'offline'; try{ save(); }catch(e){} renderGmode(); };
-  const hint=document.createElement('button'); hint.className='btn';
-  hint.style.cssText='flex:0 0 auto;width:auto;font-size:10px;padding:10px 12px;opacity:.7;';
+  // Sleek pills to match the slide toggle (no chunky .btn border / translate-press).
+  const hint=document.createElement('button');
+  hint.style.cssText='font-family:inherit;color:inherit;cursor:pointer;flex:0 0 auto;width:auto;font-size:10px;height:36px;padding:0 14px;border:1px solid '+fg+';border-radius:999px;background:transparent;opacity:.72;display:inline-flex;align-items:center;';
   hint.innerHTML='? REVEAL <span style="opacity:.6;">−'+PRODUCTION_HINT_COST+'xp</span>';
-  const submit=document.createElement('button'); submit.className='btn'; submit.textContent='SUBMIT';
-  submit.style.cssText='flex:1;font-size:12px;';
+  const submit=document.createElement('button'); submit.textContent='SUBMIT';
+  submit.style.cssText='font-family:inherit;color:inherit;cursor:pointer;flex:1;font-size:12px;height:36px;border:1px solid '+fg+';border-radius:999px;background:rgba(255,255,255,0.07);';
   ctrl.appendChild(gmode); ctrl.appendChild(hint); ctrl.appendChild(submit);
 
   const verdict=document.createElement('div'); verdict.style.cssText='margin-top:10px;text-align:center;font-size:13px;min-height:20px;'+segFont;
