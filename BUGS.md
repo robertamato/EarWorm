@@ -33,7 +33,7 @@ external-review severities as candidates, not verdicts.
 ### Multi-language: LLM/curator/eligibility/sentence paths hardcode Mandarin
 **Symptom:** On a non-Mandarin course (e.g. Arabic), sentence generation produces wrong/zero output; `sentenceAllIntroduced` is a no-op (CJK-only regex); curator/elig/exception UIs assume CJK fonts.
 **Root cause:** `generateSentencesForWord` prompt hardcodes Mandarin/CJK/pinyin; `sentenceAllIntroduced` CJK regex; no course/script awareness.
-**Status:** OPEN — deliberately deferred until the Arabic course is built (`ENGINE.md` §9: per-language-module params).
+**Status (2026-06-25, backlog #3 — functional blockers RESOLVED):** `generateSentencesForWord` is now course-general (char-vs-word covered set per segmentation mode, `activeCourse().langName` + the right unit, generic output example) — VN/AR generate correct prompts (verified by switching courses). `sentenceAllIntroduced` was ALREADY space-aware (full `_segMode()==='space'` word-boundary branch — the migration fixed it; the "CJK-only no-op" symptom is stale). Cloze + comprehension sentence display now use the course-general `charFont()`. REMAINING (cosmetic/low-priority): literal CJK fonts in the debug UIs (curator/eligibility/exception), CJK-specific detail views (char/radical — CJK-by-nature), grammar metalanguage, tone/POS; `LLM output not validated post-parse` (next item) is still Mandarin-shaped.
 
 ### LLM output not validated post-parse
 **Symptom:** A generated sentence could be committed that doesn't contain the target word, is out of length bounds, or has characters beyond the `.seen` set.
